@@ -3,12 +3,77 @@ import { ref } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 import { storeToRefs } from 'pinia'
 import { geocode } from '../utils/geocode'
+import axios from 'axios'
 
 const routeStore = useRouteStore()
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
 const locating = ref(false)
 
-// 地址输入更新路线
+const AMAP_KEY = '7b3d51a4bac970421ba4ee69861bb326'
+
+// ====== 关键：为自动补全加 防抖 + 结果缓存 + 选择锁 ======
+let fetchTimer = null
+let lastResults = []      // 缓存上一次非空结果，避免空数组导致收起
+let lockFetch = false     // 选择时短暂锁定，避免立即再次触发 fetch
+
+const fetchSuggestions = (queryString, cb) => {
+  if (lockFetch) return cb(lastResults)             // 选择后的瞬间，用缓存结果顶住
+  if (!queryString) { lastResults = []; return cb([]) }
+
+  if (fetchTimer) clearTimeout(fetchTimer)
+  fetchTimer = setTimeout(async () => {
+    try {
+      const url = `https://restapi.amap.com/v3/assistant/inputtips?keywords=${encodeURIComponent(queryString)}&key=${AMAP_KEY}`
+      const res = await axios.get(url)
+      let results = []
+      if (res.data && Array.isArray(res.data.tips) && res.data.tips.length > 0) {
+        results = res.data.tips
+            .filter(tip => tip.location && tip.name)
+            .map(tip => ({
+              value: tip.name,
+              location: tip.location,   // "lng,lat"
+              district: tip.district || ''
+            }))
+      }
+      if (res.data && res.data.status !== '1') {
+        console.warn('高德API请求异常：', res.data);
+        cb(lastResults.length ? lastResults : [{ value: '未找到匹配地点', location: '' }])
+        return
+      }
+
+      // 如果这次为空但 query 还在，继续用上次非空结果，避免弹层直接收起
+      if (results.length === 0 && queryString.trim().length > 0) {
+        cb(lastResults)
+      } else {
+        lastResults = results
+        cb(results)
+      }
+    } catch (e) {
+      // 出错也继续用缓存，保持弹层稳定
+      cb(lastResults)
+    }
+  }, 280) // 防抖时间（可按需调 200~400ms）
+}
+
+// 选择一个起点
+const handleSelectStart = (item) => {
+  lockFetch = true
+  setTimeout(() => (lockFetch = false), 500)
+  startAddress.value = item.value
+  const [lng, lat] = item.location.split(',')
+  routeStore.setStart(parseFloat(lat), parseFloat(lng))
+}
+
+// 选择一个终点
+const handleSelectEnd = (item) => {
+  lockFetch = true
+  setTimeout(() => (lockFetch = false), 500)
+  endAddress.value = item.value
+  const [lng, lat] = item.location.split(',')
+  routeStore.setEnd(parseFloat(lat), parseFloat(lng))
+}
+
+// 手动解析按钮（保留）
 const updateFromAddress = async () => {
   try {
     const start = await geocode(startAddress.value)
@@ -20,7 +85,7 @@ const updateFromAddress = async () => {
   }
 }
 
-// 定位到我
+// 定位
 const locateMe = () => {
   if (!navigator.geolocation) return alert('浏览器不支持定位')
   locating.value = true
@@ -39,15 +104,38 @@ const locateMe = () => {
 
 <template>
   <div class="control-panel">
-    <el-input v-model="startAddress" placeholder="起点地址" size="small" style="width: 250px" />
-    <el-input v-model="endAddress" placeholder="终点地址" size="small" style="width: 250px; margin-top: 5px" />
+    <el-autocomplete
+        v-model="startAddress"
+        :fetch-suggestions="fetchSuggestions"
+        placeholder="请输入起点"
+        size="small"
+        style="width: 260px"
+        @select="handleSelectStart"
+        :trigger-on-focus="true"
+        :teleported="false"
+        popper-class="jp-autocomplete"
+        placement="bottom-start"
+    />
 
-    <div style="margin-top: 5px">
+    <el-autocomplete
+        v-model="endAddress"
+        :fetch-suggestions="fetchSuggestions"
+        placeholder="请输入终点"
+        size="small"
+        style="width: 260px; margin-top: 6px"
+        @select="handleSelectEnd"
+        :trigger-on-focus="true"
+        :teleported="false"
+        popper-class="jp-autocomplete"
+        placement="bottom-start"
+    />
+
+    <div style="margin-top: 6px">
       <el-button type="primary" size="small" @click="updateFromAddress">解析地址</el-button>
       <el-button type="success" size="small" :loading="locating" @click="locateMe">定位</el-button>
     </div>
 
-    <div style="margin-top:5px;font-size:12px;color:#666;">
+    <div class="coords">
       起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}<br/>
       终点: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}
     </div>
@@ -59,10 +147,22 @@ const locateMe = () => {
   position: absolute;
   top: 10px;
   left: 10px;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   padding: 10px;
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
+  z-index: 1000; /* 容器自身层级 */
+}
+.coords {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #666;
+}
+</style>
+
+<!-- 给自动补全的弹层更高层级，避免被地图/其他容器影响 -->
+<style>
+.jp-autocomplete {
+  z-index: 2000 !important;
 }
 </style>
