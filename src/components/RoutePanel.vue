@@ -1,4 +1,5 @@
 <script setup>
+defineProps({ theme: String })
 import { ref } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 import { storeToRefs } from 'pinia'
@@ -104,40 +105,47 @@ const locateMe = () => {
 
 <template>
   <div class="control-panel">
-    <el-autocomplete
-        v-model="startAddress"
-        :fetch-suggestions="fetchSuggestions"
-        placeholder="请输入起点"
-        size="small"
-        style="width: 260px"
-        @select="handleSelectStart"
-        :trigger-on-focus="true"
-        :teleported="false"
-        popper-class="jp-autocomplete"
-        placement="bottom-start"
-    />
-
-    <el-autocomplete
-        v-model="endAddress"
-        :fetch-suggestions="fetchSuggestions"
-        placeholder="请输入终点"
-        size="small"
-        style="width: 260px; margin-top: 6px"
-        @select="handleSelectEnd"
-        :trigger-on-focus="true"
-        :teleported="false"
-        popper-class="jp-autocomplete"
-        placement="bottom-start"
-    />
-
-    <div style="margin-top: 6px">
-      <el-button type="primary" size="small" @click="updateFromAddress">解析地址</el-button>
-      <el-button type="success" size="small" :loading="locating" @click="locateMe">定位</el-button>
+    <div class="header">
+      <img src="../assets/logo.png" class="logo" alt="JourneyPro Logo" />
+      <h2 class="title">JourneyPro</h2>
     </div>
 
+    <el-form label-position="top" label-width="60px" size="small">
+      <el-form-item label="起点：">
+        <el-autocomplete
+            v-model="startAddress"
+            :fetch-suggestions="fetchSuggestions"
+            placeholder="请输入起点"
+            size="small"
+            @select="handleSelectStart"
+            :trigger-on-focus="true"
+            :teleported="false"
+            popper-class="jp-autocomplete"
+        />
+      </el-form-item>
+
+      <el-form-item label="终点：">
+        <el-autocomplete
+            v-model="endAddress"
+            :fetch-suggestions="fetchSuggestions"
+            placeholder="请输入终点"
+            size="small"
+            @select="handleSelectEnd"
+            :trigger-on-focus="true"
+            :teleported="false"
+            popper-class="jp-autocomplete"
+        />
+      </el-form-item>
+
+      <el-form-item>
+        <el-button type="primary" size="small" @click="updateFromAddress">解析地址</el-button>
+        <el-button type="success" size="small" :loading="locating" @click="locateMe">定位</el-button>
+      </el-form-item>
+    </el-form>
+
     <div class="coords">
-      起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}<br/>
-      终点: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}
+      <span>起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br/>
+      <span>终点: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}</span>
     </div>
   </div>
 </template>
@@ -148,20 +156,42 @@ const locateMe = () => {
   top: 10px;
   left: 10px;
   background: rgba(255, 255, 255, 0.96);
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  z-index: 1000; /* 容器自身层级 */
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+  width: 280px;
+  backdrop-filter: blur(4px);
 }
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
 .coords {
   margin-top: 6px;
   font-size: 12px;
   color: #666;
 }
-</style>
 
-<!-- 给自动补全的弹层更高层级，避免被地图/其他容器影响 -->
-<style>
 .jp-autocomplete {
   z-index: 2000 !important;
 }
