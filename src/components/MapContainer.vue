@@ -100,6 +100,8 @@ onMounted(() => {
     collapsible: true,
     createMarker: () => null, // ✅ 不生成默认箭头 marker
   }).addTo(map.value)
+  // 将控制器暴露给全局，供 RouteSummary.vue 读取
+  window._osrmControl = control
 
   // 初始绘制路线
   control.setWaypoints([
