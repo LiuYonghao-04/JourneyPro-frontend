@@ -10,8 +10,10 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "leaflet-routing-machine": "^3.2.12",
+    "axios": "^1.12.2",
+    "element-plus": "^2.11.5",
     "leaflet": "^1.9.4",
+    "leaflet-routing-machine": "^3.2.12",
     "vue": "^3.3.4"
   },
   "devDependencies": {
