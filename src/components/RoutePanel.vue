@@ -1,16 +1,18 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouteStore } from '../store/routeStore'
+import { storeToRefs } from 'pinia'
 import { geocode } from '../utils/geocode'
 
 const routeStore = useRouteStore()
+const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
 const locating = ref(false)
 
 // 地址输入更新路线
 const updateFromAddress = async () => {
   try {
-    const start = await geocode(routeStore.startAddress)
-    const end = await geocode(routeStore.endAddress)
+    const start = await geocode(startAddress.value)
+    const end = await geocode(endAddress.value)
     routeStore.setStart(start.lat, start.lng)
     routeStore.setEnd(end.lat, end.lng)
   } catch (err) {
@@ -37,11 +39,17 @@ const locateMe = () => {
 
 <template>
   <div class="control-panel">
-    <el-input v-model="routeStore.startAddress" placeholder="起点地址" size="small" style="width: 250px" />
-    <el-input v-model="routeStore.endAddress" placeholder="终点地址" size="small" style="width: 250px; margin-top: 5px" />
+    <el-input v-model="startAddress" placeholder="起点地址" size="small" style="width: 250px" />
+    <el-input v-model="endAddress" placeholder="终点地址" size="small" style="width: 250px; margin-top: 5px" />
+
     <div style="margin-top: 5px">
       <el-button type="primary" size="small" @click="updateFromAddress">解析地址</el-button>
       <el-button type="success" size="small" :loading="locating" @click="locateMe">定位</el-button>
+    </div>
+
+    <div style="margin-top:5px;font-size:12px;color:#666;">
+      起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}<br/>
+      终点: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}
     </div>
   </div>
 </template>

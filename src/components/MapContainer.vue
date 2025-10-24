@@ -1,4 +1,5 @@
 <script setup>
+import axios from 'axios'
 import { ref, onMounted, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -19,63 +20,109 @@ L.Icon.Default.mergeOptions({
 const map = ref(null)
 let control = null
 const routeStore = useRouteStore()
+let startMarker = null
+let endMarker = null
+
+// 自定义圆点 marker 样式
+function createColoredMarker(color, position, onDrag) {
+  const markerHtml = `<div style="background-color:${color};
+    width:18px;height:18px;border-radius:50%;
+    border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.5);"></div>`
+
+  const marker = L.marker(position, {
+    draggable: true,
+    icon: L.divIcon({
+      className: 'custom-marker',
+      html: markerHtml,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    }),
+  })
+
+  // 拖动后回填坐标到 store
+  if (onDrag) marker.on('dragend', onDrag)
+  return marker
+}
 
 onMounted(() => {
-  map.value = L.map('map').setView([routeStore.startLat, routeStore.startLng], 13)
+  // 初始化地图
+  map.value = L.map('map', { zoomControl: false })
+      .setView([routeStore.startLat, routeStore.startLng], 13)
+
+  // 移动缩放按钮到底部左侧
+  L.control.zoom({ position: 'bottomleft' }).addTo(map.value)
+
+  // 底图
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors',
   }).addTo(map.value)
 
+// 反向地理编码函数
+  async function reverseGeocode(lat, lng) {
+    try {
+      const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+      return res.data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+    } catch (e) {
+      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+    }
+  }
+
+  startMarker = createColoredMarker('green', [routeStore.startLat, routeStore.startLng], async () => {
+    const pos = startMarker.getLatLng()
+    routeStore.setStart(pos.lat, pos.lng)
+    const addr = await reverseGeocode(pos.lat, pos.lng)
+    routeStore.startAddress = addr
+  })
+
+  endMarker = createColoredMarker('red', [routeStore.endLat, routeStore.endLng], async () => {
+    const pos = endMarker.getLatLng()
+    routeStore.setEnd(pos.lat, pos.lng)
+    const addr = await reverseGeocode(pos.lat, pos.lng)
+    routeStore.endAddress = addr
+  })
+
+
+  startMarker.addTo(map.value)
+  endMarker.addTo(map.value)
+
+  // 初始化路线控件（隐藏默认箭头 marker）
   control = L.Routing.control({
     waypoints: [
       L.latLng(routeStore.startLat, routeStore.startLng),
-      L.latLng(routeStore.endLat, routeStore.endLng)
+      L.latLng(routeStore.endLat, routeStore.endLng),
     ],
-    router: L.Routing.osrmv1({
-      serviceUrl: '/osrm/route/v1',
-    }),
+    router: L.Routing.osrmv1({ serviceUrl: '/osrm/route/v1' }),
     routeWhileDragging: true,
-    addWaypoints: true,
-    draggableWaypoints: true,
+    addWaypoints: false,
+    draggableWaypoints: false,
     show: true,
     collapsible: true,
-    createMarker: (i, wp, nWps) => {
-      const color = i === 0 ? 'green' : i === nWps - 1 ? 'red' : 'blue'
-      const markerHtml = `<div style="background-color:${color};
-        width:16px;height:16px;border-radius:50%;
-        border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.5);"></div>`
-      const marker = L.marker(wp.latLng, {
-        draggable: true,
-        icon: L.divIcon({
-          className: 'custom-marker',
-          html: markerHtml,
-          iconSize: [16, 16],
-          iconAnchor: [8, 8],
-        }),
-      })
-      marker.on('dragend', () => {
-        const pos = marker.getLatLng()
-        if (i === 0) routeStore.setStart(pos.lat, pos.lng)
-        else routeStore.setEnd(pos.lat, pos.lng)
-      })
-      return marker
-    }
+    createMarker: () => null, // ✅ 不生成默认箭头 marker
   }).addTo(map.value)
-})
 
-// 监听状态变化自动刷新路线
-watch(
-    () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
-    () => {
-      if (control) {
+  // 初始绘制路线
+  control.setWaypoints([
+    L.latLng(routeStore.startLat, routeStore.startLng),
+    L.latLng(routeStore.endLat, routeStore.endLng),
+  ])
+
+  // 监听 store 变化 → 自动刷新路线和 marker
+  watch(
+      () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
+      () => {
+        // 更新 marker 位置
+        startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
+        endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
+
+        // 刷新路线
         control.setWaypoints([
           L.latLng(routeStore.startLat, routeStore.startLng),
           L.latLng(routeStore.endLat, routeStore.endLng),
         ])
       }
-    }
-)
+  )
+})
 </script>
 
 <template>
