@@ -17,6 +17,14 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 })
 
+const blueIcon = L.icon({
+  iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [0, -32],
+  shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png'
+})
+
 const map = ref(null)
 let control = null
 const routeStore = useRouteStore()
@@ -112,7 +120,7 @@ onMounted(() => {
   // 监听 store 变化 → 自动刷新路线和 marker
   watch(
       () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
-      () => {
+      async () => {
         // 更新 marker 位置
         startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
         endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
@@ -122,8 +130,90 @@ onMounted(() => {
           L.latLng(routeStore.startLat, routeStore.startLng),
           L.latLng(routeStore.endLat, routeStore.endLng),
         ])
+        // ✅ 新增：当路线更新后，获取推荐POI
+        await routeStore.fetchRecommendedPois()
+        console.log('✅ 已请求推荐点接口')
       }
   )
+
+// ✅ 监听推荐POI变化：显示推荐点标记（带防抖延迟刷新）
+  let poiLayer = L.layerGroup() // 提前定义空图层组
+  let updateTimeout = null // 防抖计时器
+
+  watch(
+      () => routeStore.recommendedPOIs,
+      (pois) => {
+        if (!map.value) return
+
+        // 🕒 防抖处理：清除上次的延迟任务
+        clearTimeout(updateTimeout)
+        updateTimeout = setTimeout(() => {
+          // 清空旧图层（不销毁对象）
+          poiLayer.clearLayers()
+
+          // 如果没有推荐点就不继续
+          if (!pois || pois.length === 0) return
+
+          // ✅ 自定义蓝色图标（你的版本里缺少了定义）
+          const blueIcon = L.icon({
+            iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [0, -32],
+            shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+          })
+
+          // 遍历推荐点生成标准 Marker
+          pois.forEach((poi) => {
+            const marker = L.marker([poi.lat, poi.lng], {
+              icon: blueIcon,
+              title: poi.name,
+            }).bindPopup(`<b>${poi.name}</b><br>${poi.category || ''}`)
+
+            // ✅ 点击 marker：居中并打开弹窗
+            marker.on('click', () => {
+              map.value.setView([poi.lat, poi.lng], 15, { animate: true })
+              marker.openPopup()
+            })
+
+            poiLayer.addLayer(marker)
+          })
+
+          // ✅ 若图层未添加则添加一次（防止重复 attach）
+          if (!map.value.hasLayer(poiLayer)) {
+            poiLayer.addTo(map.value)
+          }
+
+          console.log('📍 推荐POI已更新:', pois.length)
+        }, 300) // 延迟执行，避免动画中清除 marker
+      },
+      { deep: true }
+  )
+
+
+// ✅ 监听后端重规划路线（A→POI→B）
+  watch(
+      () => routeStore.routeGeojson,
+      (geojson) => {
+        if (!geojson || !map.value) return
+
+        // 移除原来的路线控件（OSRM LRM）
+        if (control) {
+          map.value.removeControl(control)
+          control = null
+        }
+
+        // 绘制新的路线（用 GeoJSON）
+        const newRoute = L.geoJSON(geojson, {
+          style: { color: '#228BE6', weight: 6, opacity: 0.85 },
+        }).addTo(map.value)
+
+        map.value.fitBounds(newRoute.getBounds())
+        console.log('🚗 路线已更新为含POI路径')
+      },
+      { deep: true }
+  )
+
 })
 </script>
 

@@ -3,6 +3,7 @@
     <RoutePanel />
     <MapContainer />
     <RouteSummary />
+    <POIPanel />
   </div>
 </template>
 
@@ -10,6 +11,7 @@
 import RoutePanel from './components/RoutePanel.vue'
 import MapContainer from './components/MapContainer.vue'
 import RouteSummary from './components/RouteSummary.vue'
+import POIPanel from './components/POIPanel.vue'
 </script>
 
 <style>
