@@ -145,26 +145,37 @@ onMounted(() => {
       (pois) => {
         if (!map.value) return
 
-        // 🕒 防抖处理：清除上次的延迟任务
+        // 🕒 防抖处理：清除上次延迟任务
         clearTimeout(updateTimeout)
         updateTimeout = setTimeout(() => {
-          // 清空旧图层（不销毁对象）
-          poiLayer.clearLayers()
+          if (!map.value || map.value._animatingZoom) {
+            console.log('⏳ 地图仍在动画中，延迟更新POI')
+            return
+          }
+          try {
+            poiLayer?.clearLayers() // ✅ 使用 ?. 避免空引用
+          } catch (err) {
+            console.warn('⚠️ 清空图层时出错:', err.message)
+          }
 
           // 如果没有推荐点就不继续
           if (!pois || pois.length === 0) return
 
-          // ✅ 自定义蓝色图标（你的版本里缺少了定义）
+          // ✅ 自定义蓝色图标（安全保留）
           const blueIcon = L.icon({
-            iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+            iconUrl:
+                'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
             iconSize: [25, 41],
             iconAnchor: [12, 41],
             popupAnchor: [0, -32],
-            shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+            shadowUrl:
+                'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
           })
 
-          // 遍历推荐点生成标准 Marker
           pois.forEach((poi) => {
+            // ✅ 防止非法坐标（有时会返回 null 或 undefined）
+            if (!poi.lat || !poi.lng) return
+
             const marker = L.marker([poi.lat, poi.lng], {
               icon: blueIcon,
               title: poi.name,
@@ -172,20 +183,29 @@ onMounted(() => {
 
             // ✅ 点击 marker：居中并打开弹窗
             marker.on('click', () => {
-              map.value.setView([poi.lat, poi.lng], 15, { animate: true })
-              marker.openPopup()
+              if (!map.value) return
+              try {
+                map.value.setView([poi.lat, poi.lng], 15, { animate: true })
+                marker.openPopup()
+              } catch (err) {
+                console.warn('⚠️ setView 出错（地图正在缩放）:', err.message)
+              }
             })
 
             poiLayer.addLayer(marker)
           })
 
-          // ✅ 若图层未添加则添加一次（防止重复 attach）
-          if (!map.value.hasLayer(poiLayer)) {
-            poiLayer.addTo(map.value)
+          // ✅ 确保图层只添加一次
+          if (map.value && !map.value.hasLayer(poiLayer)) {
+            try {
+              poiLayer.addTo(map.value)
+            } catch (err) {
+              console.warn('⚠️ 添加图层时出错:', err.message)
+            }
           }
 
           console.log('📍 推荐POI已更新:', pois.length)
-        }, 300) // 延迟执行，避免动画中清除 marker
+        }, 300)
       },
       { deep: true }
   )
