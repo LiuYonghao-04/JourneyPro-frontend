@@ -40,15 +40,15 @@ const addPoiToRoute = async (poi) => {
 <style scoped>
 .poi-panel {
   position: absolute;
-  top: 350px;
+  top: 400px;
   left: 10px;
   width: 300px;
   z-index: 99999;
   background: rgba(255, 255, 255, 0.92);
   border-radius: 16px;
-  padding: 12px 16px;
+  padding: 0 16px 12px 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  max-height: 80vh;
+  max-height: 400px;
   overflow-y: auto;
   backdrop-filter: blur(6px);
 }
