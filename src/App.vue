@@ -7,7 +7,12 @@
       <nav class="jp-nav">
         <RouterLink to="/home" class="jp-nav-link">首页</RouterLink>
         <RouterLink to="/map" class="jp-nav-link">地图导航</RouterLink>
-        <RouterLink to="/posts" class="jp-nav-link">社区广场</RouterLink>
+        <RouterLink
+          to="/posts"
+          :class="['jp-nav-link', { 'jp-active': isPostsActive, 'router-link-active': isPostsActive }]"
+        >
+          社区广场
+        </RouterLink>
       </nav>
       <div class="jp-auth">
         <template v-if="!auth.user">
@@ -30,10 +35,13 @@
 </template>
 
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { computed } from 'vue'
 import { useAuthStore } from './store/authStore'
 
 const auth = useAuthStore()
+const route = useRoute()
+const isPostsActive = computed(() => route.path.startsWith('/posts'))
 </script>
 
 <style>
@@ -77,7 +85,8 @@ body,
   border-radius: 999px;
 }
 
-.jp-nav-link.router-link-active {
+.jp-nav-link.router-link-active,
+.jp-nav-link.jp-active {
   background: #1677ff;
   color: #fff;
 }

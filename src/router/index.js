@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import MapView from '../views/MapView.vue'
 import PostBoardView from '../views/PostBoardView.vue'
+import PostPublishView from '../views/PostPublishView.vue'
 import LoginView from '../views/LoginView.vue'
 
 const routes = [
@@ -23,6 +24,11 @@ const routes = [
         path: '/posts',
         name: 'posts',
         component: PostBoardView,
+    },
+    {
+        path: '/posts/publish',
+        name: 'posts-publish',
+        component: PostPublishView,
     },
     {
         path: '/login',
