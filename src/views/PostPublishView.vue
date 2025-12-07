@@ -5,8 +5,9 @@
       <nav class="side-nav">
         <RouterLink to="/posts" class="nav-item">发现</RouterLink>
         <div class="nav-item active">发布</div>
-        <div class="nav-item">通知</div>
-        <div class="nav-item">我</div>
+        <div class="nav-item muted">通知</div>
+        <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">我</RouterLink>
+        <div v-else class="nav-item muted">我</div>
       </nav>
       <div v-if="!auth.user" class="login-box">
         <el-button type="primary" class="login-btn" @click="$router.push('/login')">登录/发布</el-button>
@@ -145,6 +146,9 @@ const submitPost = async () => {
 .side-nav .nav-item:hover,
 .side-nav :global(.router-link-active.nav-item) {
   background: #f4f5f7;
+}
+.nav-item.muted {
+  color: #999;
 }
 .login-box {
   border: 1px solid #f0f0f0;

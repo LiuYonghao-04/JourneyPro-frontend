@@ -21,7 +21,7 @@
         </template>
         <template v-else>
           <div class="jp-user">
-            <span class="nickname">{{ auth.user.nickname }}</span>
+            <RouterLink :to="`/person?userid=${auth.user.id}`" class="nickname">{{ auth.user.nickname }}</RouterLink>
             <button class="jp-btn ghost" @click="auth.logout">退出</button>
           </div>
         </template>

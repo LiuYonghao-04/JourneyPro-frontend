@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import MapView from '../views/MapView.vue'
 import PostBoardView from '../views/PostBoardView.vue'
 import PostPublishView from '../views/PostPublishView.vue'
+import PersonView from '../views/PersonView.vue'
 import LoginView from '../views/LoginView.vue'
 
 const routes = [
@@ -41,6 +42,11 @@ const routes = [
         name: 'register',
         component: LoginView,
         props: { mode: 'register' },
+    },
+    {
+        path: '/person',
+        name: 'person',
+        component: PersonView,
     },
 ]
 

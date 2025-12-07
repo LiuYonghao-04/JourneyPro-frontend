@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page">
     <aside class="sidebar">
       <div class="logo">小红书</div>
@@ -6,7 +6,8 @@
         <RouterLink to="/posts" class="nav-item active">发现</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">发布</RouterLink>
         <div class="nav-item muted">通知</div>
-        <div class="nav-item muted">我</div>
+        <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">我</RouterLink>
+        <div v-else class="nav-item muted">我</div>
       </div>
       <div v-if="!auth.user" class="login-card">
         <el-button type="primary" class="w-full" @click="$router.push('/login')">登录/发布</el-button>
@@ -67,8 +68,13 @@
             @click="openDetail(card)"
           >
             <div class="cover" v-if="card.cover_image || (card.images && card.images[0])">
-              <div class="img-skeleton" />
-              <img :src="card.cover_image || card.images?.[0]" :alt="card.title" loading="lazy" />
+              <div v-if="!loadedMap[card._dupKey || card.id]" class="img-skeleton" />
+              <img
+                :src="card.cover_image || card.images?.[0]"
+                :alt="card.title"
+                loading="lazy"
+                @load="markLoaded(card)"
+              />
               <div class="floating-tag" v-if="card.tags?.length">{{ card.tags[0] }}</div>
             </div>
             <div class="card-body">
@@ -194,6 +200,7 @@ const sort = ref('latest')
 const search = ref('')
 const posts = ref([])
 const basePosts = ref([])
+const loadedMap = ref({})
 const loading = ref(false)
 const noMore = ref(false)
 const detailVisible = ref(false)
@@ -223,6 +230,7 @@ const fetchPosts = async (reset = false) => {
     if (reset) {
       posts.value = []
       basePosts.value = []
+      loadedMap.value = {}
       offset.value = 0
       noMore.value = false
       dupRounds.value = 0
@@ -242,17 +250,6 @@ const fetchPosts = async (reset = false) => {
   } finally {
     loading.value = false
   }
-}
-
-const appendDuplicateBatch = () => {
-  if (basePosts.value.length === 0) return
-  dupRounds.value += 1
-  const round = dupRounds.value
-  const duplicated = basePosts.value.map((p, idx) => ({
-    ...p,
-    _dupKey: `${p.id}-dup-${round}-${idx}`,
-  }))
-  posts.value = [...posts.value, ...duplicated]
 }
 
 const fetchComments = async (postId) => {
@@ -380,6 +377,17 @@ const likeComment = async (c) => {
   }
 }
 
+const appendDuplicateBatch = () => {
+  if (basePosts.value.length === 0) return
+  dupRounds.value += 1
+  const round = dupRounds.value
+  const duplicated = basePosts.value.map((p, idx) => ({
+    ...p,
+    _dupKey: `${p.id}-dup-${round}-${idx}`,
+  }))
+  posts.value = [...posts.value, ...duplicated]
+}
+
 const setupInfiniteScroll = () => {
   const observer = new IntersectionObserver(
     (entries) => {
@@ -397,9 +405,6 @@ const setupInfiniteScroll = () => {
 }
 
 watch(sort, () => fetchPosts(true))
-watch(activeTab, () => {
-  // no API call, client filter only
-})
 
 onMounted(() => {
   fetchTags()
@@ -407,6 +412,10 @@ onMounted(() => {
   setupInfiniteScroll()
 })
 
+const markLoaded = (card) => {
+  const key = card._dupKey || card.id
+  loadedMap.value = { ...loadedMap.value, [key]: true }
+}
 </script>
 
 <style scoped>
@@ -600,7 +609,9 @@ onMounted(() => {
 }
 .img-skeleton {
   position: absolute;
+  inset: 0;
   background: #f2f2f2;
+  z-index: 1;
 }
 .floating-tag {
   position: absolute;
