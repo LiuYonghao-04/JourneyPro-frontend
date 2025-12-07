@@ -22,10 +22,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import {computed, onMounted} from 'vue'
 import { useRouteStore } from '../store/routeStore'
 
 const routeStore = useRouteStore()
+
+onMounted(() => {
+  routeStore.fetchRecommendedPois()
+})
 
 // 推荐点列表来自 store
 const pois = computed(() => routeStore.recommendedPOIs || [])
