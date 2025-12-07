@@ -1,8 +1,8 @@
 <template>
   <div class="xhs-shell">
     <aside class="sidebar">
-      <div class="logo">小红书</div>
-      <nav class="side-nav">
+      <div class="logo">社区广场</div>
+      <nav class="nav">
         <RouterLink to="/posts" class="nav-item">发现</RouterLink>
         <div class="nav-item active">发布</div>
         <div class="nav-item muted">通知</div>
@@ -123,28 +123,33 @@ const submitPost = async () => {
 }
 .sidebar {
   background: #fff;
-  border-right: 1px solid #f0f0f0;
-  padding: 20px 16px;
+  border-right: 1px solid #ececec;
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 .logo {
   font-weight: 800;
   color: #ff2442;
   font-size: 20px;
+  padding: 8px 6px;
 }
-.side-nav .nav-item,
-.side-nav :global(.router-link-active.nav-item) {
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nav-item {
   padding: 10px 12px;
   border-radius: 12px;
   cursor: pointer;
   color: #4b4b4b;
   text-decoration: none;
 }
-.side-nav .nav-item.active,
-.side-nav .nav-item:hover,
-.side-nav :global(.router-link-active.nav-item) {
+.nav-item.active,
+.nav-item:hover,
+.nav :global(.router-link-active.nav-item) {
   background: #f4f5f7;
 }
 .nav-item.muted {

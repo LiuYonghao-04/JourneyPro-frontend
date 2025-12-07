@@ -1,7 +1,7 @@
 ﻿<template>
   <div class="page">
     <aside class="sidebar">
-      <div class="logo">小红书</div>
+      <div class="logo">社区广场</div>
       <div class="nav">
         <RouterLink to="/posts" class="nav-item active">发现</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">发布</RouterLink>

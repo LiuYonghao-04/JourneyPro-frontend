@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <aside class="sidebar">
-      <div class="logo">小红书</div>
+      <div class="logo">社区广场</div>
       <div class="nav">
         <RouterLink to="/posts" class="nav-item">发现</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">发布</RouterLink>
@@ -98,27 +98,28 @@ onMounted(fetchData)
 <style scoped>
 .page {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 240px 1fr;
   height: 100%;
   background: #fafafa;
 }
 .sidebar {
   background: #fff;
-  border-right: 1px solid #f0f0f0;
-  padding: 16px;
+  border-right: 1px solid #ececec;
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .logo {
   color: #ff2442;
   font-weight: 800;
   font-size: 20px;
+  padding: 8px 6px;
 }
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .nav-item {
   padding: 10px 12px;
@@ -129,7 +130,7 @@ onMounted(fetchData)
 .nav-item.active,
 .nav-item:hover,
 .nav :global(.router-link-active.nav-item) {
-  background: #f5f5f5;
+  background: #f2f3f5;
 }
 .nav-item.muted {
   color: #999;
