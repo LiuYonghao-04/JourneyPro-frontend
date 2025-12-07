@@ -1,26 +1,29 @@
 <script setup>
 defineProps({ theme: String })
-import { ref,computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 import { storeToRefs } from 'pinia'
 import { geocode } from '../utils/geocode'
 import axios from 'axios'
 
 const routeStore = useRouteStore()
-const selectedPoi = computed(() => routeStore.selectedPoi)
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
+const viaPoints = computed(() => routeStore.viaPoints || [])
 const locating = ref(false)
 
 const AMAP_KEY = '7b3d51a4bac970421ba4ee69861bb326'
 
-// ====== 关键：为自动补全加 防抖 + 结果缓存 + 选择锁 ======
+// 自动补全防抖 + 结果缓存 + 选择锁
 let fetchTimer = null
-let lastResults = []      // 缓存上一次非空结果，避免空数组导致收起
-let lockFetch = false     // 选择时短暂锁定，避免立即再次触发 fetch
+let lastResults = []
+let lockFetch = false
 
 const fetchSuggestions = (queryString, cb) => {
-  if (lockFetch) return cb(lastResults)             // 选择后的瞬间，用缓存结果顶住
-  if (!queryString) { lastResults = []; return cb([]) }
+  if (lockFetch) return cb(lastResults)
+  if (!queryString) {
+    lastResults = []
+    return cb([])
+  }
 
   if (fetchTimer) clearTimeout(fetchTimer)
   fetchTimer = setTimeout(async () => {
@@ -30,20 +33,20 @@ const fetchSuggestions = (queryString, cb) => {
       let results = []
       if (res.data && Array.isArray(res.data.tips) && res.data.tips.length > 0) {
         results = res.data.tips
-            .filter(tip => tip.location && tip.name)
-            .map(tip => ({
-              value: tip.name,
-              location: tip.location,   // "lng,lat"
-              district: tip.district || ''
-            }))
+          .filter((tip) => tip.location && tip.name)
+          .map((tip) => ({
+            value: tip.name,
+            location: tip.location, // "lng,lat"
+            district: tip.district || '',
+          }))
       }
+
       if (res.data && res.data.status !== '1') {
-        console.warn('高德API请求异常：', res.data);
+        console.warn('高德 API 请求异常', res.data)
         cb(lastResults.length ? lastResults : [{ value: '未找到匹配地点', location: '' }])
         return
       }
 
-      // 如果这次为空但 query 还在，继续用上次非空结果，避免弹层直接收起
       if (results.length === 0 && queryString.trim().length > 0) {
         cb(lastResults)
       } else {
@@ -51,13 +54,11 @@ const fetchSuggestions = (queryString, cb) => {
         cb(results)
       }
     } catch (e) {
-      // 出错也继续用缓存，保持弹层稳定
       cb(lastResults)
     }
-  }, 280) // 防抖时间（可按需调 200~400ms）
+  }, 280)
 }
 
-// 选择一个起点
 const handleSelectStart = (item) => {
   lockFetch = true
   setTimeout(() => (lockFetch = false), 500)
@@ -66,7 +67,6 @@ const handleSelectStart = (item) => {
   routeStore.setStart(parseFloat(lat), parseFloat(lng))
 }
 
-// 选择一个终点
 const handleSelectEnd = (item) => {
   lockFetch = true
   setTimeout(() => (lockFetch = false), 500)
@@ -75,7 +75,6 @@ const handleSelectEnd = (item) => {
   routeStore.setEnd(parseFloat(lat), parseFloat(lng))
 }
 
-// 手动解析按钮（保留）
 const updateFromAddress = async () => {
   try {
     const start = await geocode(startAddress.value)
@@ -87,20 +86,27 @@ const updateFromAddress = async () => {
   }
 }
 
-// 定位
 const locateMe = () => {
   if (!navigator.geolocation) return alert('浏览器不支持定位')
   locating.value = true
   navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        routeStore.setStart(pos.coords.latitude, pos.coords.longitude)
-        locating.value = false
-      },
-      () => {
-        alert('无法定位')
-        locating.value = false
-      }
+    (pos) => {
+      routeStore.setStart(pos.coords.latitude, pos.coords.longitude)
+      locating.value = false
+    },
+    () => {
+      alert('无法定位')
+      locating.value = false
+    }
   )
+}
+
+const removeViaPoint = (poi) => {
+  routeStore.removeViaPoint(poi)
+}
+
+const clearAllViaPoints = () => {
+  routeStore.clearViaPoints()
 }
 </script>
 
@@ -112,29 +118,29 @@ const locateMe = () => {
     </div>
 
     <el-form label-position="top" label-width="60px" size="small">
-      <el-form-item label="起点：">
+      <el-form-item label="起点">
         <el-autocomplete
-            v-model="startAddress"
-            :fetch-suggestions="fetchSuggestions"
-            placeholder="请输入起点"
-            size="small"
-            @select="handleSelectStart"
-            :trigger-on-focus="true"
-            :teleported="false"
-            popper-class="jp-autocomplete"
+          v-model="startAddress"
+          :fetch-suggestions="fetchSuggestions"
+          placeholder="请输入起点"
+          size="small"
+          @select="handleSelectStart"
+          :trigger-on-focus="true"
+          :teleported="false"
+          popper-class="jp-autocomplete"
         />
       </el-form-item>
 
-      <el-form-item label="终点：">
+      <el-form-item label="终点">
         <el-autocomplete
-            v-model="endAddress"
-            :fetch-suggestions="fetchSuggestions"
-            placeholder="请输入终点"
-            size="small"
-            @select="handleSelectEnd"
-            :trigger-on-focus="true"
-            :teleported="false"
-            popper-class="jp-autocomplete"
+          v-model="endAddress"
+          :fetch-suggestions="fetchSuggestions"
+          placeholder="请输入终点"
+          size="small"
+          @select="handleSelectEnd"
+          :trigger-on-focus="true"
+          :teleported="false"
+          popper-class="jp-autocomplete"
         />
       </el-form-item>
 
@@ -144,19 +150,26 @@ const locateMe = () => {
       </el-form-item>
     </el-form>
 
-    <div class="via-tags" v-if="selectedPoi">
-      <span class="via-label">Via:</span>
-      <el-tag
+    <div class="via-tags" v-if="viaPoints.length">
+      <div class="via-header">
+        <span class="via-label">途径点</span>
+        <el-button text size="small" @click="clearAllViaPoints">清空</el-button>
+      </div>
+      <div class="tag-list">
+        <el-tag
+          v-for="poi in viaPoints"
+          :key="poi.id || poi.name || `${poi.lat}-${poi.lng}`"
           type="success"
           closable
-          @close="routeStore.clearSelectedPoi()"
-      >
-        {{ selectedPoi.name }}
-      </el-tag>
+          @close="removeViaPoint(poi)"
+        >
+          {{ poi.name || `${poi.lat.toFixed(3)}, ${poi.lng.toFixed(3)}` }}
+        </el-tag>
+      </div>
     </div>
 
     <div class="coords">
-      <span>起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br/>
+      <span>起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br />
       <span>终点: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}</span>
     </div>
   </div>
@@ -206,5 +219,31 @@ const locateMe = () => {
 
 .jp-autocomplete {
   z-index: 2000 !important;
+}
+
+.via-tags {
+  margin: 8px 0 6px;
+  padding: 8px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.via-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.via-label {
+  font-weight: 600;
+  color: #222;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

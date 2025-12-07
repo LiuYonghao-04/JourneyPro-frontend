@@ -7,11 +7,12 @@
     </div>
 
     <ul v-else>
-      <li v-for="poi in pois" :key="poi.id" class="poi-item">
+      <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
         <div class="poi-info">
           <div class="poi-name">{{ poi.name }}</div>
           <div class="poi-meta">
-            <span>{{ poi.category }}</span> ·
+            <span>{{ poi.category }}</span>
+            <span class="dot">·</span>
             <span>人气 {{ poi.popularity }}</span>
           </div>
         </div>
@@ -22,7 +23,7 @@
 </template>
 
 <script setup>
-import {computed, onMounted} from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 
 const routeStore = useRouteStore()
@@ -36,8 +37,8 @@ const pois = computed(() => routeStore.recommendedPOIs || [])
 
 // 点击按钮后重新规划路线
 const addPoiToRoute = async (poi) => {
-  console.log('🚗 重新规划路线，添加途径点:', poi.name)
-  await routeStore.rebuildRouteWithPoi(poi)
+  console.log('重新规划路线，添加途径点', poi.name)
+  await routeStore.addViaPoint(poi)
 }
 </script>
 
@@ -82,6 +83,12 @@ const addPoiToRoute = async (poi) => {
 .poi-meta {
   font-size: 12px;
   color: #777;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dot {
+  color: #bbb;
 }
 .add-btn {
   background: #228be6;

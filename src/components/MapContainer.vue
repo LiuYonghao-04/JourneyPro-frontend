@@ -10,6 +10,7 @@ import { useRouteStore } from '../store/routeStore'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -17,19 +18,18 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 })
 
-const blueIcon = L.icon({
-  iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [0, -32],
-  shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png'
-})
-
 const map = ref(null)
 let control = null
 const routeStore = useRouteStore()
 let startMarker = null
 let endMarker = null
+let poiLayer = null
+
+const buildWaypointList = () => [
+  L.latLng(routeStore.startLat, routeStore.startLng),
+  ...(routeStore.viaPoints || []).map((poi) => L.latLng(poi.lat, poi.lng)),
+  L.latLng(routeStore.endLat, routeStore.endLng),
+]
 
 // 自定义圆点 marker 样式
 function createColoredMarker(color, position, onDrag) {
@@ -47,29 +47,29 @@ function createColoredMarker(color, position, onDrag) {
     }),
   })
 
-  // 拖动后回填坐标到 store
   if (onDrag) marker.on('dragend', onDrag)
   return marker
 }
 
 onMounted(() => {
-  // 初始化地图
-  map.value = L.map('map', { zoomControl: false })
-      .setView([routeStore.startLat, routeStore.startLng], 13)
+  map.value = L.map('map', { zoomControl: false }).setView(
+    [routeStore.startLat, routeStore.startLng],
+    13
+  )
 
-  // 移动缩放按钮到底部左侧
   L.control.zoom({ position: 'bottomleft' }).addTo(map.value)
 
-  // 底图
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors',
   }).addTo(map.value)
 
-// 反向地理编码函数
+  // 反向地理编码函数
   async function reverseGeocode(lat, lng) {
     try {
-      const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+      const res = await axios.get(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      )
       return res.data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
     } catch (e) {
       return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
@@ -90,150 +90,118 @@ onMounted(() => {
     routeStore.endAddress = addr
   })
 
-
   startMarker.addTo(map.value)
   endMarker.addTo(map.value)
 
-  // 初始化路线控件（隐藏默认箭头 marker）
   control = L.Routing.control({
-    waypoints: [
-      L.latLng(routeStore.startLat, routeStore.startLng),
-      L.latLng(routeStore.endLat, routeStore.endLng),
-    ],
+    waypoints: buildWaypointList(),
     router: L.Routing.osrmv1({ serviceUrl: '/osrm/route/v1' }),
     routeWhileDragging: true,
     addWaypoints: false,
     draggableWaypoints: false,
     show: true,
     collapsible: true,
-    createMarker: () => null, // ✅ 不生成默认箭头 marker
+    createMarker: () => null,
   }).addTo(map.value)
-  // 将控制器暴露给全局，供 RouteSummary.vue 读取
+
   window._osrmControl = control
+  control.setWaypoints(buildWaypointList())
 
-  // 初始绘制路线
-  control.setWaypoints([
-    L.latLng(routeStore.startLat, routeStore.startLng),
-    L.latLng(routeStore.endLat, routeStore.endLng),
-  ])
-
-  // 监听 store 变化 → 自动刷新路线和 marker
+  // 监听起终点变化
   watch(
-      () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
-      async () => {
-        // 更新 marker 位置
-        startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
-        endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
+    () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
+    async () => {
+      startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
+      endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
 
-        // 刷新路线
-        control.setWaypoints([
-          L.latLng(routeStore.startLat, routeStore.startLng),
-          L.latLng(routeStore.endLat, routeStore.endLng),
-        ])
-        // ✅ 新增：当路线更新后，获取推荐POI
-        await routeStore.fetchRecommendedPois()
-        console.log('✅ 已请求推荐点接口')
+      if (control) {
+        control.setWaypoints(buildWaypointList())
       }
+      await routeStore.fetchRecommendedPois()
+      console.log('已请求推荐点接口')
+    }
   )
 
-// ✅ 监听推荐POI变化：显示推荐点标记（带防抖延迟刷新）
-  let poiLayer = L.layerGroup() // 提前定义空图层组
-  let updateTimeout = null // 防抖计时器
-
+  // 监听途径点变化
   watch(
-      () => routeStore.recommendedPOIs,
-      (pois) => {
+    () => routeStore.viaPoints.map((poi) => `${poi.lat},${poi.lng}`),
+    () => {
+      if (!control) return
+      control.setWaypoints(buildWaypointList())
+    },
+    { deep: true }
+  )
+
+  // 推荐 POI 的 marker
+  poiLayer = L.layerGroup()
+  let updateTimeout = null
+  watch(
+    () => routeStore.recommendedPOIs,
+    (pois) => {
+      if (!map.value) return
+      clearTimeout(updateTimeout)
+
+      updateTimeout = setTimeout(() => {
         if (!map.value) return
+        poiLayer.clearLayers()
 
-        // 🕒 防抖处理：清除上次延迟任务
-        clearTimeout(updateTimeout)
-        updateTimeout = setTimeout(() => {
-          if (!map.value || map.value._animatingZoom) {
-            console.log('⏳ 地图仍在动画中，延迟更新POI')
-            return
-          }
-          try {
-            poiLayer?.clearLayers() // ✅ 使用 ?. 避免空引用
-          } catch (err) {
-            console.warn('⚠️ 清空图层时出错:', err.message)
-          }
+        if (!pois || pois.length === 0) return
 
-          // 如果没有推荐点就不继续
-          if (!pois || pois.length === 0) return
+        const poiIcon = L.icon({
+          iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [0, -32],
+          shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+        })
 
-          // ✅ 自定义蓝色图标（安全保留）
-          const blueIcon = L.icon({
-            iconUrl:
-                'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [0, -32],
-            shadowUrl:
-                'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+        pois.forEach((poi) => {
+          if (typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+
+          const marker = L.marker([poi.lat, poi.lng], {
+            icon: poiIcon,
+            title: poi.name,
+          }).bindPopup(`<b>${poi.name}</b><br>${poi.category || ''}`)
+
+          marker.on('click', () => {
+            if (!map.value) return
+            map.value.setView([poi.lat, poi.lng], 15, { animate: true })
+            marker.openPopup()
           })
 
-          pois.forEach((poi) => {
-            // ✅ 防止非法坐标（有时会返回 null 或 undefined）
-            if (!poi.lat || !poi.lng) return
+          poiLayer.addLayer(marker)
+        })
 
-            const marker = L.marker([poi.lat, poi.lng], {
-              icon: blueIcon,
-              title: poi.name,
-            }).bindPopup(`<b>${poi.name}</b><br>${poi.category || ''}`)
-
-            // ✅ 点击 marker：居中并打开弹窗
-            marker.on('click', () => {
-              if (!map.value) return
-              try {
-                map.value.setView([poi.lat, poi.lng], 15, { animate: true })
-                marker.openPopup()
-              } catch (err) {
-                console.warn('⚠️ setView 出错（地图正在缩放）:', err.message)
-              }
-            })
-
-            poiLayer.addLayer(marker)
-          })
-
-          // ✅ 确保图层只添加一次
-          if (map.value && !map.value.hasLayer(poiLayer)) {
-            try {
-              poiLayer.addTo(map.value)
-            } catch (err) {
-              console.warn('⚠️ 添加图层时出错:', err.message)
-            }
-          }
-
-          console.log('📍 推荐POI已更新:', pois.length)
-        }, 300)
-      },
-      { deep: true }
-  )
-
-
-// ✅ 监听后端重规划路线（A→POI→B）
-  watch(
-      () => routeStore.routeGeojson,
-      (geojson) => {
-        if (!geojson || !map.value) return
-
-        // 移除原来的路线控件（OSRM LRM）
-        if (control) {
-          map.value.removeControl(control)
-          control = null
+        if (map.value && !map.value.hasLayer(poiLayer)) {
+          poiLayer.addTo(map.value)
         }
 
-        // 绘制新的路线（用 GeoJSON）
-        const newRoute = L.geoJSON(geojson, {
-          style: { color: '#228BE6', weight: 6, opacity: 0.85 },
-        }).addTo(map.value)
-
-        map.value.fitBounds(newRoute.getBounds())
-        console.log('🚗 路线已更新为含POI路径')
-      },
-      { deep: true }
+        console.log('推荐 POI 已刷新', pois.length)
+      }, 300)
+    },
+    { deep: true }
   )
 
+  // 监听后端重规划的 GeoJSON 路线
+  watch(
+    () => routeStore.routeGeojson,
+    (geojson) => {
+      if (!geojson || !map.value) return
+
+      if (control) {
+        map.value.removeControl(control)
+        control = null
+      }
+
+      const newRoute = L.geoJSON(geojson, {
+        style: { color: '#228BE6', weight: 6, opacity: 0.85 },
+      }).addTo(map.value)
+
+      map.value.fitBounds(newRoute.getBounds())
+      console.log('路线已更新为含 POI 路径')
+    },
+    { deep: true }
+  )
 })
 </script>
 

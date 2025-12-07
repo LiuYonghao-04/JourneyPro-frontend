@@ -1,9 +1,6 @@
 <script setup>
 defineProps({ theme: String })
 import { ref, onMounted } from 'vue'
-import { useRouteStore } from '../store/routeStore'
-
-const routeStore = useRouteStore()
 const distance = ref(0)
 const duration = ref(0)
 let control = null
