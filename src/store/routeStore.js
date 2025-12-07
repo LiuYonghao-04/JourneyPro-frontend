@@ -2,12 +2,12 @@ import { defineStore } from 'pinia'
 
 export const useRouteStore = defineStore('route', {
     state: () => ({
-        startAddress: '天府广场',
-        endAddress: '成都理工大学',
-        startLat: 30.6599,
-        startLng: 104.0639,
-        endLat: 30.6773,
-        endLng: 104.1444,
+        startAddress: 'London_center',
+        endAddress: 'Grosvenor Square',
+        startLat: 51.5074,
+        startLng: -0.1278,
+        endLat: 51.5113,
+        endLng: -0.1502,
         routeGeojson: null,
         steps: [],
         totalDistance: null,

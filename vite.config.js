@@ -7,8 +7,8 @@ export default defineConfig({
     proxy: {
       // 代理 /osrm 到本机 OSRM 后端 5000 端口
       '/osrm': {
-        // target: 'http://127.0.0.1:5000',
-        target: 'https://router.project-osrm.org',
+        target: 'http://127.0.0.1:5000',
+        // target: 'https://router.project-osrm.org',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/osrm/, ''),
       },
