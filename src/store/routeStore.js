@@ -13,7 +13,8 @@ export const useRouteStore = defineStore('route', {
         totalDistance: null,
         totalDuration: null,
         recommendedPOIs: [],
-        isLoading: false, // ✅ 新增：加载状态
+        isLoading: false,
+        selectedPoi: null,
     }),
 
     actions: {
@@ -60,6 +61,24 @@ export const useRouteStore = defineStore('route', {
                 console.error('❌ rebuildRouteWithPoi error:', err)
             } finally {
                 this.isLoading = false
+            }
+        },
+        clearSelectedPoi() {
+            this.selectedPoi = null
+
+            try {
+                if (!window._osrmControl) {
+                    console.warn('⚠️ OSRM 控件未初始化')
+                    return
+                }
+
+                // 只保留 起点 -> 终点
+                window._osrmControl.setWaypoints([
+                    L.latLng(this.startLat, this.startLng),
+                    L.latLng(this.endLat, this.endLng),
+                ])
+            } catch (err) {
+                console.error('❌ clearSelectedPoi error:', err)
             }
         },
 

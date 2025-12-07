@@ -1,12 +1,13 @@
 <script setup>
 defineProps({ theme: String })
-import { ref } from 'vue'
+import { ref,computed } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 import { storeToRefs } from 'pinia'
 import { geocode } from '../utils/geocode'
 import axios from 'axios'
 
 const routeStore = useRouteStore()
+const selectedPoi = computed(() => routeStore.selectedPoi)
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
 const locating = ref(false)
 
@@ -142,6 +143,17 @@ const locateMe = () => {
         <el-button type="success" size="small" :loading="locating" @click="locateMe">定位</el-button>
       </el-form-item>
     </el-form>
+
+    <div class="via-tags" v-if="selectedPoi">
+      <span class="via-label">Via:</span>
+      <el-tag
+          type="success"
+          closable
+          @close="routeStore.clearSelectedPoi()"
+      >
+        {{ selectedPoi.name }}
+      </el-tag>
+    </div>
 
     <div class="coords">
       <span>起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br/>
