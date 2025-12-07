@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import MapView from '../views/MapView.vue'
 import PostBoardView from '../views/PostBoardView.vue'
+import LoginView from '../views/LoginView.vue'
 
 const routes = [
     {
@@ -22,6 +23,18 @@ const routes = [
         path: '/posts',
         name: 'posts',
         component: PostBoardView,
+    },
+    {
+        path: '/login',
+        name: 'login',
+        component: LoginView,
+        props: { mode: 'login' },
+    },
+    {
+        path: '/register',
+        name: 'register',
+        component: LoginView,
+        props: { mode: 'register' },
     },
 ]
 

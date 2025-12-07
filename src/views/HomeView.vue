@@ -13,6 +13,8 @@
         <RouterLink to="/posts" class="btn ghost">
           逛逛帖子广场
         </RouterLink>
+        <RouterLink to="/login" class="btn ghost">登录</RouterLink>
+        <RouterLink to="/register" class="btn ghost">注册</RouterLink>
       </div>
     </div>
     <div class="home-right">
