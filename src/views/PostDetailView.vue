@@ -30,22 +30,23 @@
         </div>
 
         <div class="body">
-          <div class="author">
-            <img :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
-            <div class="author-info">
-              <div class="name">{{ post.user?.nickname || 'Traveler' }}</div>
-              <div class="time">{{ formatTime(post.created_at) }}</div>
-            </div>
-            <el-button
-              v-if="auth.user && auth.user.id === post.user?.id"
-              class="me-btn"
-              text
-              type="primary"
-              disabled
-            >
-              My post
-            </el-button>
+        <div class="author">
+          <img :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
+          <div class="author-info">
+            <div class="name">{{ post.user?.nickname || 'Traveler' }}</div>
+            <div class="time">{{ formatTime(post.created_at) }}</div>
           </div>
+          <template v-if="auth.user && auth.user.id !== post.user?.id">
+            <el-button
+              class="follow-btn"
+              :type="following ? 'success' : 'primary'"
+              @click="toggleFollow"
+              plain
+            >
+              {{ following ? 'Following' : 'Follow' }}
+            </el-button>
+          </template>
+        </div>
 
           <h2 class="title">{{ post.title }}</h2>
           <p class="text">{{ post.content }}</p>
@@ -184,6 +185,7 @@ import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
+const FOLLOW_API = 'http://localhost:3001/api/follow'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -195,6 +197,7 @@ const replyTarget = ref(null)
 const defaultAvatar = 'https://placehold.co/80x80'
 const likedIds = ref(new Set())
 const favIds = ref(new Set())
+const following = ref(false)
 
 const postId = computed(() => route.params.id)
 
@@ -216,6 +219,7 @@ const fetchPost = async () => {
     _liked: likedIds.value.has(Number(postId.value)),
     _fav: favIds.value.has(Number(postId.value)),
   }
+  await fetchFollowStatus()
 }
 
 const normalizeReplies = (replies = []) =>
@@ -351,6 +355,34 @@ const likeComment = async (comment) => {
   const data = res.data?.data
   if (data) {
     updateCommentInTree({ ...data, _liked: res.data?.liked })
+  }
+}
+
+const fetchFollowStatus = async () => {
+  if (!auth.user || !post.value?.user?.id || auth.user.id === post.value.user.id) {
+    following.value = false
+    return
+  }
+  try {
+    const res = await axios.get(`${FOLLOW_API}/status`, {
+      params: { user_id: auth.user.id, target_id: post.value.user.id },
+    })
+    following.value = !!res.data?.following
+  } catch (e) {
+    following.value = false
+  }
+}
+
+const toggleFollow = async () => {
+  if (!auth.user || !post.value?.user?.id || auth.user.id === post.value.user.id) return
+  try {
+    const res = await axios.post(`${FOLLOW_API}/toggle`, {
+      user_id: auth.user.id,
+      target_id: post.value.user.id,
+    })
+    following.value = !!res.data?.following
+  } catch (e) {
+    // ignore
   }
 }
 

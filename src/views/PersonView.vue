@@ -17,11 +17,15 @@
         </div>
         <div class="info">
           <h2>{{ userName }}</h2>
-          <div class="meta">{{ userIdLabel }}</div>
+          <div class="meta">
+            {{ userIdLabel }}
+            <span class="link" @click="openFollowers">Followers: {{ followerCount }}</span>
+          </div>
           <div class="stats">
-            <span>{{ posts.length }} posts</span>
-            <span>{{ favs.length }} favorites</span>
-            <span>{{ likes.length }} likes</span>
+            <span> posts:{{ posts.length }}</span>
+            <span>favorites:{{ favs.length }} </span>
+            <span>likes:{{ likes.length }} </span>
+<!--            <span class="link" @click="openFollowers">Followers {{ followerCount }}</span>-->
           </div>
         </div>
       </header>
@@ -64,6 +68,19 @@
       </section>
     </main>
   </div>
+
+  <el-dialog v-model="followerDialog" title="Followers" width="360px">
+    <div class="followers-list" v-if="followers.length">
+      <div v-for="f in followers" :key="f.id" class="follower-item">
+        <img :src="f.avatar_url || 'https://placehold.co/80x80'" class="follower-avatar" />
+        <div>
+          <div class="follower-name">{{ f.nickname || 'Traveler' }}</div>
+          <div class="follower-meta">ID: {{ f.user_id }}</div>
+        </div>
+      </div>
+    </div>
+    <div v-else>None yet.</div>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -74,6 +91,7 @@ import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
+const FOLLOW_API = 'http://localhost:3001/api/follow'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -82,6 +100,8 @@ const posts = ref([])
 const favs = ref([])
 const likes = ref([])
 const tab = ref('posts')
+const followers = ref([])
+const followerDialog = ref(false)
 
 const fetchData = async () => {
   const uid = userId.value
@@ -96,6 +116,7 @@ const fetchData = async () => {
   posts.value = p.map((item) => ({ ...item, _fav: favSet.has(item.id), _liked: likedSet.has(item.id) }))
   favs.value = f.map((item) => ({ ...item, _fav: true }))
   likes.value = l.map((item) => ({ ...item, _liked: true }))
+  await fetchFollowers()
 }
 
 const goDetail = (id) => {
@@ -108,6 +129,25 @@ const userIdLabel = computed(() => `User ID: ${userId.value || 'guest'}`)
 const currentList = computed(() =>
   tab.value === 'posts' ? posts.value : tab.value === 'favs' ? favs.value : likes.value
 )
+const followerCount = computed(() => followers.value.length)
+
+const fetchFollowers = async () => {
+  const uid = userId.value
+  if (!uid) {
+    followers.value = []
+    return
+  }
+  try {
+    const res = await axios.get(`${FOLLOW_API}/followers`, { params: { target_id: uid } })
+    followers.value = res.data?.data || []
+  } catch (e) {
+    followers.value = []
+  }
+}
+
+const openFollowers = () => {
+  followerDialog.value = true
+}
 
 onMounted(fetchData)
 </script>
@@ -184,8 +224,15 @@ onMounted(fetchData)
 .stats {
   color: #777;
   display: flex;
-  gap: 10px;
+  gap: 15px;
   font-size: 13px;
+}
+.meta .link {
+  color: #1677ff;
+  cursor: pointer;
+}
+.meta .link:hover {
+  text-decoration: underline;
 }
 .tabs {
   margin-top: 18px;
@@ -259,5 +306,29 @@ onMounted(fetchData)
 }
 .dot {
   color: #bbb;
+}
+.followers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.follower-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.follower-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #f3f3f3;
+}
+.follower-name {
+  font-weight: 600;
+}
+.follower-meta {
+  font-size: 12px;
+  color: #666;
 }
 </style>
