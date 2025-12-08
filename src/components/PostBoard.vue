@@ -1,20 +1,20 @@
-﻿<template>
+<template>
   <div class="page">
     <aside class="sidebar">
-      <div class="logo">社区广场</div>
+      <div class="logo">Community</div>
       <div class="nav">
-        <RouterLink to="/posts" class="nav-item active">发现</RouterLink>
-        <RouterLink to="/posts/publish" class="nav-item">发布</RouterLink>
-        <div class="nav-item muted">通知</div>
-        <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">我</RouterLink>
-        <div v-else class="nav-item muted">我</div>
+        <RouterLink to="/posts" class="nav-item active">Discover</RouterLink>
+        <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
+        <div class="nav-item muted">Notifications</div>
+        <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">Me</RouterLink>
+        <div v-else class="nav-item muted">Me</div>
       </div>
       <div v-if="!auth.user" class="login-card">
-        <el-button type="primary" class="w-full" @click="$router.push('/login')">登录/发布</el-button>
+        <el-button type="primary" class="w-full" @click="$router.push('/login')">Login / Publish</el-button>
         <ul>
-          <li>刷到更懂你的优质内容</li>
-          <li>搜索看到评论、爆料信息</li>
-          <li>查看收藏、点赞的笔记</li>
+          <li>See content tailored for you</li>
+          <li>Keep your favorites and likes</li>
+          <li>Comment and follow creators</li>
         </ul>
       </div>
     </aside>
@@ -22,16 +22,15 @@
     <main class="content">
       <header class="topbar">
         <div class="search">
-          <el-input
-            v-model="search"
-            placeholder="搜索你感兴趣的"
-            prefix-icon="el-icon-search"
-            @input="handleSearch"
-          />
+          <el-input v-model="search" placeholder="Search what you love" clearable @input="handleSearch">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
         </div>
         <div class="top-actions">
-          <el-button text>创作中心</el-button>
-          <el-button text>业务合作</el-button>
+          <el-button text>Creator</el-button>
+          <el-button text>Business</el-button>
         </div>
       </header>
 
@@ -46,7 +45,7 @@
           {{ tab }}
         </button>
         <button class="chip outline" @click="switchSort">
-          {{ sort === 'latest' ? '最新' : '最热' }}
+          {{ sort === 'latest' ? 'Latest' : 'Hot' }}
         </button>
       </section>
 
@@ -56,8 +55,8 @@
         </div>
 
         <div v-else-if="!loading && filteredPosts.length === 0" class="empty">
-          <div>暂无内容，去发布一篇吧</div>
-          <el-button type="primary" @click="$router.push('/posts/publish')">去发布</el-button>
+          <div>No posts yet. Publish one?</div>
+          <el-button type="primary" @click="$router.push('/posts/publish')">Create</el-button>
         </div>
 
         <div v-else class="waterfall">
@@ -80,16 +79,22 @@
             <div class="card-body">
               <div class="card-title">{{ card.title }}</div>
               <div class="card-meta">
-                <span>{{ card.user?.nickname || '旅人' }}</span>
+                <span>{{ card.user?.nickname || 'Guest' }}</span>
                 <span v-if="card.tags?.length"> · {{ card.tags.slice(0, 2).join(' / ') }}</span>
               </div>
               <div class="card-footer">
-                <div class="icon-btn" @click.stop="toggleLike(card)">
-                  <span class="heart" :class="{ active: card._liked }">❤️</span> {{ card.like_count || 0 }}
-                </div>
-                <div class="icon-btn" @click.stop="toggleFav(card)">
-                  <span class="star" :class="{ active: card._fav }">⭐</span> {{ card.favorite_count || 0 }}
-                </div>
+                <button class="icon-btn" @click.stop="toggleLike(card)">
+                  <el-icon :class="['stat-icon', { liked: card._liked }]">
+                    <component :is="card._liked ? CircleCheckFilled : CircleCheck" />
+                  </el-icon>
+                  <span>{{ card.like_count || 0 }}</span>
+                </button>
+                <button class="icon-btn" @click.stop="toggleFav(card)">
+                  <el-icon :class="['stat-icon', 'fav', { active: card._fav }]">
+                    <component :is="card._fav ? StarFilled : Star" />
+                  </el-icon>
+                  <span>{{ card.favorite_count || 0 }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -99,89 +104,9 @@
         <div v-if="loading && posts.length > 0" class="skeleton-more">
           <div v-for="n in 3" :key="n" class="skeleton-card small" />
         </div>
-        <div v-if="noMore" class="no-more">已经到底了</div>
+        <div v-if="noMore" class="no-more">End of feed · keep scrolling to loop</div>
       </section>
     </main>
-
-    <el-dialog v-model="detailVisible" :show-close="true" width="72%" top="5vh" class="detail-dialog">
-      <template #header>
-        <div class="detail-header">
-          <div class="detail-author">
-            <img v-if="detail?.user?.avatar_url" :src="detail.user.avatar_url" class="avatar" />
-            <span>{{ detail?.user?.nickname || '旅人' }}</span>
-          </div>
-          <el-button v-if="auth.user && detail?.user?.id === auth.user.id" text disabled>我的帖子</el-button>
-          <el-button v-else type="danger" plain>关注</el-button>
-        </div>
-      </template>
-      <div class="detail-body" v-if="detail">
-        <div class="detail-gallery" v-if="detail.images?.length">
-          <el-carousel height="480px" arrow="hover">
-            <el-carousel-item v-for="(img, idx) in detail.images" :key="idx">
-              <img :src="img" class="gallery-img" />
-            </el-carousel-item>
-          </el-carousel>
-        </div>
-        <div class="detail-content">
-          <h3>{{ detail.title }}</h3>
-          <p class="content-text">{{ detail.content }}</p>
-          <div class="tags">
-            <span v-for="tag in detail.tags" :key="tag" class="tag">#{{ tag }}</span>
-          </div>
-          <div class="detail-stats">
-            <span>❤️ {{ detail.like_count || 0 }}</span>
-            <span>📌 {{ detail.favorite_count || 0 }}</span>
-            <span>👁️ {{ detail.view_count || 0 }}</span>
-          </div>
-          <div class="detail-actions">
-            <el-button @click="toggleLike(detail)" type="primary" plain>点赞</el-button>
-            <el-button @click="toggleFav(detail)" type="success" plain>收藏</el-button>
-            <el-button @click="detailVisible = false" type="text">关闭</el-button>
-          </div>
-
-          <div class="comments">
-            <h4>留言</h4>
-            <div class="comment-input">
-              <el-input v-model="commentText" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" />
-              <el-button type="primary" size="small" @click="submitComment()">发布</el-button>
-            </div>
-            <div class="comment-list">
-              <div v-for="c in comments" :key="c.id" class="comment-item">
-                <div class="comment-head">
-                  <span class="c-author">{{ c.user?.nickname || '旅人' }}</span>
-                  <span class="c-time">{{ formatTime(c.created_at) }}</span>
-                </div>
-                <div class="c-body">{{ c.content }}</div>
-                <div class="c-actions">
-                  <span class="c-btn" @click="likeComment(c)">❤️ {{ c.like_count || 0 }}</span>
-                  <span class="c-btn" @click="toggleReply(c)">追评</span>
-                </div>
-                <div v-if="c._showReply" class="reply-box">
-                  <el-input
-                    v-model="c._replyText"
-                    type="textarea"
-                    :autosize="{ minRows: 2, maxRows: 3 }"
-                  />
-                  <el-button size="small" @click="submitComment(c)">发布追评</el-button>
-                </div>
-                <div class="replies" v-if="c.replies?.length">
-                  <div v-for="r in c.replies" :key="r.id" class="reply-item">
-                    <div class="comment-head">
-                      <span class="c-author">{{ r.user?.nickname || '旅人' }}</span>
-                      <span class="c-time">{{ formatTime(r.created_at) }}</span>
-                    </div>
-                    <div class="c-body">{{ r.content }}</div>
-                    <div class="c-actions">
-                      <span class="c-btn" @click="likeComment(r)">❤️ {{ r.like_count || 0 }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
@@ -189,13 +114,14 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
+import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const auth = useAuthStore()
 
-const tabs = ref(['推荐'])
-const activeTab = ref('推荐')
+const tabs = ref(['Recommended'])
+const activeTab = ref('Recommended')
 const sort = ref('latest')
 const search = ref('')
 const posts = ref([])
@@ -207,13 +133,40 @@ const sentinel = ref(null)
 const limit = 20
 const offset = ref(0)
 const dupRounds = ref(0)
+const likedIds = ref(new Set())
+const favIds = ref(new Set())
+
+const markWithReactions = (list) =>
+  list.map((item) => ({
+    ...item,
+    _liked: likedIds.value.has(item.id),
+    _fav: favIds.value.has(item.id),
+  }))
+
+const loadReactions = async () => {
+  if (!auth.user) {
+    likedIds.value = new Set()
+    favIds.value = new Set()
+    return
+  }
+  try {
+    const [likedRes, favRes] = await Promise.all([
+      axios.get(API_BASE, { params: { liked_by: auth.user.id, limit: 200 } }),
+      axios.get(API_BASE, { params: { favorited_by: auth.user.id, limit: 200 } }),
+    ])
+    likedIds.value = new Set((likedRes.data?.data || []).map((p) => p.id))
+    favIds.value = new Set((favRes.data?.data || []).map((p) => p.id))
+  } catch (e) {
+    // ignore
+  }
+}
 
 const fetchTags = async () => {
   try {
     const res = await axios.get(`${API_BASE}/tags/list`)
     const names = res.data?.data?.map((t) => t.name).filter(Boolean) || []
     const uniq = Array.from(new Set(names))
-    tabs.value = ['推荐', ...uniq]
+    tabs.value = ['Recommended', ...uniq]
   } catch (e) {
     // ignore
   }
@@ -230,11 +183,12 @@ const fetchPosts = async (reset = false) => {
       offset.value = 0
       noMore.value = false
       dupRounds.value = 0
+      await loadReactions()
     }
     const res = await axios.get(API_BASE, {
       params: { limit, offset: offset.value, sort: sort.value },
     })
-    const list = res.data?.data || []
+    const list = markWithReactions(res.data?.data || [])
     if (list.length < limit) noMore.value = true
     posts.value = reset ? list : [...posts.value, ...list]
     if (basePosts.value.length === 0 && list.length > 0) {
@@ -304,7 +258,7 @@ const handleSearch = () => {
 const filteredPosts = computed(() => {
   const kw = search.value.trim().toLowerCase()
   return posts.value.filter((p) => {
-    const inTab = activeTab.value === '推荐' ? true : (p.tags || []).includes(activeTab.value)
+    const inTab = activeTab.value === 'Recommended' ? true : (p.tags || []).includes(activeTab.value)
     const inKw =
       !kw ||
       p.title?.toLowerCase().includes(kw) ||
@@ -372,7 +326,7 @@ const markLoaded = (card) => {
 }
 .logo {
   font-weight: 800;
-  color: #ff2442;
+  color: #111;
   font-size: 20px;
   padding: 8px 6px;
 }
@@ -410,12 +364,6 @@ const markLoaded = (card) => {
   flex-direction: column;
   gap: 6px;
 }
-.more {
-  margin-top: auto;
-  color: #555;
-  font-size: 14px;
-}
-
 .content {
   overflow-y: auto;
   padding: 12px 18px 24px;
@@ -435,7 +383,6 @@ const markLoaded = (card) => {
   display: flex;
   gap: 8px;
 }
-
 .tabs {
   display: flex;
   gap: 10px;
@@ -451,14 +398,13 @@ const markLoaded = (card) => {
   cursor: pointer;
 }
 .chip.active {
-  background: #1e1e1e;
+  background: #111;
   color: #fff;
 }
 .chip.outline {
   background: transparent;
   border: 1px solid #d0d0d0;
 }
-
 .feed {
   min-height: 400px;
 }
@@ -494,7 +440,6 @@ const markLoaded = (card) => {
   gap: 12px;
   align-items: center;
 }
-
 .waterfall {
   column-count: 4;
   column-gap: 16px;
@@ -520,7 +465,6 @@ const markLoaded = (card) => {
     column-count: 1;
   }
 }
-
 .card {
   break-inside: avoid;
   margin-bottom: 16px;
@@ -582,23 +526,24 @@ const markLoaded = (card) => {
   color: #555;
 }
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 8px;
   border-radius: 12px;
   background: #f8f8f8;
+  border: none;
+  cursor: pointer;
 }
-.heart {
-  color: #bbb;
-}
-.heart.active {
-  color: #ff2442;
-}
-.star {
+.icon-btn :deep(.stat-icon) {
   color: #b5b5b5;
 }
-.star.active {
+.icon-btn :deep(.stat-icon.liked) {
+  color: #ff2442;
+}
+.icon-btn :deep(.stat-icon.fav.active) {
   color: #f5a524;
 }
-
 .loading-more,
 .no-more {
   text-align: center;
@@ -607,117 +552,5 @@ const markLoaded = (card) => {
 }
 .sentinel {
   height: 1px;
-}
-
-.detail-dialog .detail-body {
-  display: grid;
-  grid-template-columns: 60% 40%;
-  gap: 16px;
-}
-.detail-gallery {
-  width: 100%;
-}
-.gallery-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
-}
-.detail-content h3 {
-  margin: 0 0 8px;
-}
-.content-text {
-  white-space: pre-wrap;
-  line-height: 1.5;
-  color: #222;
-}
-.tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin: 8px 0;
-}
-.tag {
-  background: #f1f5ff;
-  color: #2f54eb;
-  border-radius: 10px;
-  padding: 4px 8px;
-  font-size: 12px;
-}
-.detail-stats {
-  display: flex;
-  gap: 10px;
-  color: #555;
-  font-size: 13px;
-}
-.detail-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.detail-author {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.detail-dialog .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-}
-
-.comments {
-  margin-top: 16px;
-  border-top: 1px solid #f0f0f0;
-  padding-top: 12px;
-}
-.comment-input {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.comment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.comment-item,
-.reply-item {
-  background: #fafafa;
-  border-radius: 12px;
-  padding: 10px;
-}
-.comment-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #666;
-}
-.c-body {
-  margin: 6px 0;
-  color: #222;
-}
-.c-actions {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: #666;
-}
-.c-btn {
-  cursor: pointer;
-}
-.reply-box {
-  margin-top: 8px;
-}
-.replies {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 </style>

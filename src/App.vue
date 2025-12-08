@@ -5,24 +5,24 @@
         <RouterLink to="/">JourneyPro</RouterLink>
       </div>
       <nav class="jp-nav">
-        <RouterLink to="/home" class="jp-nav-link">首页</RouterLink>
-        <RouterLink to="/map" class="jp-nav-link">地图导航</RouterLink>
+        <RouterLink to="/home" class="jp-nav-link">Home</RouterLink>
+        <RouterLink to="/map" class="jp-nav-link">Map</RouterLink>
         <RouterLink
           to="/posts"
           :class="['jp-nav-link', { 'jp-active': isPostsActive, 'router-link-active': isPostsActive }]"
         >
-          社区广场
+          Community
         </RouterLink>
       </nav>
       <div class="jp-auth">
         <template v-if="!auth.user">
-          <RouterLink to="/login" class="jp-btn ghost">登录</RouterLink>
-          <RouterLink to="/register" class="jp-btn primary">注册</RouterLink>
+          <RouterLink to="/login" class="jp-btn ghost">Login</RouterLink>
+          <RouterLink to="/register" class="jp-btn primary">Register</RouterLink>
         </template>
         <template v-else>
           <div class="jp-user">
             <RouterLink :to="`/person?userid=${auth.user.id}`" class="nickname">{{ auth.user.nickname }}</RouterLink>
-            <button class="jp-btn ghost" @click="auth.logout">退出</button>
+            <button class="jp-btn ghost" @click="auth.logout">Logout</button>
           </div>
         </template>
       </div>

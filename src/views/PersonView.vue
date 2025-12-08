@@ -1,12 +1,12 @@
 <template>
   <div class="page">
     <aside class="sidebar">
-      <div class="logo">小红书</div>
+      <div class="logo">Community</div>
       <div class="nav">
-        <RouterLink to="/posts" class="nav-item">发现</RouterLink>
-        <RouterLink to="/posts/publish" class="nav-item">发布</RouterLink>
-        <div class="nav-item muted">通知</div>
-        <RouterLink to="/person" class="nav-item active">我</RouterLink>
+        <RouterLink to="/posts" class="nav-item">Discover</RouterLink>
+        <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
+        <div class="nav-item muted">Notifications</div>
+        <RouterLink to="/person" class="nav-item active">Me</RouterLink>
       </div>
     </aside>
 
@@ -17,27 +17,25 @@
         </div>
         <div class="info">
           <h2>{{ userName }}</h2>
-          <div class="meta">
-            <span>{{ userIdLabel }}</span>
-          </div>
+          <div class="meta">{{ userIdLabel }}</div>
           <div class="stats">
-            <span>{{ posts.length }} 笔记</span>
-            <span>{{ favs.length }} 收藏</span>
-            <span>{{ likes.length }} 点赞</span>
+            <span>{{ posts.length }} posts</span>
+            <span>{{ favs.length }} favorites</span>
+            <span>{{ likes.length }} likes</span>
           </div>
         </div>
       </header>
 
       <div class="tabs">
-        <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">笔记</button>
-        <button class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">收藏</button>
-        <button class="tab" :class="{ active: tab === 'likes' }" @click="tab = 'likes'">点赞</button>
+        <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">Posts</button>
+        <button class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">Favorites</button>
+        <button class="tab" :class="{ active: tab === 'likes' }" @click="tab = 'likes'">Likes</button>
       </div>
 
       <section class="grid">
         <div v-if="currentList.length === 0" class="empty">
-          <div class="empty-icon">🌥️</div>
-          <p>你还没有发布任何内容哦~</p>
+          <div class="empty-icon">🌱</div>
+          <p>No content yet.</p>
         </div>
         <div v-else class="cards">
           <div
@@ -46,13 +44,20 @@
             class="card"
             @click="goDetail(card.id)"
           >
-            <div class="cover" v-if="card.cover_image || (card.images && card.images[0])">
+            <div class="cover" v-if="card.cover_image || card.images?.[0]">
               <img :src="card.cover_image || card.images?.[0]" loading="lazy" />
             </div>
             <div class="card-title">{{ card.title }}</div>
             <div class="card-meta">
-              <span class="icon" :class="{ active: card._liked }">❤️</span> {{ card.like_count || 0 }} ·
-              <span class="icon" :class="{ active: card._fav }">⭐</span> {{ card.favorite_count || 0 }}
+              <el-icon :class="['stat-icon', { liked: card._liked }]">
+                <component :is="card._liked ? CircleCheckFilled : CircleCheck" />
+              </el-icon>
+              <span>{{ card.like_count || 0 }}</span>
+              <span class="dot">·</span>
+              <el-icon :class="['stat-icon', 'fav', { active: card._fav }]">
+                <component :is="card._fav ? StarFilled : Star" />
+              </el-icon>
+              <span>{{ card.favorite_count || 0 }}</span>
             </div>
           </div>
         </div>
@@ -63,8 +68,9 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, RouterLink, useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import axios from 'axios'
+import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
@@ -82,12 +88,12 @@ const fetchData = async () => {
   if (!uid) return
   const [p, f, l] = await Promise.all([
     axios.get(API_BASE, { params: { user_id: uid, limit: 50 } }).then((r) => r.data?.data || []),
-    axios
-      .get(API_BASE, { params: { favorited_by: uid, limit: 50 } })
-      .then((r) => r.data?.data || []),
+    axios.get(API_BASE, { params: { favorited_by: uid, limit: 50 } }).then((r) => r.data?.data || []),
     axios.get(API_BASE, { params: { liked_by: uid, limit: 50 } }).then((r) => r.data?.data || []),
   ])
-  posts.value = p
+  const likedSet = new Set(l.map((i) => i.id))
+  const favSet = new Set(f.map((i) => i.id))
+  posts.value = p.map((item) => ({ ...item, _fav: favSet.has(item.id), _liked: likedSet.has(item.id) }))
   favs.value = f.map((item) => ({ ...item, _fav: true }))
   likes.value = l.map((item) => ({ ...item, _liked: true }))
 }
@@ -96,9 +102,9 @@ const goDetail = (id) => {
   router.push(`/posts/postsid=${id}`)
 }
 
-const userName = computed(() => auth.user?.nickname || '旅人')
+const userName = computed(() => auth.user?.nickname || 'Traveler')
 const userAvatar = computed(() => auth.user?.avatar_url || 'https://placehold.co/120x120')
-const userIdLabel = computed(() => `用户ID：${userId.value || '未登录'}`)
+const userIdLabel = computed(() => `User ID: ${userId.value || 'guest'}`)
 const currentList = computed(() =>
   tab.value === 'posts' ? posts.value : tab.value === 'favs' ? favs.value : likes.value
 )
@@ -122,7 +128,7 @@ onMounted(fetchData)
   gap: 14px;
 }
 .logo {
-  color: #ff2442;
+  color: #111;
   font-weight: 800;
   font-size: 20px;
   padding: 8px 6px;
@@ -146,7 +152,6 @@ onMounted(fetchData)
 .nav-item.muted {
   color: #999;
 }
-
 .content {
   overflow-y: auto;
   padding: 24px 28px;
@@ -182,7 +187,6 @@ onMounted(fetchData)
   gap: 10px;
   font-size: 13px;
 }
-
 .tabs {
   margin-top: 18px;
   display: flex;
@@ -199,7 +203,6 @@ onMounted(fetchData)
   background: #111;
   color: #fff;
 }
-
 .grid {
   margin-top: 16px;
   background: #fff;
@@ -245,10 +248,16 @@ onMounted(fetchData)
   gap: 6px;
   align-items: center;
 }
-.icon {
+.stat-icon {
   color: #aaa;
 }
-.icon.active {
+.stat-icon.liked {
   color: #ff2442;
+}
+.stat-icon.fav.active {
+  color: #f5a524;
+}
+.dot {
+  color: #bbb;
 }
 </style>
