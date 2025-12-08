@@ -37,7 +37,7 @@
               <span class="heart" :class="{ active: post._liked }">❤</span> {{ post.like_count || 0 }}
             </el-button>
             <el-button @click="toggleFav(post)" type="success" plain>
-              <span class="star" :class="{ active: post._fav }">⭐星</span> {{ post.favorite_count || 0 }}
+              <span class="star" :class="{ active: post._fav }">★</span> {{ post.favorite_count || 0 }}
             </el-button>
           </div>
 
@@ -55,7 +55,7 @@
                 </div>
                 <div class="c-body">{{ c.content }}</div>
                 <div class="c-actions">
-                  <span class="c-btn" @click="likeComment(c)">❤️ {{ c.like_count || 0 }}</span>
+                  <span class="c-btn" @click="likeComment(c)">❤ {{ c.like_count || 0 }}</span>
                   <span class="c-btn" @click="toggleReply(c)">追评</span>
                 </div>
                 <div v-if="c._showReply" class="reply-box">
@@ -74,7 +74,7 @@
                     </div>
                     <div class="c-body">{{ r.content }}</div>
                     <div class="c-actions">
-                      <span class="c-btn" @click="likeComment(r)">❤️ {{ r.like_count || 0 }}</span>
+                      <span class="c-btn" @click="likeComment(r)">❤ {{ r.like_count || 0 }}</span>
                     </div>
                   </div>
                 </div>
