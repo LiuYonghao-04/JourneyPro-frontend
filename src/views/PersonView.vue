@@ -1,12 +1,12 @@
 <template>
   <div class="page">
     <aside class="sidebar">
-      <div class="logo">社区广场</div>
+      <div class="logo">小红书</div>
       <div class="nav">
         <RouterLink to="/posts" class="nav-item">发现</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">发布</RouterLink>
         <div class="nav-item muted">通知</div>
-        <div class="nav-item active">我</div>
+        <RouterLink to="/person" class="nav-item active">我</RouterLink>
       </div>
     </aside>
 
@@ -40,13 +40,19 @@
           <p>你还没有发布任何内容哦~</p>
         </div>
         <div v-else class="cards">
-          <div v-for="card in currentList" :key="card._dupKey || card.id" class="card">
+          <div
+            v-for="card in currentList"
+            :key="card._dupKey || card.id"
+            class="card"
+            @click="goDetail(card.id)"
+          >
             <div class="cover" v-if="card.cover_image || (card.images && card.images[0])">
               <img :src="card.cover_image || card.images?.[0]" loading="lazy" />
             </div>
             <div class="card-title">{{ card.title }}</div>
             <div class="card-meta">
-              ❤️ {{ card.like_count || 0 }} · 📌 {{ card.favorite_count || 0 }}
+              <span class="icon" :class="{ active: card._liked }">❤️</span> {{ card.like_count || 0 }} ·
+              <span class="icon" :class="{ active: card._fav }">⭐</span> {{ card.favorite_count || 0 }}
             </div>
           </div>
         </div>
@@ -57,12 +63,13 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const userId = computed(() => route.query.userid || auth.user?.id)
 const posts = ref([])
@@ -81,8 +88,12 @@ const fetchData = async () => {
     axios.get(API_BASE, { params: { liked_by: uid, limit: 50 } }).then((r) => r.data?.data || []),
   ])
   posts.value = p
-  favs.value = f
-  likes.value = l
+  favs.value = f.map((item) => ({ ...item, _fav: true }))
+  likes.value = l.map((item) => ({ ...item, _liked: true }))
+}
+
+const goDetail = (id) => {
+  router.push(`/posts/postsid=${id}`)
 }
 
 const userName = computed(() => auth.user?.nickname || '旅人')
@@ -215,6 +226,7 @@ onMounted(fetchData)
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid #eee;
+  cursor: pointer;
 }
 .card .cover img {
   width: 100%;
@@ -229,5 +241,14 @@ onMounted(fetchData)
   padding: 0 10px 10px;
   font-size: 12px;
   color: #666;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.icon {
+  color: #aaa;
+}
+.icon.active {
+  color: #ff2442;
 }
 </style>

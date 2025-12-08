@@ -85,10 +85,10 @@
               </div>
               <div class="card-footer">
                 <div class="icon-btn" @click.stop="toggleLike(card)">
-                  <span :class="{ active: card._liked }">❤️</span> {{ card.like_count || 0 }}
+                  <span class="heart" :class="{ active: card._liked }">❤️</span> {{ card.like_count || 0 }}
                 </div>
                 <div class="icon-btn" @click.stop="toggleFav(card)">
-                  <span :class="{ active: card._fav }">📌</span> {{ card.favorite_count || 0 }}
+                  <span class="star" :class="{ active: card._fav }">⭐</span> {{ card.favorite_count || 0 }}
                 </div>
               </div>
             </div>
@@ -203,10 +203,6 @@ const basePosts = ref([])
 const loadedMap = ref({})
 const loading = ref(false)
 const noMore = ref(false)
-const detailVisible = ref(false)
-const detail = ref(null)
-const comments = ref([])
-const commentText = ref('')
 const sentinel = ref(null)
 const limit = 20
 const offset = ref(0)
@@ -252,15 +248,6 @@ const fetchPosts = async (reset = false) => {
   }
 }
 
-const fetchComments = async (postId) => {
-  try {
-    const res = await axios.get(`${API_BASE}/${postId}/comments`)
-    comments.value = res.data?.data || []
-  } catch (e) {
-    comments.value = []
-  }
-}
-
 const toggleLike = async (card) => {
   try {
     const res = await axios.post(`${API_BASE}/${card.id}/like`, { user_id: auth.user?.id })
@@ -268,7 +255,6 @@ const toggleLike = async (card) => {
     if (updated) {
       updated._liked = res.data?.liked
       replacePost(updated)
-      if (detail.value?.id === card.id) detail.value = updated
     }
   } catch (e) {
     // ignore
@@ -279,26 +265,22 @@ const toggleFav = async (card) => {
   try {
     const res = await axios.post(`${API_BASE}/${card.id}/favorite`, { user_id: auth.user?.id })
     const updated = res.data?.data
+    const favorited = res.data?.favorited
     if (updated) {
-      updated._fav = res.data?.favorited
+      updated._fav = favorited
       replacePost(updated)
-      if (detail.value?.id === card.id) detail.value = updated
+    } else {
+      card._fav = favorited
+      card.favorite_count = (card.favorite_count || 0) + (favorited ? 1 : -1)
+      replacePost(card)
     }
   } catch (e) {
     // ignore
   }
 }
 
-const openDetail = async (card) => {
-  try {
-    const res = await axios.get(`${API_BASE}/${card.id}`)
-    detail.value = res.data?.data || card
-    await fetchComments(card.id)
-  } catch (e) {
-    detail.value = card
-  } finally {
-    detailVisible.value = true
-  }
+const openDetail = (card) => {
+  window.location.href = `/posts/postsid=${card.id}`
 }
 
 const replacePost = (updated) => {
@@ -331,51 +313,6 @@ const filteredPosts = computed(() => {
     return inTab && inKw
   })
 })
-
-const formatTime = (t) => (t ? new Date(t).toLocaleString() : '')
-
-const submitComment = async (parent) => {
-  if (!detail.value) return
-  const text = parent ? parent._replyText : commentText.value
-  if (!text) return
-  try {
-    const res = await axios.post(`${API_BASE}/${detail.value.id}/comments`, {
-      content: text,
-      parent_id: parent?.id,
-      user_id: auth.user?.id,
-    })
-    const newC = res.data?.data
-    if (!newC) return
-    if (parent) {
-      parent.replies = parent.replies || []
-      parent.replies.push(newC)
-      parent._replyText = ''
-      parent._showReply = false
-    } else {
-      comments.value.push({ ...newC, replies: [] })
-      commentText.value = ''
-    }
-  } catch (e) {
-    // ignore
-  }
-}
-
-const toggleReply = (c) => {
-  c._showReply = !c._showReply
-  if (!c._replyText) c._replyText = ''
-}
-
-const likeComment = async (c) => {
-  try {
-    const res = await axios.post(`${API_BASE}/comments/${c.id}/like`, { user_id: auth.user?.id })
-    const updated = res.data?.data
-    if (updated) {
-      c.like_count = updated.like_count
-    }
-  } catch (e) {
-    // ignore
-  }
-}
 
 const appendDuplicateBatch = () => {
   if (basePosts.value.length === 0) return
@@ -649,8 +586,17 @@ const markLoaded = (card) => {
   border-radius: 12px;
   background: #f8f8f8;
 }
-.icon-btn .active {
+.heart {
+  color: #bbb;
+}
+.heart.active {
   color: #ff2442;
+}
+.star {
+  color: #b5b5b5;
+}
+.star.active {
+  color: #f5a524;
 }
 
 .loading-more,

@@ -4,6 +4,7 @@ import MapView from '../views/MapView.vue'
 import PostBoardView from '../views/PostBoardView.vue'
 import PostPublishView from '../views/PostPublishView.vue'
 import PersonView from '../views/PersonView.vue'
+import PostDetailView from '../views/PostDetailView.vue'
 import LoginView from '../views/LoginView.vue'
 
 const routes = [
@@ -47,6 +48,11 @@ const routes = [
         path: '/person',
         name: 'person',
         component: PersonView,
+    },
+    {
+        path: '/posts/postsid=:id',
+        name: 'post-detail',
+        component: PostDetailView,
     },
 ]
 
