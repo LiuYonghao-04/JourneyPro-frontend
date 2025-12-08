@@ -26,7 +26,7 @@
           <h1>Create a new post</h1>
           <p>Polish your story with preview, tag suggestions, and autosave.</p>
         </div>
-        <el-tag type="success" v-if="auth.user">Logged in as {{ auth.user.nickname }}</el-tag>
+        <el-tag type="success" v-if="auth.user" style="font-size: 20px">Logged in as {{ auth.user.nickname }}</el-tag>
         <el-tag type="warning" v-else>Posting as guest</el-tag>
       </section>
 
