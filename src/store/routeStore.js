@@ -1,6 +1,29 @@
 import { defineStore } from 'pinia'
 import L from 'leaflet'
 
+const STORAGE_KEY = 'jp_via_points'
+
+function loadViaPoints() {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const list = JSON.parse(raw)
+    return Array.isArray(list) ? list : []
+  } catch (e) {
+    return []
+  }
+}
+
+function saveViaPoints(list) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  } catch (e) {
+    // ignore
+  }
+}
+
 export const useRouteStore = defineStore('route', {
   state: () => ({
     startAddress: 'London_center',
@@ -15,7 +38,7 @@ export const useRouteStore = defineStore('route', {
     totalDuration: null,
     recommendedPOIs: [],
     isLoading: false,
-    viaPoints: [],
+    viaPoints: loadViaPoints(),
   }),
 
   actions: {
@@ -66,6 +89,7 @@ export const useRouteStore = defineStore('route', {
         )
         if (!exists) {
           this.viaPoints.push(poi)
+          saveViaPoints(this.viaPoints)
         }
 
         this.applyWaypointsToControl()
@@ -85,6 +109,7 @@ export const useRouteStore = defineStore('route', {
       )
       if (before !== this.viaPoints.length) {
         this.applyWaypointsToControl()
+        saveViaPoints(this.viaPoints)
       }
     },
 
@@ -92,6 +117,7 @@ export const useRouteStore = defineStore('route', {
       if (this.viaPoints.length === 0) return
       this.viaPoints = []
       this.applyWaypointsToControl()
+      saveViaPoints(this.viaPoints)
     },
 
     async fetchRecommendedPois() {

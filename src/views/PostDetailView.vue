@@ -5,7 +5,7 @@
       <div class="nav">
         <RouterLink to="/posts" class="nav-item active">Discover</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
-        <div class="nav-item muted">Notifications</div>
+        <RouterLink to="/notifications" class="nav-item">Notifications</RouterLink>
         <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">Me</RouterLink>
         <div v-else class="nav-item muted">Me</div>
       </div>
@@ -54,6 +54,28 @@
           <div class="tags" v-if="post.tags?.length">
             <span v-for="tag in post.tags" :key="tag" class="tag">#{{ tag }}</span>
           </div>
+
+          <div v-if="post.poi_id" class="poi-actions">
+            <div class="poi-meta">
+              <strong>{{ poiDetail?.name || 'POI from this post' }}</strong>
+              <span class="poi-cat" v-if="poiDetail?.category">{{ poiDetail.category }}</span>
+              <span class="poi-cat" v-else-if="poiLoading">Loading...</span>
+            </div>
+          <div class="poi-buttons">
+            <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View on map</el-button>
+            <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">
+              Add to route
+            </el-button>
+          </div>
+          <el-alert
+            v-if="alertMessage"
+            :title="alertMessage"
+            :type="alertType"
+            :closable="false"
+            show-icon
+            class="inline-alert"
+          />
+        </div>
 
           <div class="stats">
             <button class="pill" @click="toggleLikePost">
@@ -181,14 +203,17 @@
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import axios from 'axios'
-import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
+import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
+import { useRouteStore } from '../store/routeStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'
+const POI_API = 'http://localhost:3001/api/poi'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const routeStore = useRouteStore()
 const post = ref(null)
 const comments = ref([])
 const commentText = ref('')
@@ -198,8 +223,13 @@ const defaultAvatar = 'https://placehold.co/80x80'
 const likedIds = ref(new Set())
 const favIds = ref(new Set())
 const following = ref(false)
+const poiDetail = ref(null)
+const poiLoading = ref(false)
+const alertMessage = ref('')
+const alertType = ref('success')
 
 const postId = computed(() => route.params.id)
+
 
 const goBack = () => {
   router.back()
@@ -220,6 +250,7 @@ const fetchPost = async () => {
     _fav: favIds.value.has(Number(postId.value)),
   }
   await fetchFollowStatus()
+  await fetchPoiDetail()
 }
 
 const normalizeReplies = (replies = []) =>
@@ -356,6 +387,74 @@ const likeComment = async (comment) => {
   if (data) {
     updateCommentInTree({ ...data, _liked: res.data?.liked })
   }
+}
+
+const fetchPoiDetail = async () => {
+  const poiId = post.value?.poi_id
+  if (!poiId) {
+    poiDetail.value = null
+    return
+  }
+  poiLoading.value = true
+  try {
+    const res = await axios.get(`${POI_API}/${poiId}`)
+    poiDetail.value = res.data?.data || null
+  } catch (e) {
+    poiDetail.value = null
+  } finally {
+    poiLoading.value = false
+  }
+}
+
+const viewOnMap = () => {
+  if (!poiDetail.value) return
+  const { lat, lng, name, id } = poiDetail.value
+  const poiId = Number(id) || id
+  router.push({
+    path: '/map',
+    query: {
+      poi_lat: lat,
+      poi_lng: lng,
+      poi_name: name,
+      poi_id: poiId,
+    },
+  })
+}
+
+const addToRoute = () => {
+  if (!poiDetail.value) return
+  const { id, name, lat, lng } = poiDetail.value
+  const latNum = Number(lat)
+  const lngNum = Number(lng)
+  const currentId = id !== undefined && id !== null ? String(id) : null
+  const exists = routeStore.viaPoints.some((p) => {
+    const pid = p.id !== undefined && p.id !== null ? String(p.id) : null
+    if (pid && currentId) return pid === currentId
+    if (
+      typeof p.lat === 'number' &&
+      typeof p.lng === 'number' &&
+      !Number.isNaN(latNum) &&
+      !Number.isNaN(lngNum)
+    ) {
+      return Number(p.lat) === latNum && Number(p.lng) === lngNum
+    }
+    return false
+  })
+  if (exists) {
+    alertType.value = 'warning'
+    alertMessage.value = 'Already added to route'
+    console.log('addToRoute skipped duplicate', { currentId, latNum, lngNum, viaPoints: routeStore.viaPoints })
+    return
+  }
+  routeStore.addViaPoint({
+    id,
+    name,
+    lat: latNum,
+    lng: lngNum,
+  })
+  alertType.value = 'success'
+  alertMessage.value = 'Added to route'
+  console.log('addToRoute success', { id, latNum, lngNum, viaPoints: routeStore.viaPoints })
 }
 
 const fetchFollowStatus = async () => {
@@ -504,6 +603,20 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+.poi-actions {
+  padding: 10px;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  background: #fafafa;
+}
+.poi-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.inline-alert {
+  margin-top: 8px;
 }
 .tag {
   background: #f1f5ff;

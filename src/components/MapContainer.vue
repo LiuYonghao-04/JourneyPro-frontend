@@ -1,6 +1,7 @@
 <script setup>
 import axios from 'axios'
 import { ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
@@ -24,6 +25,7 @@ const routeStore = useRouteStore()
 let startMarker = null
 let endMarker = null
 let poiLayer = null
+const route = useRoute()
 
 const buildWaypointList = () => [
   L.latLng(routeStore.startLat, routeStore.startLng),
@@ -201,6 +203,31 @@ onMounted(() => {
       console.log('路线已更新为含 POI 路径')
     },
     { deep: true }
+  )
+
+  // focus to poi from query
+  watch(
+    () => route.query,
+    () => {
+      const lat = route.query.poi_lat ? Number(route.query.poi_lat) : null
+      const lng = route.query.poi_lng ? Number(route.query.poi_lng) : null
+      if (map.value && typeof lat === 'number' && typeof lng === 'number' && !Number.isNaN(lat) && !Number.isNaN(lng)) {
+        map.value.setView([lat, lng], 15)
+        // optional marker
+        const marker = L.marker([lat, lng]).addTo(map.value)
+        marker.bindPopup(route.query.poi_name || 'Selected POI').openPopup()
+      }
+      // add to via points if requested
+      if (route.query.poi_lat && route.query.poi_lng && route.query.poi_id) {
+        routeStore.addViaPoint({
+          id: Number(route.query.poi_id) || route.query.poi_id,
+          name: route.query.poi_name || 'POI',
+          lat: Number(route.query.poi_lat),
+          lng: Number(route.query.poi_lng),
+        })
+      }
+    },
+    { immediate: true }
   )
 })
 </script>
