@@ -5,7 +5,7 @@
       <div class="nav">
         <RouterLink to="/posts" class="nav-item active">Discover</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
-        <div class="nav-item muted">Notifications</div>
+        <RouterLink to="/notifications" class="nav-item">Notifications</RouterLink>
         <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">Me</RouterLink>
         <div v-else class="nav-item muted">Me</div>
       </div>

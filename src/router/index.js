@@ -6,6 +6,7 @@ import PostPublishView from '../views/PostPublishView.vue'
 import PersonView from '../views/PersonView.vue'
 import PostDetailView from '../views/PostDetailView.vue'
 import LoginView from '../views/LoginView.vue'
+import NotificationView from '../views/NotificationView.vue'
 
 const routes = [
     {
@@ -33,6 +34,11 @@ const routes = [
         component: PostPublishView,
     },
     {
+        path: '/notifications/:type?',
+        name: 'notifications',
+        component: NotificationView,
+    },
+    {
         path: '/login',
         name: 'login',
         component: LoginView,
@@ -57,7 +63,7 @@ const routes = [
 ]
 
 const router = createRouter({
-    history: createWebHistory(), // 所以会有 /map、/posts 这种路径
+    history: createWebHistory(),
     routes,
 })
 

@@ -5,7 +5,7 @@
       <div class="nav">
         <RouterLink to="/posts" class="nav-item">Discover</RouterLink>
         <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
-        <div class="nav-item muted">Notifications</div>
+        <RouterLink to="/notifications" class="nav-item">Notifications</RouterLink>
         <RouterLink to="/person" class="nav-item active">Me</RouterLink>
       </div>
     </aside>
