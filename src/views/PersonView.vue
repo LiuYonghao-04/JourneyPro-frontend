@@ -12,8 +12,9 @@
 
     <main class="content">
       <header class="profile">
-        <div class="avatar-wrap">
+        <div class="avatar-wrap" @click="isSelf && openAvatarDialog()">
           <img :src="displayAvatar" alt="avatar" />
+          <div v-if="isSelf" class="avatar-mask">Change</div>
         </div>
         <div class="info">
           <h2>{{ displayUserName }}</h2>
@@ -87,6 +88,19 @@
     </div>
     <div v-else>None yet.</div>
   </el-dialog>
+
+  <el-dialog v-model="avatarDialog" title="Update Avatar" width="420px">
+    <div class="avatar-edit">
+      <el-input v-model="avatarInput" placeholder="https://..."></el-input>
+      <div class="avatar-actions">
+        <el-button size="small" @click="randomAvatar">Random</el-button>
+        <el-button type="primary" size="small" @click="saveAvatar">Save</el-button>
+      </div>
+      <div class="avatar-preview">
+        <img :src="avatarInput || displayAvatar" alt="preview" />
+      </div>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -112,6 +126,8 @@ const loadedMap = ref({})
 const followers = ref([])
 const followerDialog = ref(false)
 const profile = ref(null)
+const avatarDialog = ref(false)
+const avatarInput = ref('')
 
 const fetchData = async () => {
   const uid = userId.value
@@ -175,6 +191,36 @@ const fetchProfile = async () => {
 
 const openFollowers = () => {
   followerDialog.value = true
+}
+
+const openAvatarDialog = () => {
+  if (!isSelf.value) return
+  avatarInput.value = profile.value?.avatar_url || auth.user?.avatar_url || ''
+  avatarDialog.value = true
+}
+
+const randomAvatar = () => {
+  const seed = Math.floor(Math.random() * 200) + 1
+  avatarInput.value = `https://picsum.photos/seed/jp_post${seed}_cover/800/600`
+}
+
+const saveAvatar = async () => {
+  const url = (avatarInput.value || '').trim()
+  if (!url) return
+  try {
+    const res = await axios.post(`${AUTH_API}/avatar`, {
+      user_id: auth.user?.id,
+      avatar_url: url,
+    })
+    const updated = res.data?.user
+    if (updated) {
+      profile.value = updated
+      auth.setUser(updated)
+      avatarDialog.value = false
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 const displayUserName = computed(() => profile.value?.nickname || auth.user?.nickname || 'Traveler')
@@ -260,11 +306,28 @@ watch(
   border-radius: 50%;
   overflow: hidden;
   background: #f1f1f1;
+  position: relative;
+  cursor: pointer;
 }
 .avatar-wrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.avatar-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-weight: 700;
+  font-size: 14px;
+}
+.avatar-wrap:hover .avatar-mask {
+  opacity: 1;
 }
 .info h2 {
   margin: 0 0 6px;
@@ -393,5 +456,28 @@ watch(
 .follower-meta {
   font-size: 12px;
   color: #666;
+}
+.avatar-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.avatar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.avatar-preview {
+  display: inline-flex;
+  padding: 8px;
+  border: 1px solid #e6e8eb;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+.avatar-preview img {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 10px;
 }
 </style>

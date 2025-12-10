@@ -7,6 +7,7 @@ import PersonView from '../views/PersonView.vue'
 import PostDetailView from '../views/PostDetailView.vue'
 import LoginView from '../views/LoginView.vue'
 import NotificationView from '../views/NotificationView.vue'
+import { useAuthStore } from '../store/authStore'
 
 const routes = [
     {
@@ -65,6 +66,24 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(),
     routes,
+})
+
+const needAuth = (path) => {
+    return (
+        path.startsWith('/posts/publish') ||
+        path.startsWith('/notifications') ||
+        path.startsWith('/person') ||
+        path.startsWith('/posts/postsid')
+    )
+}
+
+router.beforeEach((to, from, next) => {
+    const auth = useAuthStore()
+    if (needAuth(to.path) && !auth.user) {
+        next({ path: '/login', query: { redirect: to.fullPath } })
+        return
+    }
+    next()
 })
 
 export default router

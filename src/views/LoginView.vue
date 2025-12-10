@@ -2,30 +2,55 @@
   <div class="auth-page">
     <div class="auth-card">
       <div class="tabs">
-        <button :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button>
-        <button :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
+        <button :class="{ active: mode === 'login' }" @click="switchMode('login')">Login</button>
+        <button :class="{ active: mode === 'register' }" @click="switchMode('register')">Register</button>
       </div>
 
       <form class="auth-form" @submit.prevent="handleSubmit">
         <label>
-          账号
-          <input v-model="form.username" type="text" placeholder="请输入账号" required />
+          Username
+          <input v-model="form.username" type="text" placeholder="Enter username" required />
         </label>
         <label>
-          密码
-          <input v-model="form.password" type="password" placeholder="请输入密码" required />
+          Password
+          <input v-model="form.password" type="password" placeholder="Enter password (min 6 chars)" required />
+          <span class="hint">Password must be at least 6 characters.</span>
         </label>
         <label v-if="mode === 'register'">
-          昵称
-          <input v-model="form.nickname" type="text" placeholder="显示昵称" required />
+          Nickname
+          <input v-model="form.nickname" type="text" placeholder="Display name" required />
         </label>
         <label v-if="mode === 'register'">
-          头像链接（可选）
-          <input v-model="form.avatarUrl" type="url" placeholder="http://..." />
+          Avatar URL (optional)
+          <div class="avatar-row">
+            <input v-model="form.avatarUrl" type="url" placeholder="http://..." />
+            <button type="button" class="mini-btn" @click="setRandomAvatar">Random</button>
+            <button type="button" class="mini-btn" @click="togglePreview">Preview</button>
+          </div>
         </label>
+        <div v-if="mode === 'register' && showPreview" class="avatar-preview">
+          <img :src="form.avatarUrl || defaultAvatar" alt="avatar preview" />
+        </div>
+
+        <div v-if="mode === 'register'" class="captcha-row">
+          <label class="captcha-label">
+            Image Captcha
+            <input
+              v-model="form.captchaCode"
+              type="text"
+              placeholder="Enter code"
+              maxlength="6"
+              required
+            />
+          </label>
+          <div class="captcha-img" @click="loadCaptcha">
+            <img v-if="captchaImg" :src="captchaImg" alt="captcha" />
+            <span v-else>Loading...</span>
+          </div>
+        </div>
 
         <button class="submit" type="submit" :disabled="auth.loading">
-          {{ mode === 'login' ? '登录' : '注册' }}
+          {{ mode === 'login' ? 'Login' : 'Register' }}
         </button>
         <p v-if="auth.error" class="error">{{ auth.error }}</p>
       </form>
@@ -34,8 +59,9 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { reactive, ref, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
 const props = defineProps({
@@ -51,25 +77,97 @@ const form = reactive({
   password: '',
   nickname: '',
   avatarUrl: '',
+  captchaCode: '',
 })
+const captchaKey = ref('')
+const captchaImg = ref('')
+const showPreview = ref(false)
+const defaultAvatar = 'https://placehold.co/120x120'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+const switchMode = (m) => {
+  mode.value = m
+  const targetName = m === 'register' ? 'register' : 'login'
+  router.replace({ name: targetName, query: route.query })
+  if (m === 'register') {
+    loadCaptcha()
+  }
+}
+
+const loadCaptcha = async () => {
+  try {
+    const res = await axios.get('http://localhost:3001/api/auth/captcha')
+    if (res.data?.success) {
+      captchaKey.value = res.data.key
+      captchaImg.value = res.data.image
+    }
+  } catch (e) {
+    captchaKey.value = ''
+    captchaImg.value = ''
+  }
+}
 
 const handleSubmit = async () => {
+  if (!form.password || form.password.length < 6) {
+    auth.error = 'Password must be at least 6 characters.'
+    return
+  }
   if (mode.value === 'login') {
     const ok = await auth.login({ username: form.username, password: form.password })
-    if (ok) router.push('/home')
+    if (ok) {
+      const redirect = route.query.redirect || '/home'
+      router.push(redirect)
+    }
   } else {
+    if (!form.captchaCode || !captchaKey.value) {
+      auth.error = 'Please enter captcha'
+      return
+    }
     const ok = await auth.register({
       username: form.username,
       password: form.password,
       nickname: form.nickname,
       avatarUrl: form.avatarUrl || null,
+      captcha_key: captchaKey.value,
+      captcha_code: form.captchaCode,
     })
-    if (ok) router.push('/home')
+    if (ok) {
+      router.push('/home')
+    } else {
+      loadCaptcha()
+    }
   }
 }
+
+const setRandomAvatar = () => {
+  const seed = Math.floor(Math.random() * 200) + 1
+  form.avatarUrl = `https://picsum.photos/seed/jp_post${seed}_cover/800/600`
+}
+
+const togglePreview = () => {
+  showPreview.value = !showPreview.value
+}
+
+onMounted(() => {
+  if (mode.value === 'register') {
+    loadCaptcha()
+  }
+})
+
+watch(
+  () => route.name,
+  (val) => {
+    if (val === 'register') {
+      switchMode('register')
+    } else if (val === 'login') {
+      switchMode('login')
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -149,9 +247,73 @@ const handleSubmit = async () => {
   cursor: not-allowed;
 }
 
+.captcha-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.captcha-label {
+  flex: 1;
+}
+
+.captcha-img {
+  width: 120px;
+  height: 40px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  background: #f7f9fb;
+}
+
+.captcha-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.avatar-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.mini-btn {
+  padding: 10px 10px;
+  border-radius: 8px;
+  border: 1px solid #dcdfe6;
+  background: #f7f9fb;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.mini-btn:hover {
+  border-color: #1677ff;
+  color: #1677ff;
+}
+.avatar-preview {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #e6e8eb;
+  border-radius: 10px;
+  background: #fafbfc;
+  display: inline-flex;
+}
+.avatar-preview img {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
 .error {
   color: #e03131;
   font-size: 12px;
   margin: 0;
+}
+.hint {
+  color: #888;
+  font-size: 12px;
 }
 </style>

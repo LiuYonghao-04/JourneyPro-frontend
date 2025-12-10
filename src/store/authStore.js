@@ -10,6 +10,10 @@ export const useAuthStore = defineStore('auth', {
     error: null,
   }),
   actions: {
+    setUser(user) {
+      this.user = user
+      localStorage.setItem('jp_user', JSON.stringify(user))
+    },
     async login(payload) {
       this.loading = true
       this.error = null
@@ -23,9 +27,8 @@ export const useAuthStore = defineStore('auth', {
         if (!res.ok || !data.success) {
           throw new Error('登录失败，请检查账号或密码')
         }
-        this.user = data.user
+        this.setUser(data.user)
         this.token = data.token
-        localStorage.setItem('jp_user', JSON.stringify(this.user))
         localStorage.setItem('jp_token', this.token)
         return true
       } catch (err) {
@@ -48,9 +51,8 @@ export const useAuthStore = defineStore('auth', {
         if (!res.ok || !data.success) {
           throw new Error('注册失败，账号可能已存在')
         }
-        this.user = data.user
+        this.setUser(data.user)
         this.token = data.token
-        localStorage.setItem('jp_user', JSON.stringify(this.user))
         localStorage.setItem('jp_token', this.token)
         return true
       } catch (err) {

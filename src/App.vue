@@ -16,8 +16,18 @@
       </nav>
       <div class="jp-auth">
         <template v-if="!auth.user">
-          <RouterLink to="/login" class="jp-btn ghost">Login</RouterLink>
-          <RouterLink to="/register" class="jp-btn primary">Register</RouterLink>
+          <RouterLink
+            to="/login"
+            :class="['jp-btn', isLoginPage ? 'primary' : 'ghost']"
+          >
+            Login
+          </RouterLink>
+          <RouterLink
+            to="/register"
+            :class="['jp-btn', isRegisterPage ? 'primary' : 'ghost']"
+          >
+            Register
+          </RouterLink>
         </template>
         <template v-else>
           <div class="jp-user">
@@ -42,6 +52,8 @@ import { useAuthStore } from './store/authStore'
 const auth = useAuthStore()
 const route = useRoute()
 const isPostsActive = computed(() => route.path.startsWith('/posts') || route.path.startsWith('/notifications'))
+const isLoginPage = computed(() => route.name === 'login')
+const isRegisterPage = computed(() => route.name === 'register')
 </script>
 
 <style>
