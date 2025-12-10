@@ -1,8 +1,6 @@
 <template>
   <div class="page" :style="parallaxStyle" @mousemove="handleMouse">
-    <div class="floating floating-a"></div>
-    <div class="floating floating-b"></div>
-    <div class="floating floating-c"></div>
+    <!-- Removed floating blobs -->
 
     <section class="intro" ref="sections">
       <div class="intro-text" :style="introStyle">
@@ -17,9 +15,9 @@
       </div>
       <div class="intro-scenery">
         <div class="intro-mountain"></div>
-        <div class="intro-sun"></div>
-        <div class="intro-cloud cloud-a"></div>
-        <div class="intro-cloud cloud-b"></div>
+        <div class="intro-sun" :style="sunStyle"></div>
+<!--        <div class="intro-cloud cloud-a"></div>-->
+<!--        <div class="intro-cloud cloud-b"></div>-->
       </div>
     </section>
 
@@ -151,7 +149,15 @@ const introProgress = ref(0)
 const scrollHandler = ref(null)
 const wheelHandler = ref(null)
 const introLocked = ref(true)
+const introPlayed = ref(false)
 const introStyle = computed(() => {
+  if (introPlayed.value && !introLocked.value) {
+    return {
+      transform: 'translateY(0) scale(1)',
+      opacity: 1,
+      filter: 'none',
+    }
+  }
   const p = Math.min(Math.max(introProgress.value, 0), 1.2)
   const scale = 1 + p * 4.2 // dramatically fill screen
   const translateY = 24 - p * 80
@@ -163,6 +169,16 @@ const introStyle = computed(() => {
     filter: `blur(${blur}px)`,
   }
 })
+const sunStyle = computed(() => {
+  // When unlocked, keep sun fully visible
+  if (!introLocked.value) return { opacity: 1, filter: 'none' }
+  const p = Math.min(Math.max(introProgress.value, 0), 1) // 0 -> 1
+  if (p <= 0.1) return { opacity: 1, filter: 'none' } // fully visible until 15%
+  const t = Math.min(Math.max((p - 0.1) / 0.1, 0), 1) // fade between 15% and 50%
+  const opacity = 1 - t
+  const blur = t * 8
+  return { opacity, filter: `blur(${blur}px)` }
+})
 
 const handleMouse = (e) => {
   const x = (e.clientX / window.innerWidth - 0.5) * 10
@@ -171,8 +187,9 @@ const handleMouse = (e) => {
 }
 
 const unlockIntro = () => {
-  introProgress.value = 1
+  introProgress.value = 0
   introLocked.value = false
+  introPlayed.value = true
   document.body.style.overflow = ''
   if (wheelHandler.value) {
     window.removeEventListener('wheel', wheelHandler.value)
@@ -184,13 +201,11 @@ const unlockIntro = () => {
 }
 
 const jumpToMain = () => {
-  introProgress.value = 1
+  introProgress.value = 0
   unlockIntro()
 }
 
 onMounted(() => {
-
-
   const els = document.querySelectorAll('.section, .hero, .intro')
   const observer = new IntersectionObserver(
     (entries) => {
@@ -202,20 +217,22 @@ onMounted(() => {
   )
   els.forEach((el) => observer.observe(el))
 
-  document.body.style.overflow = 'hidden'
+  if (introLocked.value) {
+    document.body.style.overflow = 'hidden'
 
-  const onWheel = (e) => {
-    if (!introLocked.value) return
-    e.preventDefault()
-    const delta = e.deltaY || 0
-    const next = Math.min(Math.max(introProgress.value + delta * 0.0035, 0), 1)
-    introProgress.value = next
-    if (next >= 1) {
-      unlockIntro()
+    const onWheel = (e) => {
+      if (!introLocked.value) return
+      e.preventDefault()
+      const delta = e.deltaY || 0
+      const next = Math.min(Math.max(introProgress.value + delta * 0.0022, 0), 1)
+      introProgress.value = next
+      if (next >= 1) {
+        unlockIntro()
+      }
     }
+    wheelHandler.value = onWheel
+    window.addEventListener('wheel', onWheel, { passive: false })
   }
-  wheelHandler.value = onWheel
-  window.addEventListener('wheel', onWheel, { passive: false })
 })
 
 onBeforeUnmount(() => {
@@ -273,7 +290,7 @@ onBeforeUnmount(() => {
   height: 40%;
   background: linear-gradient(180deg, rgba(110, 143, 255, 0.35), rgba(11, 18, 33, 1));
   border-radius: 50% 50% 0 0;
-  transform: translateX(-50%) scale(calc(1 + var(--intro-progress, 0) * 0.3));
+  transform: translateX(-50%) scale(calc(1 + var(--intro-progress, 0) * 4));
   transition: transform 0.6s ease;
 }
 .intro-sun {
@@ -285,6 +302,8 @@ onBeforeUnmount(() => {
   background: radial-gradient(circle, rgba(255, 200, 112, 0.9), transparent 70%);
   border-radius: 50%;
   animation: glow 6s ease-in-out infinite alternate;
+  opacity: calc(1 - var(--intro-progress, 0));
+  filter: blur(calc(var(--intro-progress, 0) * 6px));
 }
 .intro-cloud {
   position: absolute;
@@ -620,44 +639,6 @@ h1 span {
   border-radius: 14px;
   color: #e8ecf5;
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-.floating {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(28px);
-  opacity: 0.5;
-  animation: float 12s ease-in-out infinite alternate;
-}
-.floating-a {
-  width: 260px;
-  height: 260px;
-  background: radial-gradient(circle, rgba(122, 224, 255, 0.32), transparent 60%);
-  top: 6%;
-  left: 4%;
-}
-.floating-b {
-  width: 220px;
-  height: 220px;
-  background: radial-gradient(circle, rgba(255, 132, 172, 0.28), transparent 60%);
-  bottom: 12%;
-  right: 8%;
-  animation-duration: 14s;
-}
-.floating-c {
-  width: 180px;
-  height: 180px;
-  background: radial-gradient(circle, rgba(138, 216, 255, 0.25), transparent 60%);
-  top: 30%;
-  right: 18%;
-  animation-duration: 16s;
-}
-@keyframes float {
-  from {
-    transform: translateY(0px) scale(1);
-  }
-  to {
-    transform: translateY(-24px) scale(1.06);
-  }
 }
 @media (max-width: 900px) {
   .hero {
