@@ -29,8 +29,8 @@
           </el-input>
         </div>
         <div class="top-actions">
-          <el-button text>Creator</el-button>
-          <el-button text>Business</el-button>
+<!--          <el-button text>Creator</el-button>-->
+<!--          <el-button text>Business</el-button>-->
         </div>
       </header>
 
