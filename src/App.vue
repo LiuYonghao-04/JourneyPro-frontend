@@ -15,8 +15,16 @@
         </RouterLink>
       </nav>
       <div class="jp-auth">
-        <button class="jp-btn ghost small" @click="toggleTheme">
-          {{ themeLabel }}
+        <button
+          class="jp-switch"
+          :class="theme"
+          type="button"
+          @click="toggleTheme"
+          aria-label="Toggle theme"
+        >
+          <span class="switch-icon sun">☀️</span>
+          <span class="switch-icon moon">🌙</span>
+          <span class="switch-thumb"></span>
         </button>
         <template v-if="!auth.user">
           <RouterLink
@@ -59,7 +67,6 @@ const isLoginPage = computed(() => route.name === 'login')
 const isRegisterPage = computed(() => route.name === 'register')
 
 const theme = ref(localStorage.getItem('jp_theme') || 'dark')
-const themeLabel = computed(() => (theme.value === 'dark' ? 'Light' : 'Dark'))
 watchEffect(() => {
   document.body.setAttribute('data-theme', theme.value)
   localStorage.setItem('jp_theme', theme.value)
@@ -78,6 +85,13 @@ body,
   height: 100%;
   width: 100%;
 }
+body {
+  transition: background-color 1s ease, color 1s ease;
+  overflow-x: hidden;
+}
+#app {
+  overflow-x: hidden;
+}
 
 .jp-header {
   height: 56px;
@@ -88,6 +102,12 @@ body,
   justify-content: space-between;
   background: #ffffff;
   border-bottom: 1px solid #eee;
+  transition: background-color 1s ease, border-color 1s ease, color 1s ease;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
 }
 
 .jp-logo a {
@@ -120,6 +140,54 @@ body,
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.jp-switch {
+  position: relative;
+  width: 64px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--fg) 40%, transparent);
+  background: color-mix(in srgb, var(--fg) 15%, transparent);
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+.jp-switch .switch-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  pointer-events: none;
+  color: color-mix(in srgb, var(--fg) 80%, transparent);
+}
+.jp-switch .sun { left: 10px; }
+.jp-switch .moon { right: 10px; }
+.jp-switch .switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  transition: transform 0.25s ease, background 0.25s ease;
+}
+.jp-switch.dark .switch-thumb {
+  transform: translateX(0);
+}
+.jp-switch.light .switch-thumb {
+  transform: translateX(32px);
+}
+.jp-switch.light {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+.jp-switch:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }
 
 .jp-btn {
@@ -159,9 +227,8 @@ body,
 }
 
 .jp-main {
-  height: calc(100% - 56px);
-}
-.jp-main > * {
-  height: 100%;
+  min-height: 100%;
+  padding-top: 56px;
+  box-sizing: border-box;
 }
 </style>

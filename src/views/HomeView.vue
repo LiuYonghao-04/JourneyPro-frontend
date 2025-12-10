@@ -11,7 +11,7 @@
           <span class="pulse"></span>
           <span class="pulse"></span>
         </div>
-        <a class="scroll-hint" href="#main" @click.prevent="jumpToMain">Scroll to explore ↓</a>
+        <a class="scroll-hint" href="#main" @click.prevent="jumpToMain">Scroll to explore &darr;</a>
       </div>
       <div class="intro-scenery">
         <div class="intro-mountain"></div>
@@ -23,7 +23,7 @@
         <div
           v-else
           class="intro-moon"
-          :style="sunStyle"
+          :style="moonStyle"
         ></div>
 <!--        <div class="intro-cloud cloud-a"></div>-->
 <!--        <div class="intro-cloud cloud-b"></div>-->
@@ -33,12 +33,12 @@
     <header class="hero" id="main">
       <div class="hero-bg"></div>
       <div class="hero-content">
-        <p class="eyebrow">JourneyPro · Intelligent Trip OS</p>
+        <p class="eyebrow">JourneyPro &middot; Intelligent Trip OS</p>
         <h1>
           Plan smart. <span>Explore deeper.</span>
         </h1>
         <p class="lede">
-          Not just shortest paths — discover food, scenery, and stories along every journey.
+          Not just shortest paths &mdash; discover food, scenery, and stories along every journey.
         </p>
         <div class="hero-actions">
           <RouterLink class="btn primary" to="/map">Open Map</RouterLink>
@@ -71,13 +71,21 @@
           Curated POIs, seamless routing, and a vibrant community to keep you inspired along the way.
         </p>
       </div>
-      <div class="grid">
-        <div class="feature card" v-for="f in features" :key="f.title">
+                  <div class="grid">
+        <component
+          v-for="f in features"
+          :is="f.to ? RouterLink : 'div'"
+          :to="f.to"
+          class="feature card"
+          :class="{ link: !!f.to, modal: !!f.modal }"
+          :key="f.title"
+          @click="handleFeatureClick(f)"
+        >
           <div class="icon">{{ f.icon }}</div>
           <h3>{{ f.title }}</h3>
           <p>{{ f.desc }}</p>
           <div class="chip" v-for="tag in f.tags" :key="tag">{{ tag }}</div>
-        </div>
+        </component>
       </div>
     </section>
 
@@ -115,6 +123,13 @@
         </div>
       </div>
     </section>
+    <div v-if="modalContent" class="feature-modal" @click.self="closeModal">
+      <div class="feature-modal__card">
+        <h3>{{ modalContent.title }}</h3>
+        <p>{{ modalContent.body }}</p>
+        <button class="btn primary" @click="closeModal">Close</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -124,20 +139,44 @@ import { RouterLink } from 'vue-router'
 import { useAuthStore } from '../store/authStore'
 
 const auth = useAuthStore()
+
+
+
 const heroCards = [
-  { icon: '🗺️', title: 'Smart map', desc: 'Clean UI, focus on your route.' },
-  { icon: '🎯', title: 'POI precision', desc: 'Curated stops that match your vibe.' },
-  { icon: '🤝', title: 'Community', desc: 'Learn from locals and fellow travelers.' },
+  { icon: '🧭', title: 'Smart map', desc: 'Clean UI, focus on your route.'},
+  { icon: '📍', title: 'POI precision', desc: 'Curated stops that match your vibe.'},
+  { icon: '🤝', title: 'Community', desc: 'Learn from locals and fellow travelers.'},
 ]
 
+
 const features = [
-  { icon: '✨', title: 'Adaptive routing', desc: 'Dynamic routes with POI-aware suggestions.', tags: ['live', 'safe'] },
-  { icon: '📌', title: 'POI library', desc: 'Search by mood, theme, or distance.', tags: ['food', 'sights'] },
-  { icon: '💬', title: 'Social layer', desc: 'Posts, likes, saves, and chat in real time.', tags: ['social', 'realtime'] },
-  { icon: '📱', title: 'Mobile first', desc: 'Smooth on phones and tablets.', tags: ['responsive'] },
-  { icon: '🔒', title: 'Privacy-first', desc: 'Control what you share and with whom.', tags: ['secure'] },
-  { icon: '🚀', title: 'Fast UX', desc: 'Lightweight, animated, and delightful.', tags: ['fast'] },
+  { icon: '🧭', title: 'Adaptive routing', desc: 'Dynamic routes with POI-aware suggestions.', tags: ['live', 'safe'], to: '/map' },
+  { icon: '📚', title: 'POI library', desc: 'Search by mood, theme, or distance.', tags: ['food', 'sights'] },
+  { icon: '💬', title: 'Social layer', desc: 'Posts, likes, saves, and chat in real time.', tags: ['social', 'realtime'], to: '/posts' },
+  { icon: '🔒', title: 'Privacy-first', desc: 'Control what you share and with whom.', tags: ['secure'], modal: 'privacy' },
+  { icon: '⚡', title: 'Fast UX', desc: 'Lightweight, animated, and delightful.', tags: ['fast'], modal: 'ux' },
 ]
+
+const activeModal = ref(null)
+const modalCopy = {
+  privacy: {
+    title: 'Privacy-first',
+    body: 'We only store the minimum needed, and you control visibility for posts, routes, and profile.',
+  },
+  ux: {
+    title: 'Fast UX',
+    body: 'Preloading key assets, lean API responses, and animation throttling keep the experience snappy.',
+  },
+}
+const modalContent = computed(() => (activeModal.value ? modalCopy[activeModal.value] : null))
+const handleFeatureClick = (f) => {
+  if (f.modal) {
+    activeModal.value = f.modal
+  }
+}
+const closeModal = () => {
+  activeModal.value = null
+}
 
 const steps = [
   { title: 'Discover', desc: 'Browse community posts and curated POIs.' },
@@ -180,12 +219,26 @@ const introStyle = computed(() => {
   }
 })
 const sunStyle = computed(() => {
-  if (!introLocked.value) return { opacity: 1, filter: 'none' }
+  const isLight = theme.value === 'light'
+  if (!introLocked.value) return { opacity: isLight ? 1 : 0, filter: 'none' }
   const p = Math.min(Math.max(introProgress.value, 0), 1) // 0 -> 1
+  if (!isLight) return { opacity: 0, filter: 'blur(6px)' }
   if (p <= 0.15) return { opacity: 1, filter: 'none' }
   const t = Math.min(Math.max((p - 0.15) / 0.35, 0), 1) // fade 15% -> 50%
   const opacity = 1 - t
   const blur = t * 8
+  return { opacity, filter: `blur(${blur}px)` }
+})
+
+const moonStyle = computed(() => {
+  const isDark = theme.value === 'dark'
+  if (!introLocked.value) return { opacity: isDark ? 1 : 0, filter: 'none' }
+  if (!isDark) return { opacity: 0, filter: 'blur(6px)' }
+  const p = Math.min(Math.max(introProgress.value, 0), 1)
+  if (p <= 0.15) return { opacity: 1, filter: 'none' }
+  const t = Math.min(Math.max((p - 0.15) / 0.35, 0), 1)
+  const opacity = 1 - t
+  const blur = t * 6
   return { opacity, filter: `blur(${blur}px)` }
 })
 
@@ -281,7 +334,7 @@ onBeforeUnmount(() => {
   --bg-pattern: radial-gradient(circle at 20% 18%, rgba(255, 230, 190, 0.18), transparent 32%),
     radial-gradient(circle at 78% 8%, rgba(188, 214, 255, 0.2), transparent 30%),
     #f6f8fb;
-  --fg: #0c1220;
+  --fg: rgba(17, 28, 43, 0.8);
   --muted: #4b5567;
   --panel: #ffffff;
   --panel-border: #e8ebf2;
@@ -294,12 +347,14 @@ onBeforeUnmount(() => {
 }
 :global(body) {
   background: var(--bg-main);
+  transition: background 1s ease, color 1s ease;
 }
  .page {
   color: var(--fg);
   min-height: 100%;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: var(--bg-pattern);
+  transition: background 1s ease, color 1s ease;
 }
 .intro {
   min-height: 100vh;
@@ -336,7 +391,7 @@ onBeforeUnmount(() => {
   background: var(--mountain-bg, linear-gradient(180deg, rgba(110, 143, 255, 0.35), rgba(11, 18, 33, 1)));
   border-radius: 50% 50% 0 0;
   transform: translateX(-50%) scale(calc(1 + var(--intro-progress, 0) * 4));
-  transition: transform 0.6s ease;
+  transition: transform 0.6s ease, background 1s ease;
 }
 .intro-sun {
   position: absolute;
@@ -351,6 +406,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 50px rgba(255, 220, 160, 0.7), 0 0 90px rgba(255, 210, 140, 0.4);
   opacity: calc(1 - var(--intro-progress, 0));
   filter: blur(calc(var(--intro-progress, 0) * 6px));
+  transition: opacity 0.9s ease, filter 0.9s ease, transform 0.9s ease, box-shadow 0.9s ease, background 0.9s ease;
 }
 .intro-moon {
   position: absolute;
@@ -364,6 +420,7 @@ onBeforeUnmount(() => {
     inset -14px -12px 22px rgba(20, 28, 48, 0.45),
     10px 8px 18px rgba(0, 0, 0, 0.28);
   transform: translateX(10px);
+  transition: opacity 0.9s ease, filter 0.9s ease, transform 0.9s ease, box-shadow 0.9s ease, background 0.9s ease;
 }
 .intro-moon::after {
   content: "";
@@ -471,6 +528,7 @@ onBeforeUnmount(() => {
   grid-template-columns: 1.1fr 0.9fr;
   gap: 40px;
   transform: translate3d(calc(var(--px, 0px) * 0.2), calc(var(--py, 0px) * 0.2), 0);
+  transition: background 1s ease, color 1s ease;
 }
 .hero.visible .hero-content,
 .section.visible .section-header,
@@ -517,10 +575,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(8px);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-.glass:hover {
-  transform: translateY(-6px) scale(1.01);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
 }
 .hero-visual .card .icon {
   font-size: 22px;
@@ -585,7 +639,9 @@ h1 span {
   border: none;
 }
 .btn.ghost {
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--fg) 60%, transparent);
+  color: var(--fg);
 }
 .hero-badges {
   display: flex;
@@ -604,6 +660,7 @@ h1 span {
 .section {
   padding: 40px 64px 60px;
   position: relative;
+  transition: background 1s ease, color 1s ease;
 }
 .section.alt {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
@@ -628,6 +685,13 @@ h1 span {
   box-shadow: var(--shadow);
   transition: transform 0.25s ease, border-color 0.2s;
 }
+.feature.card.link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+}
+
 .feature.card:hover {
   transform: translateY(-6px) scale(1.01);
   border-color: rgba(122, 224, 255, 0.5);
@@ -703,12 +767,36 @@ h1 span {
   justify-content: flex-end;
 }
 .cta-bubble {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--badge);
+  border: 1px solid var(--badge-border);
   padding: 10px 12px;
   border-radius: 14px;
-  color: #e8ecf5;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--fg);
 }
+
+.feature-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+.feature-modal__card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--fg);
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  max-width: 420px;
+  width: 90%;
+}
+.feature.card.modal {
+  cursor: pointer;
+}
+
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;
@@ -725,3 +813,12 @@ h1 span {
   }
 }
 </style>
+
+
+
+
+
+
+
+
+
