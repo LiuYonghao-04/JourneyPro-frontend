@@ -2,7 +2,7 @@
   <div class="map-page">
     <RoutePanel />
     <MapContainer />
-    <RouteSummary />
+    <RouteDirections />
     <POIPanel />
   </div>
 </template>
@@ -10,7 +10,7 @@
 <script setup>
 import RoutePanel from '../components/RoutePanel.vue'
 import MapContainer from '../components/MapContainer.vue'
-import RouteSummary from '../components/RouteSummary.vue'
+import RouteDirections from '../components/RouteDirections.vue'
 import POIPanel from '../components/POIPanel.vue'
 </script>
 

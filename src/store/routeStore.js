@@ -61,20 +61,7 @@ export const useRouteStore = defineStore('route', {
     },
 
     applyWaypointsToControl() {
-      if (!window._osrmControl) {
-        console.warn('OSRM control is not ready')
-        return
-      }
-
-      window._osrmControl.setWaypoints(this.buildWaypoints())
-
-      // Update distance/duration once for the latest route
-      window._osrmControl.once('routesfound', (e) => {
-        const route = e.routes[0]
-        this.totalDistance = (route.summary.totalDistance / 1000).toFixed(2)
-        this.totalDuration = (route.summary.totalTime / 60).toFixed(1)
-        console.log('Route updated with via points:', this.totalDistance, 'km')
-      })
+      // no-op: routing is handled in MapContainer fetchRoute
     },
 
     addViaPoint(poi) {
@@ -108,7 +95,6 @@ export const useRouteStore = defineStore('route', {
         poi.id ? p.id !== poi.id : p.lat !== poi.lat || p.lng !== poi.lng
       )
       if (before !== this.viaPoints.length) {
-        this.applyWaypointsToControl()
         saveViaPoints(this.viaPoints)
       }
     },
@@ -116,7 +102,6 @@ export const useRouteStore = defineStore('route', {
     clearViaPoints() {
       if (this.viaPoints.length === 0) return
       this.viaPoints = []
-      this.applyWaypointsToControl()
       saveViaPoints(this.viaPoints)
     },
 

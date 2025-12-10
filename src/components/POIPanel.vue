@@ -1,67 +1,99 @@
-<template>
-  <div class="poi-panel">
-    <h3 class="title">推荐途径点</h3>
-
-    <div v-if="pois.length === 0" class="empty">
-      暂无推荐，请先规划路线。
+﻿<template>
+  <div class="poi-panel" :class="{ collapsed }">
+    <div class="panel-head" @click="toggle">
+      <h3 class="title">Recommended POIs</h3>
+      <button class="collapse-btn">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
     </div>
 
-    <ul v-else>
-      <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
-        <div class="poi-info">
-          <div class="poi-name">{{ poi.name }}</div>
-          <div class="poi-meta">
-            <span>{{ poi.category }}</span>
-            <span class="dot">·</span>
-            <span>人气 {{ poi.popularity }}</span>
+    <div v-if="!collapsed">
+      <div v-if="pois.length === 0" class="empty">
+        No recommendations yet. Plan a route first.
+      </div>
+
+      <ul v-else class="poi-list">
+        <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
+          <div class="poi-info">
+            <div class="poi-name">{{ poi.name }}</div>
+            <div class="poi-meta">
+              <span>{{ poi.category }}</span>
+              <span class="dot">·</span>
+              <span>人气 {{ poi.popularity }}</span>
+            </div>
           </div>
-        </div>
-        <button class="add-btn" @click="addPoiToRoute(poi)">加入路线</button>
-      </li>
-    </ul>
+          <button class="add-btn" @click="addPoiToRoute(poi)">Add</button>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 
 const routeStore = useRouteStore()
+const collapsed = ref(false)
 
 onMounted(() => {
   routeStore.fetchRecommendedPois()
 })
 
-// 推荐点列表来自 store
 const pois = computed(() => routeStore.recommendedPOIs || [])
 
-// 点击按钮后重新规划路线
 const addPoiToRoute = async (poi) => {
-  console.log('重新规划路线，添加途径点', poi.name)
   await routeStore.addViaPoint(poi)
+}
+
+const toggle = () => {
+  collapsed.value = !collapsed.value
 }
 </script>
 
 <style scoped>
 .poi-panel {
   position: absolute;
-  top: 400px;
+  bottom: 10px;
   left: 10px;
-  width: 300px;
+  width: 320px;
   z-index: 99999;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--panel);
   border-radius: 16px;
-  padding: 0 16px 12px 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  max-height: 400px;
-  overflow-y: auto;
-  backdrop-filter: blur(6px);
+  padding: 12px 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--panel-border);
+  max-height: 40vh;
+  overflow: hidden;
+  backdrop-filter: none;
+}
+.poi-panel.collapsed {
+  height: 52px;
+  max-height: 52px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .title {
   font-size: 18px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 10px;
+  color: var(--fg);
+  margin: 0;
+}
+.collapse-btn {
+  border: 1px solid var(--panel-border);
+  background: var(--badge);
+  color: var(--fg);
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.poi-list {
+  overflow-y: auto;
+  max-height: calc(50vh - 70px);
+  margin-top: 10px;
 }
 .poi-item {
   display: flex;
@@ -69,7 +101,7 @@ const addPoiToRoute = async (poi) => {
   align-items: center;
   margin: 6px 0;
   padding: 6px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--panel-border);
 }
 .poi-info {
   flex: 1;
@@ -78,33 +110,33 @@ const addPoiToRoute = async (poi) => {
 .poi-name {
   font-size: 15px;
   font-weight: 500;
-  color: #222;
+  color: var(--fg);
 }
 .poi-meta {
   font-size: 12px;
-  color: #777;
+  color: var(--muted);
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .dot {
-  color: #bbb;
+  color: var(--muted);
 }
 .add-btn {
-  background: #228be6;
+  background: var(--btn-primary);
   border: none;
-  color: white;
+  color: var(--btn-text);
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
   transition: 0.2s;
 }
 .add-btn:hover {
-  background: #1c7ed6;
+  filter: brightness(1.05);
 }
 .empty {
   font-size: 14px;
-  color: #999;
+  color: var(--muted);
   text-align: center;
   padding: 12px 0;
 }

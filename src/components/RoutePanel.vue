@@ -18,45 +18,10 @@ let fetchTimer = null
 let lastResults = []
 let lockFetch = false
 
-const fetchSuggestions = (queryString, cb) => {
-  if (lockFetch) return cb(lastResults)
-  if (!queryString) {
-    lastResults = []
-    return cb([])
-  }
-
-  if (fetchTimer) clearTimeout(fetchTimer)
-  fetchTimer = setTimeout(async () => {
-    try {
-      const url = `https://restapi.amap.com/v3/assistant/inputtips?keywords=${encodeURIComponent(queryString)}&key=${AMAP_KEY}`
-      const res = await axios.get(url)
-      let results = []
-      if (res.data && Array.isArray(res.data.tips) && res.data.tips.length > 0) {
-        results = res.data.tips
-          .filter((tip) => tip.location && tip.name)
-          .map((tip) => ({
-            value: tip.name,
-            location: tip.location, // "lng,lat"
-            district: tip.district || '',
-          }))
-      }
-
-      if (res.data && res.data.status !== '1') {
-        console.warn('高德 API 请求异常', res.data)
-        cb(lastResults.length ? lastResults : [{ value: '未找到匹配地点', location: '' }])
-        return
-      }
-
-      if (results.length === 0 && queryString.trim().length > 0) {
-        cb(lastResults)
-      } else {
-        lastResults = results
-        cb(results)
-      }
-    } catch (e) {
-      cb(lastResults)
-    }
-  }, 280)
+// Disabled Gaode autocomplete; returning empty suggestions
+const fetchSuggestions = (_queryString, cb) => {
+  lastResults = []
+  cb([])
 }
 
 const handleSelectStart = (item) => {
@@ -118,11 +83,11 @@ const clearAllViaPoints = () => {
     </div>
 
     <el-form label-position="top" label-width="60px" size="small">
-      <el-form-item label="起点">
+      <el-form-item label="Starting point">
         <el-autocomplete
           v-model="startAddress"
           :fetch-suggestions="fetchSuggestions"
-          placeholder="请输入起点"
+          placeholder="Please enter starting point"
           size="small"
           @select="handleSelectStart"
           :trigger-on-focus="true"
@@ -131,11 +96,11 @@ const clearAllViaPoints = () => {
         />
       </el-form-item>
 
-      <el-form-item label="终点">
+      <el-form-item label="Ending point">
         <el-autocomplete
           v-model="endAddress"
           :fetch-suggestions="fetchSuggestions"
-          placeholder="请输入终点"
+          placeholder="Please enter end point"
           size="small"
           @select="handleSelectEnd"
           :trigger-on-focus="true"
@@ -145,15 +110,15 @@ const clearAllViaPoints = () => {
       </el-form-item>
 
       <el-form-item>
-        <el-button type="primary" size="small" @click="updateFromAddress">解析地址</el-button>
-        <el-button type="success" size="small" :loading="locating" @click="locateMe">定位</el-button>
+        <el-button type="primary" size="small" @click="updateFromAddress">GO</el-button>
+<!--        <el-button type="success" size="small" :loading="locating" @click="locateMe">Positioning</el-button>-->
       </el-form-item>
     </el-form>
 
     <div class="via-tags" v-if="viaPoints.length">
       <div class="via-header">
-        <span class="via-label">途径点</span>
-        <el-button text size="small" @click="clearAllViaPoints">清空</el-button>
+        <span class="via-label">Waypoint</span>
+        <el-button text size="small" @click="clearAllViaPoints">Clear</el-button>
       </div>
       <div class="tag-list">
         <el-tag
@@ -169,8 +134,8 @@ const clearAllViaPoints = () => {
     </div>
 
     <div class="coords">
-      <span>起点: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br />
-      <span>终点: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}</span>
+      <span>Starting point: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br />
+      <span>Ending point: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}</span>
     </div>
   </div>
 </template>
@@ -178,7 +143,7 @@ const clearAllViaPoints = () => {
 <style scoped>
 .control-panel {
   position: absolute;
-  top: 10px;
+  top: 60px;
   left: 10px;
   background: rgba(255, 255, 255, 0.96);
   padding: 12px 14px;

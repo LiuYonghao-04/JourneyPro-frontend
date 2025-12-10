@@ -1,16 +1,14 @@
-<script setup>
-import axios from 'axios'
-import { ref, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
-import 'leaflet-routing-machine'
-import { useRouteStore } from '../store/routeStore'
+﻿<script setup>
+import axios from "axios"
+import { ref, onMounted, watch } from "vue"
+import { useRoute } from "vue-router"
+import L from "leaflet"
+import "leaflet/dist/leaflet.css"
+import { useRouteStore } from "../store/routeStore"
 
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
-import markerIcon from 'leaflet/dist/images/marker-icon.png'
-import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png"
+import markerIcon from "leaflet/dist/images/marker-icon.png"
+import markerShadow from "leaflet/dist/images/marker-shadow.png"
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -20,11 +18,11 @@ L.Icon.Default.mergeOptions({
 })
 
 const map = ref(null)
-let control = null
 const routeStore = useRouteStore()
 let startMarker = null
 let endMarker = null
 let poiLayer = null
+let routeLayer = null
 const route = useRoute()
 
 const buildWaypointList = () => [
@@ -33,7 +31,6 @@ const buildWaypointList = () => [
   L.latLng(routeStore.endLat, routeStore.endLng),
 ]
 
-// 自定义圆点 marker 样式
 function createColoredMarker(color, position, onDrag) {
   const markerHtml = `<div style="background-color:${color};
     width:18px;height:18px;border-radius:50%;
@@ -42,35 +39,77 @@ function createColoredMarker(color, position, onDrag) {
   const marker = L.marker(position, {
     draggable: true,
     icon: L.divIcon({
-      className: 'custom-marker',
+      className: "custom-marker",
       html: markerHtml,
       iconSize: [18, 18],
       iconAnchor: [9, 9],
     }),
   })
 
-  if (onDrag) marker.on('dragend', onDrag)
+  if (onDrag) marker.on("dragend", onDrag)
   return marker
 }
 
+const fetchRoute = async () => {
+  if (!map.value) return
+  const waypoints = buildWaypointList()
+  if (waypoints.length < 2) return
+  const coordStr = waypoints.map((wp) => `${wp.lng},${wp.lat}`).join(";")
+  try {
+    const res = await axios.get(
+      `/osrm/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`
+    )
+    const routeData = res.data?.routes?.[0]
+    if (!routeData) return
+
+    routeStore.totalDistance = (routeData.distance / 1000).toFixed(2)
+    routeStore.totalDuration = (routeData.duration / 60).toFixed(1)
+    routeStore.routeGeojson = { type: "Feature", geometry: routeData.geometry }
+    // flatten steps across all legs for turn-by-turn list
+    const steps =
+      routeData.legs?.flatMap((leg) =>
+        (leg.steps || []).map((s) => {
+          const maneuver = s.maneuver || {}
+          const type = maneuver.type || "Go"
+          const modifier = maneuver.modifier ? ` ${maneuver.modifier}` : ""
+          const road = s.name ? ` onto ${s.name}` : ""
+          const instruction =
+            maneuver.instruction || `${type}${modifier}${road}`.trim()
+          return {
+            instruction,
+            road: s.name || "",
+            distance: (s.distance / 1000).toFixed(2),
+            duration: Math.round(s.duration / 60),
+          }
+        })
+      ) || []
+    routeStore.steps = steps
+
+    if (routeLayer) map.value.removeLayer(routeLayer)
+    routeLayer = L.geoJSON(routeData.geometry, {
+      style: { color: "#228BE6", weight: 6, opacity: 0.9 },
+    }).addTo(map.value)
+    map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
+  } catch (e) {
+    console.warn("Route fetch failed", e)
+  }
+}
+
 onMounted(() => {
-  map.value = L.map('map', { zoomControl: false }).setView(
+  map.value = L.map("map", { zoomControl: false }).setView(
     [routeStore.startLat, routeStore.startLng],
     13
   )
 
-  L.control.zoom({ position: 'bottomleft' }).addTo(map.value)
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
-    attribution: '© OpenStreetMap contributors',
+    attribution: "© OpenStreetMap contributors",
   }).addTo(map.value)
 
-  // 反向地理编码函数
   async function reverseGeocode(lat, lng) {
     try {
       const res = await axios.get(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`
       )
       return res.data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
     } catch (e) {
@@ -78,63 +117,45 @@ onMounted(() => {
     }
   }
 
-  startMarker = createColoredMarker('green', [routeStore.startLat, routeStore.startLng], async () => {
+  startMarker = createColoredMarker("green", [routeStore.startLat, routeStore.startLng], async () => {
     const pos = startMarker.getLatLng()
     routeStore.setStart(pos.lat, pos.lng)
     const addr = await reverseGeocode(pos.lat, pos.lng)
     routeStore.startAddress = addr
+    fetchRoute()
   })
 
-  endMarker = createColoredMarker('red', [routeStore.endLat, routeStore.endLng], async () => {
+  endMarker = createColoredMarker("red", [routeStore.endLat, routeStore.endLng], async () => {
     const pos = endMarker.getLatLng()
     routeStore.setEnd(pos.lat, pos.lng)
     const addr = await reverseGeocode(pos.lat, pos.lng)
     routeStore.endAddress = addr
+    fetchRoute()
   })
 
   startMarker.addTo(map.value)
   endMarker.addTo(map.value)
 
-  control = L.Routing.control({
-    waypoints: buildWaypointList(),
-    router: L.Routing.osrmv1({ serviceUrl: '/osrm/route/v1' }),
-    routeWhileDragging: true,
-    addWaypoints: false,
-    draggableWaypoints: false,
-    show: true,
-    collapsible: true,
-    createMarker: () => null,
-  }).addTo(map.value)
+  fetchRoute()
 
-  window._osrmControl = control
-  control.setWaypoints(buildWaypointList())
-
-  // 监听起终点变化
   watch(
     () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
     async () => {
       startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
       endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
-
-      if (control) {
-        control.setWaypoints(buildWaypointList())
-      }
+      fetchRoute()
       await routeStore.fetchRecommendedPois()
-      console.log('已请求推荐点接口')
     }
   )
 
-  // 监听途径点变化
   watch(
     () => routeStore.viaPoints.map((poi) => `${poi.lat},${poi.lng}`),
     () => {
-      if (!control) return
-      control.setWaypoints(buildWaypointList())
+      fetchRoute()
     },
     { deep: true }
   )
 
-  // 推荐 POI 的 marker
   poiLayer = L.layerGroup()
   let updateTimeout = null
   watch(
@@ -150,22 +171,22 @@ onMounted(() => {
         if (!pois || pois.length === 0) return
 
         const poiIcon = L.icon({
-          iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png',
+          iconUrl: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png",
           iconSize: [25, 41],
           iconAnchor: [12, 41],
           popupAnchor: [0, -32],
-          shadowUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png',
+          shadowUrl: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png",
         })
 
         pois.forEach((poi) => {
-          if (typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+          if (typeof poi.lat !== "number" || typeof poi.lng !== "number") return
 
           const marker = L.marker([poi.lat, poi.lng], {
             icon: poiIcon,
             title: poi.name,
-          }).bindPopup(`<b>${poi.name}</b><br>${poi.category || ''}`)
+          }).bindPopup(`<b>${poi.name}</b><br>${poi.category || ""}`)
 
-          marker.on('click', () => {
+          marker.on("click", () => {
             if (!map.value) return
             map.value.setView([poi.lat, poi.lng], 15, { animate: true })
             marker.openPopup()
@@ -177,51 +198,38 @@ onMounted(() => {
         if (map.value && !map.value.hasLayer(poiLayer)) {
           poiLayer.addTo(map.value)
         }
-
-        console.log('推荐 POI 已刷新', pois.length)
       }, 300)
     },
     { deep: true }
   )
 
-  // 监听后端重规划的 GeoJSON 路线
   watch(
     () => routeStore.routeGeojson,
     (geojson) => {
-      if (!geojson || !map.value) return
-
-      if (control) {
-        map.value.removeControl(control)
-        control = null
-      }
-
-      const newRoute = L.geoJSON(geojson, {
-        style: { color: '#228BE6', weight: 6, opacity: 0.85 },
+      if (!geojson || !map.value || !geojson.geometry) return
+      if (routeLayer) map.value.removeLayer(routeLayer)
+      routeLayer = L.geoJSON(geojson.geometry, {
+        style: { color: "#228BE6", weight: 6, opacity: 0.9 },
       }).addTo(map.value)
-
-      map.value.fitBounds(newRoute.getBounds())
-      console.log('路线已更新为含 POI 路径')
+      map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
     },
     { deep: true }
   )
 
-  // focus to poi from query
   watch(
     () => route.query,
     () => {
       const lat = route.query.poi_lat ? Number(route.query.poi_lat) : null
       const lng = route.query.poi_lng ? Number(route.query.poi_lng) : null
-      if (map.value && typeof lat === 'number' && typeof lng === 'number' && !Number.isNaN(lat) && !Number.isNaN(lng)) {
+      if (map.value && typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng)) {
         map.value.setView([lat, lng], 15)
-        // optional marker
         const marker = L.marker([lat, lng]).addTo(map.value)
-        marker.bindPopup(route.query.poi_name || 'Selected POI').openPopup()
+        marker.bindPopup(route.query.poi_name || "Selected POI").openPopup()
       }
-      // add to via points if requested
       if (route.query.poi_lat && route.query.poi_lng && route.query.poi_id) {
         routeStore.addViaPoint({
           id: Number(route.query.poi_id) || route.query.poi_id,
-          name: route.query.poi_name || 'POI',
+          name: route.query.poi_name || "POI",
           lat: Number(route.query.poi_lat),
           lng: Number(route.query.poi_lng),
         })
