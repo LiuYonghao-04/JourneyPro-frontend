@@ -228,10 +228,10 @@ onMounted(fetchData)
   font-size: 13px;
 }
 .meta .link {
-  color: #1677ff;
   cursor: pointer;
 }
 .meta .link:hover {
+  color: #1677ff;
   text-decoration: underline;
 }
 .tabs {
