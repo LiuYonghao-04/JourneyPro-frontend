@@ -15,7 +15,16 @@
       </div>
       <div class="intro-scenery">
         <div class="intro-mountain"></div>
-        <div class="intro-sun" :style="sunStyle"></div>
+        <div
+          v-if="theme === 'light'"
+          class="intro-sun"
+          :style="sunStyle"
+        ></div>
+        <div
+          v-else
+          class="intro-moon"
+          :style="sunStyle"
+        ></div>
 <!--        <div class="intro-cloud cloud-a"></div>-->
 <!--        <div class="intro-cloud cloud-b"></div>-->
       </div>
@@ -115,7 +124,6 @@ import { RouterLink } from 'vue-router'
 import { useAuthStore } from '../store/authStore'
 
 const auth = useAuthStore()
-
 const heroCards = [
   { icon: '🗺️', title: 'Smart map', desc: 'Clean UI, focus on your route.' },
   { icon: '🎯', title: 'POI precision', desc: 'Curated stops that match your vibe.' },
@@ -150,6 +158,8 @@ const scrollHandler = ref(null)
 const wheelHandler = ref(null)
 const introLocked = ref(true)
 const introPlayed = ref(false)
+const theme = ref(document.body.getAttribute('data-theme') || 'dark')
+let themeObserver = null
 const introStyle = computed(() => {
   if (introPlayed.value && !introLocked.value) {
     return {
@@ -170,11 +180,10 @@ const introStyle = computed(() => {
   }
 })
 const sunStyle = computed(() => {
-  // When unlocked, keep sun fully visible
   if (!introLocked.value) return { opacity: 1, filter: 'none' }
   const p = Math.min(Math.max(introProgress.value, 0), 1) // 0 -> 1
-  if (p <= 0.1) return { opacity: 1, filter: 'none' } // fully visible until 15%
-  const t = Math.min(Math.max((p - 0.1) / 0.1, 0), 1) // fade between 15% and 50%
+  if (p <= 0.15) return { opacity: 1, filter: 'none' }
+  const t = Math.min(Math.max((p - 0.15) / 0.35, 0), 1) // fade 15% -> 50%
   const opacity = 1 - t
   const blur = t * 8
   return { opacity, filter: `blur(${blur}px)` }
@@ -206,6 +215,11 @@ const jumpToMain = () => {
 }
 
 onMounted(() => {
+  themeObserver = new MutationObserver(() => {
+    theme.value = document.body.getAttribute('data-theme') || 'dark'
+  })
+  themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
+
   const els = document.querySelectorAll('.section, .hero, .intro')
   const observer = new IntersectionObserver(
     (entries) => {
@@ -241,20 +255,51 @@ onBeforeUnmount(() => {
   if (wheelHandler.value) {
     window.removeEventListener('wheel', wheelHandler.value)
   }
+  themeObserver?.disconnect()
 })
 </script>
 
 <style scoped>
-:global(body) {
-  background: #0b1221;
-}
-.page {
-  color: #e8ecf5;
-  min-height: 100%;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: radial-gradient(circle at 20% 20%, rgba(110, 143, 255, 0.12), transparent 30%),
+:global(body[data-theme='dark']) {
+  --bg-main: #0b1221;
+  --bg-pattern: radial-gradient(circle at 20% 20%, rgba(110, 143, 255, 0.12), transparent 30%),
     radial-gradient(circle at 80% 0%, rgba(255, 118, 174, 0.14), transparent 28%),
     #0b1221;
+  --fg: #e8ecf5;
+  --muted: #c3c9d6;
+  --panel: rgba(255, 255, 255, 0.05);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --badge: rgba(255, 255, 255, 0.06);
+  --badge-border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  --btn-primary: linear-gradient(120deg, #5a8cff, #7ae0ff);
+  --btn-text: #0a0f1a;
+  --mountain-bg: linear-gradient(180deg, rgba(90, 120, 220, 0.35), rgba(8, 12, 22, 1));
+}
+:global(body[data-theme='light']) {
+  --bg-main: #f6f8fb;
+  --bg-pattern: radial-gradient(circle at 20% 18%, rgba(255, 230, 190, 0.18), transparent 32%),
+    radial-gradient(circle at 78% 8%, rgba(188, 214, 255, 0.2), transparent 30%),
+    #f6f8fb;
+  --fg: #0c1220;
+  --muted: #4b5567;
+  --panel: #ffffff;
+  --panel-border: #e8ebf2;
+  --badge: #f3f5fb;
+  --badge-border: #e3e7ef;
+  --shadow: 0 14px 36px rgba(15, 35, 52, 0.12);
+  --btn-primary: linear-gradient(120deg, #4d8cff, #74d8ff);
+  --btn-text: #0a0f1a;
+  --mountain-bg: linear-gradient(180deg, rgba(255, 230, 200, 0.65), rgba(245, 247, 251, 1));
+}
+:global(body) {
+  background: var(--bg-main);
+}
+ .page {
+  color: var(--fg);
+  min-height: 100%;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-pattern);
 }
 .intro {
   min-height: 100vh;
@@ -288,7 +333,7 @@ onBeforeUnmount(() => {
   left: 50%;
   width: 140%;
   height: 40%;
-  background: linear-gradient(180deg, rgba(110, 143, 255, 0.35), rgba(11, 18, 33, 1));
+  background: var(--mountain-bg, linear-gradient(180deg, rgba(110, 143, 255, 0.35), rgba(11, 18, 33, 1)));
   border-radius: 50% 50% 0 0;
   transform: translateX(-50%) scale(calc(1 + var(--intro-progress, 0) * 4));
   transition: transform 0.6s ease;
@@ -299,11 +344,35 @@ onBeforeUnmount(() => {
   left: 20%;
   width: 120px;
   height: 120px;
-  background: radial-gradient(circle, rgba(255, 200, 112, 0.9), transparent 70%);
+  background: radial-gradient(circle, rgba(255, 235, 150, 0.95), transparent 65%),
+    radial-gradient(circle, rgba(255, 245, 210, 0.8), transparent 70%);
   border-radius: 50%;
   animation: glow 6s ease-in-out infinite alternate;
+  box-shadow: 0 0 50px rgba(255, 220, 160, 0.7), 0 0 90px rgba(255, 210, 140, 0.4);
   opacity: calc(1 - var(--intro-progress, 0));
   filter: blur(calc(var(--intro-progress, 0) * 6px));
+}
+.intro-moon {
+  position: absolute;
+  top: 14%;
+  right: 20%;
+  width: 110px;
+  height: 110px;
+  background: radial-gradient(circle at 40% 40%, rgba(230, 236, 255, 0.95), transparent 70%);
+  border-radius: 50%;
+  box-shadow:
+    inset -14px -12px 22px rgba(20, 28, 48, 0.45),
+    10px 8px 18px rgba(0, 0, 0, 0.28);
+  transform: translateX(10px);
+}
+.intro-moon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 60% 50%, rgba(12, 16, 28, 0.95), transparent 62%);
+  border-radius: 50%;
+  transform: translateX(14px);
+  mix-blend-mode: multiply;
 }
 .intro-cloud {
   position: absolute;
@@ -481,7 +550,7 @@ h1 span {
   color: #8ad8ff;
 }
 .lede {
-  color: #c3c9d6;
+  color: var(--muted);
   font-size: 16px;
   max-width: 520px;
   line-height: 1.6;
@@ -502,7 +571,7 @@ h1 span {
   font-size: 14px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   text-decoration: none;
-  color: #e8ecf5;
+  color: var(--fg);
   background: transparent;
   transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
@@ -511,8 +580,8 @@ h1 span {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
 }
 .btn.primary {
-  background: linear-gradient(120deg, #5a8cff, #7ae0ff);
-  color: #0a0f1a;
+  background: var(--btn-primary);
+  color: var(--btn-text);
   border: none;
 }
 .btn.ghost {
@@ -525,12 +594,12 @@ h1 span {
   margin-top: 10px;
 }
 .badge {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--badge);
+  border: 1px solid var(--badge-border);
   padding: 8px 12px;
   border-radius: 12px;
   font-size: 12px;
-  color: #d3d9e5;
+  color: var(--muted);
 }
 .section {
   padding: 40px 64px 60px;
@@ -551,12 +620,12 @@ h1 span {
   gap: 16px;
 }
 .feature.card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
   border-radius: 16px;
   padding: 16px;
-  color: #e8ecf5;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
+  color: var(--fg);
+  box-shadow: var(--shadow);
   transition: transform 0.25s ease, border-color 0.2s;
 }
 .feature.card:hover {
@@ -571,7 +640,7 @@ h1 span {
   margin: 0 0 6px;
 }
 .feature p {
-  color: #c3c9d6;
+  color: var(--muted);
   font-size: 14px;
   min-height: 40px;
 }
@@ -579,11 +648,11 @@ h1 span {
   display: inline-block;
   padding: 4px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--badge);
+  border: 1px solid var(--badge-border);
   font-size: 12px;
   margin-right: 6px;
-  color: #d3d9e5;
+  color: var(--muted);
 }
 .timeline {
   margin-top: 14px;
@@ -594,8 +663,8 @@ h1 span {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
   border-radius: 14px;
   padding: 14px;
 }
@@ -614,11 +683,11 @@ h1 span {
 }
 .step p {
   margin: 0;
-  color: #c3c9d6;
+  color: var(--muted);
 }
 .cta.card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
   border-radius: 18px;
   padding: 24px;
   display: grid;

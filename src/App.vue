@@ -15,6 +15,9 @@
         </RouterLink>
       </nav>
       <div class="jp-auth">
+        <button class="jp-btn ghost small" @click="toggleTheme">
+          {{ themeLabel }}
+        </button>
         <template v-if="!auth.user">
           <RouterLink
             to="/login"
@@ -46,7 +49,7 @@
 
 <script setup>
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { computed } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { useAuthStore } from './store/authStore'
 
 const auth = useAuthStore()
@@ -54,6 +57,16 @@ const route = useRoute()
 const isPostsActive = computed(() => route.path.startsWith('/posts') || route.path.startsWith('/notifications'))
 const isLoginPage = computed(() => route.name === 'login')
 const isRegisterPage = computed(() => route.name === 'register')
+
+const theme = ref(localStorage.getItem('jp_theme') || 'dark')
+const themeLabel = computed(() => (theme.value === 'dark' ? 'Light' : 'Dark'))
+watchEffect(() => {
+  document.body.setAttribute('data-theme', theme.value)
+  localStorage.setItem('jp_theme', theme.value)
+})
+const toggleTheme = () => {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+}
 </script>
 
 <style>
@@ -116,6 +129,10 @@ body,
   text-decoration: none;
   border: 1px solid transparent;
   cursor: pointer;
+}
+.jp-btn.small {
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .jp-btn.primary {
