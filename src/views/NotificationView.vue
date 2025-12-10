@@ -22,7 +22,7 @@
         <el-button type="primary" @click="$router.push('/login')">Login</el-button>
       </section>
 
-      <section v-else class="list" v-loading="loading">
+      <section v-else-if="activeType !== 'chat'" class="list" v-loading="loading">
         <div class="filter">
           <el-button
             v-for="c in categories"
@@ -57,17 +57,124 @@
           </div>
         </div>
       </section>
+
+      <section v-else class="chat-wrap" v-loading="chatLoading">
+        <div class="chat-filter">
+          <el-button
+            v-for="c in categories"
+            :key="c.key"
+            size="small"
+            :type="activeType === c.key ? 'primary' : 'default'"
+            @click="switchType(c.key)"
+          >
+            {{ c.label }}<span v-if="countMap[c.key]"> ({{ countMap[c.key] }})</span>
+          </el-button>
+        </div>
+        <div class="chat-box">
+          <div class="chat-sidebar">
+            <div class="chat-sidebar-title">Chats</div>
+            <div class="chat-search">
+              <el-input
+                v-model="searchKey"
+                placeholder="Search by nickname or ID"
+                size="small"
+                clearable
+                @change="searchUsers"
+                @clear="() => { searchResults = [] }"
+              />
+              <div v-if="searchResults.length" class="search-results">
+                <div
+                  v-for="u in searchResults"
+                  :key="u.id"
+                  class="search-item"
+                  @click="startChatWithUser(u)"
+                >
+                  <img :src="u.avatar_url || placeholder" class="chat-avatar" />
+                  <div class="search-text">
+                    <div class="chat-name">{{ u.nickname || u.username || ('User ' + u.id) }}</div>
+                    <div class="chat-time">ID: {{ u.id }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="conversations.length === 0" class="chat-empty">No conversations yet.</div>
+            <div
+              v-for="c in conversations"
+              :key="c.peer_id"
+              class="chat-conv"
+              :class="{ active: activePeerId === c.peer_id }"
+              @click="openConversation(c.peer_id)"
+            >
+              <img class="chat-avatar" :src="c.avatar_url || placeholder" />
+              <div class="chat-conv-main">
+                <div class="chat-conv-top">
+                  <span class="chat-name">{{ c.nickname || ('User ' + c.peer_id) }}</span>
+                  <span class="chat-time">{{ formatTime(c.last_time) }}</span>
+                </div>
+                <div class="chat-conv-bottom">
+                  <span class="chat-preview">{{ c.last_content || 'Start chatting' }}</span>
+                  <span v-if="c.unreadCount" class="chat-badge">{{ c.unreadCount }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+            <div class="chat-panel" v-if="activePeerId">
+              <div class="chat-panel-header">
+                <div class="chat-peer">{{ activePeer?.nickname || ('User ' + activePeerId) }}</div>
+              </div>
+              <div class="chat-messages" ref="messageContainer">
+              <div
+                v-for="msg in chatMessages"
+                :key="msg.id || msg.local_id"
+                class="chat-bubble"
+                :class="{ me: msg.sender_id === auth.user.id }"
+              >
+                <div class="chat-text">{{ msg.content }}</div>
+                <div class="chat-meta">{{ formatTime(msg.created_at) }}</div>
+              </div>
+            </div>
+              <div class="chat-input">
+                <div class="chat-toolbar">
+                  <el-popover placement="top-start" width="240" trigger="click" v-model:visible="emojiVisible">
+                    <template #reference>
+                      <el-button size="small" text>😀 Emoji</el-button>
+                    </template>
+                    <div class="emoji-grid">
+                      <span v-for="(em, idx) in emojis" :key="idx" class="emoji-cell" @click="addEmoji(em)">
+                        {{ em }}
+                      </span>
+                    </div>
+                  </el-popover>
+                </div>
+                <el-input
+                  v-model="chatInput"
+                  type="textarea"
+                  rows="2"
+                  placeholder="Type a message"
+                  @keydown.enter.prevent="sendMessage"
+                />
+                <div class="chat-actions">
+                  <el-button type="primary" @click="sendMessage" :loading="chatSending">Send</el-button>
+                </div>
+              </div>
+            </div>
+          <div class="chat-panel empty-state" v-else>
+            <p>Select a conversation to start chatting.</p>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/notifications'
+const CHAT_BASE = 'http://localhost:3001/api/chat'
 const auth = useAuthStore()
 const items = ref([])
 const loading = ref(false)
@@ -81,13 +188,30 @@ const categories = [
   { key: 'favorite', label: 'Favorites' },
   { key: 'comment', label: 'Comments' },
   { key: 'follow', label: 'Follows' },
+  { key: 'chat', label: 'Chat' },
 ]
 const activeType = ref('all')
 const filteredItems = computed(() =>
   activeType.value === 'all' ? items.value : items.value.filter((it) => it.type === activeType.value)
 )
+
+const conversations = ref([])
+const chatMessages = ref([])
+const activePeerId = ref(null)
+const chatInput = ref('')
+const chatLoading = ref(false)
+const chatSending = ref(false)
+const messageContainer = ref(null)
+const emojiVisible = ref(false)
+const emojis = ['😀','😃','😄','😁','😆','🥹','😊','😉','😍','😘','😜','🤪','😎','🤔','🤨','😴','😷','🤒','🤕','🤮','🥳','🤯','😇','😭','😡','👍','👎','🙏','👏','👌','🤝','💪','🔥','✨','❤️','💔','💯','🎉','🎁','🌟','🍀','🍔','🍕','🍜','🍣','🍺','☕️']
+const searchKey = ref('')
+const searchResults = ref([])
+const searchLoading = ref(false)
+
+const activePeer = computed(() => conversations.value.find((c) => c.peer_id === activePeerId.value))
+const chatUnread = computed(() => conversations.value.reduce((sum, c) => sum + (c.unreadCount || 0), 0))
 const countMap = computed(() => {
-  const m = { all: items.value.length }
+  const m = { all: items.value.length, chat: chatUnread.value }
   items.value.forEach((it) => {
     m[it.type] = (m[it.type] || 0) + 1
   })
@@ -115,6 +239,11 @@ const setupStream = () => {
     try {
       const data = JSON.parse(evt.data)
       if (data.connected) return
+       // chat pushes are handled separately
+      if (data.type === 'chat') {
+        handleIncomingChat(data)
+        return
+      }
       items.value = [data, ...items.value].slice(0, 100)
     } catch (e) {
       // ignore parse errors
@@ -132,7 +261,190 @@ const label = (type) => {
   if (type === 'favorite') return 'favorited your post'
   if (type === 'comment') return 'commented on your post'
   if (type === 'follow') return 'followed you'
+  if (type === 'chat') return 'sent you a message'
   return 'activity'
+}
+
+const fetchConversations = async () => {
+  if (!auth.user) return
+  chatLoading.value = true
+  try {
+    const res = await axios.get(`${CHAT_BASE}/list`, { params: { user_id: auth.user.id } })
+    const data = res.data?.data || []
+    conversations.value = data.map((c) => ({
+      ...c,
+      last_content: c.content,
+      last_time: c.created_at,
+      unreadCount: c.unreadCount || 0,
+    }))
+  } catch (e) {
+    conversations.value = []
+  } finally {
+    chatLoading.value = false
+  }
+}
+
+const searchUsers = async () => {
+  if (!auth.user) return
+  const keyword = searchKey.value.trim()
+  if (!keyword) {
+    searchResults.value = []
+    return
+  }
+  searchLoading.value = true
+  try {
+    const res = await axios.get(`${CHAT_BASE}/search`, {
+      params: { keyword, user_id: auth.user.id },
+    })
+    searchResults.value = res.data?.data || []
+  } catch (e) {
+    searchResults.value = []
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+const startChatWithUser = (user) => {
+  if (!user?.id) return
+  const existing = conversations.value.find((c) => c.peer_id === user.id)
+  if (!existing) {
+    conversations.value.unshift({
+      peer_id: user.id,
+      nickname: user.nickname || user.username || `User ${user.id}`,
+      avatar_url: user.avatar_url,
+      last_content: 'New chat',
+      last_time: new Date().toISOString(),
+      unreadCount: 0,
+    })
+  }
+  activePeerId.value = user.id
+  searchResults.value = []
+  searchKey.value = ''
+  fetchHistory(user.id)
+}
+
+const addEmoji = (emoji) => {
+  chatInput.value = (chatInput.value || '') + emoji
+  emojiVisible.value = false
+}
+
+const fetchHistory = async (peerId) => {
+  if (!auth.user || !peerId) return
+  chatLoading.value = true
+  try {
+    const res = await axios.get(`${CHAT_BASE}/history`, {
+      params: { user_id: auth.user.id, peer_id: peerId },
+    })
+    chatMessages.value = res.data?.data || []
+    await nextTick()
+    scrollToBottom()
+  } catch (e) {
+    chatMessages.value = []
+  } finally {
+    chatLoading.value = false
+  }
+}
+
+const openConversation = (peerId) => {
+  activePeerId.value = peerId
+  const target = conversations.value.find((c) => c.peer_id === peerId)
+  if (target) target.unreadCount = 0
+  fetchHistory(peerId)
+}
+
+const scrollToBottom = () => {
+  if (!messageContainer.value) return
+  requestAnimationFrame(() => {
+    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+  })
+}
+
+const upsertConversation = (payload) => {
+  const peerId = payload.peer_id
+  const idx = conversations.value.findIndex((c) => c.peer_id === peerId)
+  const base = {
+    peer_id: peerId,
+    nickname: payload.nickname,
+    avatar_url: payload.avatar_url,
+    last_content: payload.content,
+    last_time: payload.created_at || new Date().toISOString(),
+    unreadCount: 0,
+  }
+  if (idx >= 0) {
+    const existing = conversations.value[idx]
+    const updated = {
+      ...existing,
+      ...base,
+      unreadCount:
+        peerId === activePeerId.value ? 0 : (existing.unreadCount || 0) + (payload.incrementUnread ? 1 : 0),
+    }
+    conversations.value.splice(idx, 1)
+    conversations.value.unshift(updated)
+  } else {
+    conversations.value.unshift({
+      ...base,
+      unreadCount: peerId === activePeerId.value ? 0 : (payload.incrementUnread ? 1 : 0),
+    })
+  }
+}
+
+const handleIncomingChat = (data) => {
+  const peerId = data.actor_id
+  const isActive = peerId === activePeerId.value
+  upsertConversation({
+    peer_id: peerId,
+    nickname: data.actor_nickname,
+    avatar_url: data.actor_avatar,
+    content: data.content,
+    created_at: data.created_at,
+    incrementUnread: !isActive,
+  })
+  if (isActive) {
+    chatMessages.value.push({
+      sender_id: peerId,
+      receiver_id: auth.user.id,
+      content: data.content,
+      created_at: data.created_at || new Date().toISOString(),
+      id: `incoming-${Date.now()}`,
+    })
+    scrollToBottom()
+  }
+}
+
+const sendMessage = async () => {
+  if (!auth.user || !activePeerId.value) return
+  const content = (chatInput.value || '').trim()
+  if (!content) return
+  chatSending.value = true
+  try {
+    const res = await axios.post(`${CHAT_BASE}/send`, {
+      sender_id: auth.user.id,
+      receiver_id: activePeerId.value,
+      content,
+    })
+    const msg = res.data?.data || {
+      sender_id: auth.user.id,
+      receiver_id: activePeerId.value,
+      content,
+      created_at: new Date().toISOString(),
+      id: `local-${Date.now()}`,
+    }
+    chatMessages.value.push(msg)
+    upsertConversation({
+      peer_id: activePeerId.value,
+      nickname: activePeer.value?.nickname,
+      avatar_url: activePeer.value?.avatar_url,
+      content,
+      created_at: msg.created_at,
+      incrementUnread: false,
+    })
+    chatInput.value = ''
+    scrollToBottom()
+  } catch (e) {
+    // ignore
+  } finally {
+    chatSending.value = false
+  }
 }
 
 onMounted(() => {
@@ -147,6 +459,7 @@ watch(
   () => auth.user?.id,
   () => {
     fetchData()
+    fetchConversations()
     setupStream()
   }
 )
@@ -155,6 +468,9 @@ watch(
   () => route.params.type,
   (val) => {
     activeType.value = (val || 'all')
+    if (activeType.value === 'chat') {
+      fetchConversations()
+    }
   },
   { immediate: true }
 )
@@ -162,6 +478,13 @@ watch(
 const switchType = (key) => {
   router.push(key === 'all' ? '/notifications' : `/notifications/${key}`)
 }
+
+watch(
+  () => activePeerId.value,
+  () => {
+    nextTick(() => scrollToBottom())
+  }
+)
 </script>
 
 <style scoped>
@@ -290,12 +613,217 @@ const switchType = (key) => {
   color: #666;
   padding: 40px 0;
 }
+.chat-wrap {
+  background: #fff;
+  border: 1px solid #ececec;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-filter {
+  display: flex;
+  gap: 8px;
+}
+.chat-box {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 10px;
+  height: 640px;
+}
+.chat-sidebar {
+  border-right: 1px solid #f0f0f0;
+  padding-right: 10px;
+  overflow-y: auto;
+}
+.chat-sidebar-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.chat-search {
+  margin-bottom: 10px;
+  position: relative;
+}
+.search-results {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ececec;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.search-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.search-item:hover {
+  background: #f6f7f9;
+}
+.search-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-conv {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.chat-conv:hover,
+.chat-conv.active {
+  background: #f4f5f7;
+}
+.chat-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #f3f3f3;
+}
+.chat-conv-main {
+  flex: 1;
+  min-width: 0;
+}
+.chat-conv-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.chat-name {
+  font-weight: 700;
+}
+.chat-time {
+  color: #999;
+}
+.chat-conv-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.chat-preview {
+  color: #555;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-badge {
+  min-width: 18px;
+  padding: 2px 6px;
+  background: #ff4d4f;
+  color: #fff;
+  border-radius: 12px;
+  font-size: 12px;
+}
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #f0f0f0;
+  padding-left: 10px;
+}
+.chat-panel-header {
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-weight: 700;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-bubble {
+  max-width: 70%;
+  background: #f4f6f8;
+  padding: 10px 12px;
+  border-radius: 14px;
+  align-self: flex-start;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.04);
+}
+.chat-bubble.me {
+  background: #4b8afc;
+  color: #fff;
+  align-self: flex-end;
+}
+.chat-text {
+  font-size: 14px;
+}
+.chat-meta {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 4px;
+}
+.chat-bubble.me .chat-meta {
+  color: rgba(255, 255, 255, 0.8);
+}
+.chat-input {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-toolbar {
+  display: flex;
+  gap: 8px;
+}
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  padding: 6px;
+}
+.emoji-cell {
+  cursor: pointer;
+  font-size: 18px;
+  text-align: center;
+  line-height: 32px;
+  border-radius: 8px;
+}
+.emoji-cell:hover {
+  background: #f4f5f7;
+}
+.chat-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.chat-empty {
+  color: #777;
+  padding: 12px;
+}
+.empty-state {
+  justify-content: center;
+  align-items: center;
+  color: #777;
+}
 @media (max-width: 780px) {
   .page {
     grid-template-columns: 1fr;
   }
   .sidebar {
     display: none;
+  }
+  .chat-box {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .chat-panel {
+    border-left: none;
+    padding-left: 0;
   }
 }
 </style>

@@ -49,7 +49,12 @@
             @click="goDetail(card.id)"
           >
             <div class="cover" v-if="card.cover_image || card.images?.[0]">
-              <img :src="card.cover_image || card.images?.[0]" loading="lazy" />
+              <div v-if="!loadedMap[coverKey(card)]" class="img-skeleton" />
+              <img
+                :src="card.cover_image || card.images?.[0]"
+                loading="lazy"
+                @load="markLoaded(card)"
+              />
             </div>
             <div class="card-title">{{ card.title }}</div>
             <div class="card-meta">
@@ -100,6 +105,7 @@ const posts = ref([])
 const favs = ref([])
 const likes = ref([])
 const tab = ref('posts')
+const loadedMap = ref({})
 const followers = ref([])
 const followerDialog = ref(false)
 
@@ -129,6 +135,11 @@ const userIdLabel = computed(() => `User ID: ${userId.value || 'guest'}`)
 const currentList = computed(() =>
   tab.value === 'posts' ? posts.value : tab.value === 'favs' ? favs.value : likes.value
 )
+const coverKey = (card) => card._dupKey || card.id
+const markLoaded = (card) => {
+  const key = coverKey(card)
+  loadedMap.value = { ...loadedMap.value, [key]: true }
+}
 const followerCount = computed(() => followers.value.length)
 
 const fetchFollowers = async () => {
@@ -282,6 +293,15 @@ onMounted(fetchData)
   width: 100%;
   height: 180px;
   object-fit: cover;
+}
+.card .cover {
+  position: relative;
+  height: 180px;
+}
+.img-skeleton {
+  position: absolute;
+  inset: 0;
+  background: #f3f3f3;
 }
 .card-title {
   font-weight: 700;

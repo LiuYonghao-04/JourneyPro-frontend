@@ -482,11 +482,24 @@ const markLoaded = (card) => {
 }
 .cover {
   position: relative;
+  width: 100%;
+  min-height: 240px;
+  background: #f6f7f9;
 }
 .cover img {
+  position: relative;
   width: 100%;
+  height: 100%;
+  min-height: 240px;
   display: block;
   object-fit: cover;
+}
+.img-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #f1f2f3 25%, #e5e7eb 50%, #f1f2f3 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 .img-skeleton {
   position: absolute;
