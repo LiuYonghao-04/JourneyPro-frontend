@@ -1,6 +1,29 @@
 <template>
-  <div class="page">
-    <header class="hero">
+  <div class="page" :style="parallaxStyle" @mousemove="handleMouse">
+    <div class="floating floating-a"></div>
+    <div class="floating floating-b"></div>
+    <div class="floating floating-c"></div>
+
+    <section class="intro" ref="sections">
+      <div class="intro-text" :style="introStyle">
+        <div class="intro-logo">JourneyPro</div>
+        <p class="intro-sub">Where routes meet stories</p>
+        <div class="intro-anim">
+          <span class="pulse"></span>
+          <span class="pulse"></span>
+          <span class="pulse"></span>
+        </div>
+        <a class="scroll-hint" href="#main" @click.prevent="jumpToMain">Scroll to explore ↓</a>
+      </div>
+      <div class="intro-scenery">
+        <div class="intro-mountain"></div>
+        <div class="intro-sun"></div>
+        <div class="intro-cloud cloud-a"></div>
+        <div class="intro-cloud cloud-b"></div>
+      </div>
+    </section>
+
+    <header class="hero" id="main">
       <div class="hero-bg"></div>
       <div class="hero-content">
         <p class="eyebrow">JourneyPro · Intelligent Trip OS</p>
@@ -89,7 +112,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '../store/authStore'
 
@@ -118,8 +141,57 @@ const steps = [
 
 const sections = ref([])
 
+const tilt = ref({ x: 0, y: 0 })
+const parallaxStyle = computed(() => ({
+  '--px': `${tilt.value.x}px`,
+  '--py': `${tilt.value.y}px`,
+  '--intro-progress': introProgress.value,
+}))
+const introProgress = ref(0)
+const scrollHandler = ref(null)
+const wheelHandler = ref(null)
+const introLocked = ref(true)
+const introStyle = computed(() => {
+  const p = Math.min(Math.max(introProgress.value, 0), 1.2)
+  const scale = 1 + p * 4.2 // dramatically fill screen
+  const translateY = 24 - p * 80
+  const opacity = Math.max(1 - p * 1.1, 0)
+  const blur = p * 6
+  return {
+    transform: `translateY(${translateY}px) scale(${scale})`,
+    opacity,
+    filter: `blur(${blur}px)`,
+  }
+})
+
+const handleMouse = (e) => {
+  const x = (e.clientX / window.innerWidth - 0.5) * 10
+  const y = (e.clientY / window.innerHeight - 0.5) * 10
+  tilt.value = { x, y }
+}
+
+const unlockIntro = () => {
+  introProgress.value = 1
+  introLocked.value = false
+  document.body.style.overflow = ''
+  if (wheelHandler.value) {
+    window.removeEventListener('wheel', wheelHandler.value)
+  }
+  const main = document.getElementById('main')
+  if (main) {
+    main.scrollIntoView({ behavior: 'smooth' })
+  }
+}
+
+const jumpToMain = () => {
+  introProgress.value = 1
+  unlockIntro()
+}
+
 onMounted(() => {
-  const els = document.querySelectorAll('.section, .hero')
+
+
+  const els = document.querySelectorAll('.section, .hero, .intro')
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -129,6 +201,29 @@ onMounted(() => {
     { threshold: 0.2 }
   )
   els.forEach((el) => observer.observe(el))
+
+  document.body.style.overflow = 'hidden'
+
+  const onWheel = (e) => {
+    if (!introLocked.value) return
+    e.preventDefault()
+    const delta = e.deltaY || 0
+    const next = Math.min(Math.max(introProgress.value + delta * 0.0035, 0), 1)
+    introProgress.value = next
+    if (next >= 1) {
+      unlockIntro()
+    }
+  }
+  wheelHandler.value = onWheel
+  window.addEventListener('wheel', onWheel, { passive: false })
+})
+
+onBeforeUnmount(() => {
+  tilt.value = { x: 0, y: 0 }
+  document.body.style.overflow = ''
+  if (wheelHandler.value) {
+    window.removeEventListener('wheel', wheelHandler.value)
+  }
 })
 </script>
 
@@ -144,6 +239,142 @@ onMounted(() => {
     radial-gradient(circle at 80% 0%, rgba(255, 118, 174, 0.14), transparent 28%),
     #0b1221;
 }
+.intro {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  perspective: 1200px;
+}
+.intro-text {
+  text-align: center;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s ease, transform 0.8s ease, filter 0.8s ease;
+  transform-origin: center;
+  z-index: 2;
+}
+.intro.visible .intro-text {
+  opacity: 1;
+}
+.intro-scenery {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  filter: blur(calc(var(--intro-progress, 0) * 1px));
+}
+.intro-mountain {
+  position: absolute;
+  bottom: -5%;
+  left: 50%;
+  width: 140%;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(110, 143, 255, 0.35), rgba(11, 18, 33, 1));
+  border-radius: 50% 50% 0 0;
+  transform: translateX(-50%) scale(calc(1 + var(--intro-progress, 0) * 0.3));
+  transition: transform 0.6s ease;
+}
+.intro-sun {
+  position: absolute;
+  top: 14%;
+  left: 20%;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 200, 112, 0.9), transparent 70%);
+  border-radius: 50%;
+  animation: glow 6s ease-in-out infinite alternate;
+}
+.intro-cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  filter: blur(2px);
+}
+.cloud-a {
+  width: 220px;
+  height: 70px;
+  top: 18%;
+  right: 12%;
+  animation: drift 18s linear infinite;
+}
+.cloud-b {
+  width: 180px;
+  height: 60px;
+  top: 28%;
+  left: 18%;
+  animation: drift 24s linear infinite reverse;
+}
+@keyframes drift {
+  from {
+    transform: translateX(-40px);
+  }
+  to {
+    transform: translateX(40px);
+  }
+}
+@keyframes glow {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+.intro-logo {
+  font-size: clamp(42px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.intro-sub {
+  color: #c3c9d6;
+  margin: 10px 0 18px;
+  font-size: 16px;
+}
+.intro-anim {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(120deg, #6ea8ff, #7ae0ff);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.pulse:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.pulse:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+.scroll-hint {
+  color: #7fb1ff;
+  text-decoration: none;
+  font-weight: 600;
+}
+.scroll-hint:hover {
+  text-decoration: underline;
+}
 .hero {
   position: relative;
   overflow: hidden;
@@ -151,6 +382,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
   gap: 40px;
+  transform: translate3d(calc(var(--px, 0px) * 0.2), calc(var(--py, 0px) * 0.2), 0);
 }
 .hero.visible .hero-content,
 .section.visible .section-header,
@@ -187,6 +419,7 @@ onMounted(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-content: start;
+  transform: translate3d(calc(var(--px, 0px) * 0.35), calc(var(--py, 0px) * 0.35), 0);
 }
 .glass {
   background: rgba(255, 255, 255, 0.06);
@@ -195,6 +428,11 @@ onMounted(() => {
   padding: 16px;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(8px);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.glass:hover {
+  transform: translateY(-6px) scale(1.01);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
 }
 .hero-visual .card .icon {
   font-size: 22px;
@@ -300,6 +538,11 @@ h1 span {
   padding: 16px;
   color: #e8ecf5;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
+  transition: transform 0.25s ease, border-color 0.2s;
+}
+.feature.card:hover {
+  transform: translateY(-6px) scale(1.01);
+  border-color: rgba(122, 224, 255, 0.5);
 }
 .feature .icon {
   font-size: 22px;
@@ -377,6 +620,44 @@ h1 span {
   border-radius: 14px;
   color: #e8ecf5;
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.floating {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(28px);
+  opacity: 0.5;
+  animation: float 12s ease-in-out infinite alternate;
+}
+.floating-a {
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(122, 224, 255, 0.32), transparent 60%);
+  top: 6%;
+  left: 4%;
+}
+.floating-b {
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(255, 132, 172, 0.28), transparent 60%);
+  bottom: 12%;
+  right: 8%;
+  animation-duration: 14s;
+}
+.floating-c {
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(138, 216, 255, 0.25), transparent 60%);
+  top: 30%;
+  right: 18%;
+  animation-duration: 16s;
+}
+@keyframes float {
+  from {
+    transform: translateY(0px) scale(1);
+  }
+  to {
+    transform: translateY(-24px) scale(1.06);
+  }
 }
 @media (max-width: 900px) {
   .hero {
