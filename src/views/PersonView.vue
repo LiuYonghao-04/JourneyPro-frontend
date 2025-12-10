@@ -201,7 +201,7 @@ const openAvatarDialog = () => {
 
 const randomAvatar = () => {
   const seed = Math.floor(Math.random() * 200) + 1
-  avatarInput.value = `https://picsum.photos/seed/jp_post${seed}_cover/800/600`
+  avatarInput.value = `https://picsum.photos/seed/jp_post${seed}_cover/120/120`
 }
 
 const saveAvatar = async () => {
@@ -251,7 +251,7 @@ watch(
 .page {
   display: grid;
   grid-template-columns: 240px 1fr;
-  height: 100%;
+  min-height: calc(100vh - 56px);
   background: var(--badge);
 }
 .sidebar {
@@ -311,7 +311,6 @@ watch(
 }
 .avatar-wrap img {
   width: 100%;
-  height: 100%;
   object-fit: cover;
 }
 .avatar-mask {

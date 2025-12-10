@@ -502,16 +502,17 @@ watch(
 .page {
   display: grid;
   grid-template-columns: 240px 1fr;
-  height: 100%;
+  min-height: calc(100vh - 56px);
   background: var(--bg-main);
 }
 .sidebar {
   background: var(--panel);
-  border-right: 1px solid #ececec;
+  border-right: 1px solid var(--panel-border);
   padding: 18px 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: calc(100vh - 56px);
 }
 .logo {
   font-weight: 800;
@@ -528,13 +529,14 @@ watch(
   padding: 10px 12px;
   border-radius: 12px;
   cursor: pointer;
-  color: #4b4b4b;
+  color: var(--fg);
   text-decoration: none;
 }
 .nav-item.active,
 .nav-item:hover,
 .nav :global(.router-link-active.nav-item) {
-  background: #f4f5f7;
+  background: var(--badge);
+  color: var(--fg);
 }
 .nav-item.muted {
   color: var(--muted);

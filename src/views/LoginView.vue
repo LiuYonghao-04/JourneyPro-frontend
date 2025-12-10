@@ -28,9 +28,9 @@
             <button type="button" class="mini-btn" @click="togglePreview">Preview</button>
           </div>
         </label>
-        <div v-if="mode === 'register' && showPreview" class="avatar-preview">
-          <img :src="form.avatarUrl || defaultAvatar" alt="avatar preview" />
-        </div>
+<div v-if="mode === 'register' && showPreview" class="avatar-preview">
+  <img :src="form.avatarUrl || defaultAvatar" alt="avatar preview" />
+</div>
 
         <div v-if="mode === 'register'" class="captcha-row">
           <label class="captcha-label">
@@ -44,7 +44,8 @@
             />
           </label>
           <div class="captcha-img" @click="loadCaptcha">
-            <img v-if="captchaImg" :src="captchaImg" alt="captcha" />
+            <div v-if="captchaIsSvg" class="captcha-svg" v-html="captchaImg"></div>
+            <img v-else-if="captchaSrc" :src="captchaSrc" alt="captcha" />
             <span v-else>Loading...</span>
           </div>
         </div>
@@ -59,7 +60,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, watch } from 'vue'
+import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
@@ -81,6 +82,12 @@ const form = reactive({
 })
 const captchaKey = ref('')
 const captchaImg = ref('')
+const captchaIsSvg = computed(() => captchaImg.value?.trim().startsWith('<svg'))
+const captchaSrc = computed(() => {
+  if (!captchaImg.value || captchaIsSvg.value) return ''
+  if (captchaImg.value.startsWith('data:')) return captchaImg.value
+  return `data:image/png;base64,${captchaImg.value}`
+})
 const showPreview = ref(false)
 const defaultAvatar = 'https://placehold.co/120x120'
 
@@ -144,7 +151,7 @@ const handleSubmit = async () => {
 
 const setRandomAvatar = () => {
   const seed = Math.floor(Math.random() * 200) + 1
-  form.avatarUrl = `https://picsum.photos/seed/jp_post${seed}_cover/800/600`
+  form.avatarUrl = `https://picsum.photos/seed/jp_post${seed}_cover/120/120`
 }
 
 const togglePreview = () => {
@@ -175,12 +182,12 @@ watch(
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100%;
+  min-height: calc(100vh - 56px);
   background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 85%, transparent), color-mix(in srgb, var(--badge) 90%, transparent));
 }
 
 .auth-card {
-  width: 380px;
+  max-width: 420px;
   background: var(--panel);
   border-radius: 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
@@ -200,6 +207,7 @@ watch(
   border-radius: 10px;
   border: 1px solid #e4e7ed;
   background: var(--badge);
+  color: var(--muted);
   cursor: pointer;
   font-weight: 600;
 }
@@ -267,6 +275,11 @@ watch(
   cursor: pointer;
   background: var(--badge);
 }
+.captcha-svg :deep(svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 
 .captcha-img img {
   width: 100%;
@@ -284,6 +297,7 @@ watch(
   border-radius: 8px;
   border: 1px solid #dcdfe6;
   background: var(--badge);
+  color: var(--muted);
   cursor: pointer;
   font-size: 12px;
   white-space: nowrap;

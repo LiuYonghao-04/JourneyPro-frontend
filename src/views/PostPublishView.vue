@@ -387,7 +387,7 @@ watch(
 .page {
   display: grid;
   grid-template-columns: 240px 1fr;
-  height: 100%;
+  min-height: calc(100vh - 56px);
   background: var(--bg-main);
 }
 .sidebar {
@@ -397,6 +397,7 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: calc(100vh - 56px);
 }
 .logo {
   font-weight: 800;
@@ -454,6 +455,7 @@ watch(
 .main {
   overflow-y: auto;
   padding: 20px 24px 32px;
+  min-height: calc(100vh - 56px);
 }
 .hero {
   background: linear-gradient(
