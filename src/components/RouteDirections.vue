@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 
 const routeStore = useRouteStore()
-const { totalDistance, totalDuration, steps, startAddress, endAddress } = storeToRefs(routeStore)
+const { totalDistance, totalDuration, steps} = storeToRefs(routeStore)
 const collapsed = ref(false)
 const hasRoute = computed(() => steps.value && steps.value.length > 0)
 const toggle = () => { collapsed.value = !collapsed.value }
