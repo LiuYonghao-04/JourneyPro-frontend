@@ -88,13 +88,13 @@
               <el-icon :class="['stat-icon', { liked: post._liked }]">
                 <component :is="post._liked ? CircleCheckFilled : CircleCheck" />
               </el-icon>
-              <span>{{ post.like_count || 0 }}</span>
+              <span class="views">{{ post.like_count || 0 }}</span>
             </button>
             <button class="pill" @click="toggleFavPost">
               <el-icon :class="['stat-icon', 'fav', { active: post._fav }]">
                 <component :is="post._fav ? StarFilled : Star" />
               </el-icon>
-              <span>{{ post.favorite_count || 0 }}</span>
+              <span class="views">{{ post.favorite_count || 0 }}</span>
             </button>
             <span class="views">{{ post.view_count || 0 }} views</span>
           </div>
@@ -103,7 +103,7 @@
 
       <section class="comments">
         <div class="comments-header">
-          <h3>Comments</h3>
+          <h3 class="title">Comments</h3>
           <span class="count">{{ comments.length }}</span>
         </div>
         <div class="comment-editor">
@@ -517,10 +517,10 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 240px 1fr;
   height: 100%;
-  background: #f5f6f7;
+  background: var(--bg-main);
 }
 .sidebar {
-  background: #fff;
+  background: var(--panel);
   border-right: 1px solid #ececec;
   padding: 18px 14px;
   display: flex;
@@ -529,7 +529,7 @@ onMounted(() => {
 }
 .logo {
   font-weight: 800;
-  color: #111;
+  color: var(--fg);
   font-size: 20px;
   padding: 8px 6px;
 }
@@ -541,16 +541,17 @@ onMounted(() => {
 .nav-item {
   padding: 10px 12px;
   border-radius: 12px;
-  color: #444;
+  color: var(--fg);
   text-decoration: none;
 }
 .nav-item.active,
 .nav-item:hover,
 .nav :global(.router-link-active.nav-item) {
-  background: #f2f3f5;
+  background: var(--badge);
+  color: var(--fg);
 }
 .nav-item.muted {
-  color: #999;
+  color: var(--muted);
 }
 .content {
   overflow-y: auto;
@@ -566,7 +567,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 60% 40%;
   gap: 18px;
-  background: #fff;
+  background: var(--panel);
   border-radius: 18px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
   padding: 16px;
@@ -581,11 +582,11 @@ onMounted(() => {
 }
 .media-placeholder {
   height: 520px;
-  background: #f2f2f2;
+  background: var(--badge);
   border-radius: 12px;
   display: grid;
   place-items: center;
-  color: #888;
+  color: var(--muted);
 }
 .body {
   display: flex;
@@ -605,14 +606,14 @@ onMounted(() => {
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
-  background: #f1f1f1;
+  background: var(--badge);
 }
 .author-info .name {
   font-weight: 700;
-  color: #111;
+  color: var(--fg);
 }
 .author-info .time {
-  color: #777;
+  color: var(--muted);
   font-size: 12px;
 }
 .name-link {
@@ -621,10 +622,11 @@ onMounted(() => {
 }
 .title {
   margin: 6px 0;
+  color: var(--fg);
 }
 .text {
   line-height: 1.6;
-  color: #222;
+  color: var(--fg);
   white-space: pre-wrap;
 }
 .tags {
@@ -634,9 +636,13 @@ onMounted(() => {
 }
 .poi-actions {
   padding: 10px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
-  background: #fafafa;
+  background: var(--badge);
+  color: var(--fg);
+}
+.poi-cat{
+  margin-left: 12px;
 }
 .poi-buttons {
   display: flex;
@@ -647,8 +653,8 @@ onMounted(() => {
   margin-top: 8px;
 }
 .tag {
-  background: #f1f5ff;
-  color: #2f54eb;
+  background: var(--badge);
+  color: var(--fg);
   padding: 6px 10px;
   border-radius: 12px;
   font-size: 12px;
@@ -657,19 +663,20 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  color: var(--fg);
 }
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid #eee;
-  background: #f8f8f8;
+  border: 1px solid var(--panel-border);
+  background: var(--badge);
   border-radius: 16px;
   padding: 6px 10px;
   cursor: pointer;
 }
 .stat-icon {
-  color: #b5b5b5;
+  color: color-mix(in srgb, var(--fg) 50%, transparent);
 }
 .stat-icon.liked {
   color: #ff2442;
@@ -678,12 +685,12 @@ onMounted(() => {
   color: #f5a524;
 }
 .views {
-  color: #777;
+  color: var(--muted);
   font-size: 13px;
 }
 .comments {
   margin-top: 18px;
-  background: #fff;
+  background: var(--panel);
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
@@ -695,7 +702,7 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 .comments-header .count {
-  color: #555;
+  color: var(--muted);
 }
 .comment-editor {
   display: flex;
@@ -703,6 +710,16 @@ onMounted(() => {
   gap: 10px;
   margin-bottom: 14px;
 }
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  background: var(--panel) !important;
+  color: var(--fg) !important;
+  border-color: var(--panel-border) !important;
+}
+:deep(.el-input__inner) {
+  color: var(--fg);
+}
+
 .comment-list {
   display: flex;
   flex-direction: column;
@@ -710,7 +727,7 @@ onMounted(() => {
 }
 .comment-item,
 .reply-item {
-  background: #fafafa;
+  background: var(--badge);
   border-radius: 12px;
   padding: 10px;
 }
@@ -720,10 +737,10 @@ onMounted(() => {
 }
 .reply-meta {
   font-size: 12px;
-  color: #888;
+  color: var(--muted);
 }
 .reply-meta .name.muted {
-  color: #999;
+  color: var(--muted);
   font-size: 12px;
 }
 .comment-head {
@@ -735,7 +752,7 @@ onMounted(() => {
   font-weight: 600;
 }
 .comment-meta .time {
-  color: #777;
+  color: var(--muted);
   font-size: 12px;
 }
 .inline-link {
@@ -744,7 +761,7 @@ onMounted(() => {
 }
 .comment-body {
   margin: 6px 0;
-  color: #222;
+  color: var(--fg);
 }
 .comment-actions {
   display: flex;
@@ -756,7 +773,7 @@ onMounted(() => {
   gap: 6px;
   border: none;
   background: transparent;
-  color: #666;
+  color: var(--muted);
   cursor: pointer;
   padding: 4px 0;
 }

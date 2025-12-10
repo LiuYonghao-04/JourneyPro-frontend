@@ -17,7 +17,6 @@
           <li>Sync across devices</li>
         </ul>
       </div>
-      <div class="more">More</div>
     </aside>
 
     <main class="main">
@@ -26,7 +25,7 @@
           <h1>Create a new post</h1>
           <p>Polish your story with preview, tag suggestions, and autosave.</p>
         </div>
-        <el-tag type="success" v-if="auth.user" style="font-size: 20px">Logged in as {{ auth.user.nickname }}</el-tag>
+        <el-tag type="success" v-if="auth.user" size="large">Logged in as {{ auth.user.nickname }}</el-tag>
         <el-tag type="warning" v-else>Posting as guest</el-tag>
       </section>
 
@@ -49,7 +48,6 @@
             <el-input
               v-model="form.title"
               maxlength="60"
-              show-word-limit
               placeholder="Title (e.g. Weekend by the sea)"
             />
           </div>
@@ -63,7 +61,6 @@
               v-model="form.content"
               type="textarea"
               :maxlength="800"
-              show-word-limit
               :autosize="{ minRows: 4, maxRows: 8 }"
               placeholder="Write tips, feelings, routes, budgets..."
             />
@@ -163,7 +160,7 @@
         </div>
 
         <div class="preview">
-          <h3>Live preview</h3>
+          <h3 class="card-title">Live preview</h3>
           <div class="card">
             <div class="cover" :class="{ empty: !coverImage }">
               <img v-if="coverImage" :src="coverImage" alt="cover" />
@@ -391,11 +388,11 @@ watch(
   display: grid;
   grid-template-columns: 240px 1fr;
   height: 100%;
-  background: #f5f6f8;
+  background: var(--bg-main);
 }
 .sidebar {
-  background: #fff;
-  border-right: 1px solid #ececec;
+  background: var(--panel);
+  border-right: 1px solid var(--panel-border);
   padding: 18px 14px;
   display: flex;
   flex-direction: column;
@@ -403,7 +400,7 @@ watch(
 }
 .logo {
   font-weight: 800;
-  color: #111;
+  color: var(--fg);
   font-size: 20px;
   padding: 8px 6px;
 }
@@ -416,19 +413,19 @@ watch(
   padding: 10px 12px;
   border-radius: 12px;
   cursor: pointer;
-  color: #4b4b4b;
+  color: var(--fg);
   text-decoration: none;
 }
 .nav-item.active,
 .nav-item:hover,
 .nav :global(.router-link-active.nav-item) {
-  background: #f4f5f7;
+  background: var(--badge);
 }
 .nav-item.muted {
-  color: #999;
+  color: var(--muted);
 }
 .login-box {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 12px;
 }
@@ -436,27 +433,35 @@ watch(
   width: 100%;
   margin-bottom: 8px;
 }
+.el-input__wrapper,
+.el-textarea__inner {
+  background: var(--panel) !important;
+  color: var(--fg) !important;
+  border-color: var(--panel-border) !important;
+}
+:deep(.el-input__inner) {
+  color: var(--fg);
+}
 .login-box ul {
   padding-left: 18px;
   margin: 0;
-  color: #777;
+  color: var(--muted);
   font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.more {
-  margin-top: auto;
-  color: #555;
-  font-size: 14px;
 }
 .main {
   overflow-y: auto;
   padding: 20px 24px 32px;
 }
 .hero {
-  background: linear-gradient(135deg, #e7f0ff, #fef6f3);
-  border: 1px solid #e8ecf5;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--panel) 85%, transparent),
+    color-mix(in srgb, var(--badge) 90%, transparent)
+  );
+  border: 1px solid var(--panel-border);
   border-radius: 18px;
   padding: 16px 20px;
   display: flex;
@@ -466,10 +471,11 @@ watch(
 }
 .hero h1 {
   margin: 0 0 4px;
+  color: var(--fg);
 }
 .hero p {
   margin: 0;
-  color: #555;
+  color: var(--muted);
 }
 .workspace {
   display: grid;
@@ -478,9 +484,9 @@ watch(
 }
 .form,
 .preview {
-  background: #fff;
+  background: var(--panel);
   border-radius: 18px;
-  border: 1px solid #ececec;
+  border: 1px solid var(--panel-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
   padding: 16px;
 }
@@ -495,10 +501,21 @@ watch(
 }
 label {
   font-weight: 600;
+  color: var(--fg);
 }
+
 .hint {
-  color: #888;
+  color: var(--muted);
   font-size: 12px;
+}
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  background: var(--panel) !important;
+  color: var(--fg) !important;
+  border-color: var(--panel-border) !important;
+}
+:deep(.el-input__inner) {
+  color: var(--fg);
 }
 .thumbs {
   display: grid;
@@ -507,7 +524,7 @@ label {
   margin-top: 8px;
 }
 .thumb {
-  border: 1px solid #eee;
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
   overflow: hidden;
   height: 72px;
@@ -527,7 +544,7 @@ label {
   left: 6px;
   border: none;
   background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+  color: var(--fg);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -539,7 +556,7 @@ label {
   bottom: 6px;
   left: 6px;
   background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+  color: var(--fg);
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 10px;
@@ -551,6 +568,8 @@ label {
   margin-bottom: 8px;
 }
 .chip {
+  background: var(--badge);
+  color: var(--fg);
   cursor: pointer;
 }
 .poi-row {
@@ -562,7 +581,7 @@ label {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 8px;
   margin-top: 8px;
@@ -578,7 +597,7 @@ label {
 }
 .poi-text .poi-meta {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
 }
 .poi-option {
   display: flex;
@@ -589,7 +608,7 @@ label {
 }
 .poi-option .poi-meta {
   font-size: 12px;
-  color: #777;
+  color: var(--muted);
 }
 .actions {
   display: flex;
@@ -608,12 +627,12 @@ label {
   margin: 0 0 10px;
 }
 .card {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--panel-border);
   border-radius: 14px;
   overflow: hidden;
 }
 .cover {
-  background: #f4f6fb;
+  background: var(--badge);
   height: 220px;
   display: grid;
   place-items: center;
@@ -624,10 +643,15 @@ label {
   object-fit: cover;
 }
 .cover.empty {
-  background: linear-gradient(135deg, #f4f6fb, #fefefe);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--badge) 90%, #fff),
+    color-mix(in srgb, var(--panel) 85%, #fff)
+  );
+  color: var(--muted);
 }
 .placeholder {
-  color: #777;
+  color: var(--muted);
   font-size: 12px;
 }
 .card-body {
@@ -637,21 +661,22 @@ label {
   font-size: 18px;
   font-weight: 700;
   margin-bottom: 6px;
+  color: var(--fg);
 }
 .card-meta {
-  color: #666;
+  color: var(--muted);
   font-size: 13px;
   margin-bottom: 8px;
 }
 .card-text {
-  color: #222;
+  color: var(--fg);
   line-height: 1.5;
   margin: 0 0 8px;
 }
 .card-foot {
   display: flex;
   justify-content: space-between;
-  color: #777;
+  color: var(--muted);
   font-size: 12px;
 }
 @media (max-width: 900px) {

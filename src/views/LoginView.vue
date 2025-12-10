@@ -176,12 +176,12 @@ watch(
   justify-content: center;
   align-items: center;
   height: 100%;
-  background: linear-gradient(135deg, #edf2ff 0%, #f8f9fa 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 85%, transparent), color-mix(in srgb, var(--badge) 90%, transparent));
 }
 
 .auth-card {
   width: 380px;
-  background: #fff;
+  background: var(--panel);
   border-radius: 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
   padding: 20px 24px 28px;
@@ -199,7 +199,7 @@ watch(
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid #e4e7ed;
-  background: #f7f9fb;
+  background: var(--badge);
   cursor: pointer;
   font-weight: 600;
 }
@@ -218,7 +218,7 @@ watch(
 
 .auth-form label {
   font-size: 13px;
-  color: #444;
+  color: var(--fg);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -265,7 +265,7 @@ watch(
   display: grid;
   place-items: center;
   cursor: pointer;
-  background: #f7f9fb;
+  background: var(--badge);
 }
 
 .captcha-img img {
@@ -283,7 +283,7 @@ watch(
   padding: 10px 10px;
   border-radius: 8px;
   border: 1px solid #dcdfe6;
-  background: #f7f9fb;
+  background: var(--badge);
   cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
@@ -297,7 +297,7 @@ watch(
   padding: 8px;
   border: 1px solid #e6e8eb;
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--badge);
   display: inline-flex;
 }
 .avatar-preview img {
@@ -313,7 +313,7 @@ watch(
   margin: 0;
 }
 .hint {
-  color: #888;
+  color: var(--muted);
   font-size: 12px;
 }
 </style>

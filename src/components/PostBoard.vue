@@ -87,13 +87,13 @@
                   <el-icon :class="['stat-icon', { liked: card._liked }]">
                     <component :is="card._liked ? CircleCheckFilled : CircleCheck" />
                   </el-icon>
-                  <span>{{ card.like_count || 0 }}</span>
+                  <span style="color: var(--muted)">{{ card.like_count || 0 }}</span>
                 </button>
                 <button class="icon-btn" @click.stop="toggleFav(card)">
                   <el-icon :class="['stat-icon', 'fav', { active: card._fav }]">
                     <component :is="card._fav ? StarFilled : Star" />
                   </el-icon>
-                  <span>{{ card.favorite_count || 0 }}</span>
+                  <span style="color: var(--muted)">{{ card.favorite_count || 0 }}</span>
                 </button>
               </div>
             </div>
@@ -314,11 +314,12 @@ const markLoaded = (card) => {
   display: grid;
   grid-template-columns: 240px 1fr;
   height: 100%;
-  background: #f5f6f7;
+  background: var(--bg-main);
+  color: var(--fg);
 }
 .sidebar {
-  background: #fff;
-  border-right: 1px solid #ececec;
+  background: var(--panel);
+  border-right: 1px solid var(--panel-border);
   padding: 18px 14px;
   display: flex;
   flex-direction: column;
@@ -326,7 +327,7 @@ const markLoaded = (card) => {
 }
 .logo {
   font-weight: 800;
-  color: #111;
+  color: var(--fg);
   font-size: 20px;
   padding: 8px 6px;
 }
@@ -338,27 +339,28 @@ const markLoaded = (card) => {
 .nav-item {
   padding: 10px 12px;
   border-radius: 12px;
-  color: #444;
+  color: var(--fg);
   text-decoration: none;
 }
 .nav-item.active,
 .nav-item:hover,
 .nav :global(.router-link-active.nav-item) {
-  background: #f2f3f5;
+  background: var(--btn-primary);
+  color: var(--btn-text);
 }
 .nav-item.muted {
-  color: #999;
+  color: var(--muted);
 }
 .login-card {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 12px;
-  background: #fafafa;
+  background: var(--badge);
 }
 .login-card ul {
   padding-left: 16px;
   margin: 8px 0 0;
-  color: #777;
+  color: var(--muted);
   font-size: 12px;
   display: flex;
   flex-direction: column;
@@ -379,6 +381,15 @@ const markLoaded = (card) => {
   flex: 1;
   max-width: 520px;
 }
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  background: var(--panel) !important;
+  color: var(--fg) !important;
+  border-color: var(--panel-border) !important;
+}
+:deep(.el-input__inner) {
+  color: var(--fg);
+}
 .top-actions {
   display: flex;
   gap: 8px;
@@ -391,19 +402,19 @@ const markLoaded = (card) => {
 }
 .chip {
   border: none;
-  background: #f1f2f6;
+  background: var(--badge);
   padding: 8px 14px;
   border-radius: 16px;
-  color: #444;
+  color: var(--fg);
   cursor: pointer;
 }
 .chip.active {
-  background: #111;
-  color: #fff;
+  background: var(--btn-primary);
+  color: var(--btn-text);
 }
 .chip.outline {
   background: transparent;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--badge-border);
 }
 .feed {
   min-height: 400px;
@@ -416,7 +427,12 @@ const markLoaded = (card) => {
 .skeleton-card {
   height: 260px;
   border-radius: 16px;
-  background: linear-gradient(90deg, #f1f2f3 25%, #e5e7eb 50%, #f1f2f3 75%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--badge) 90%, #fff) 25%,
+    color-mix(in srgb, var(--badge) 80%, #fff) 50%,
+    color-mix(in srgb, var(--badge) 90%, #fff) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -434,7 +450,7 @@ const markLoaded = (card) => {
 .empty {
   text-align: center;
   padding: 60px 0;
-  color: #666;
+  color: var(--muted);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -468,23 +484,23 @@ const markLoaded = (card) => {
 .card {
   break-inside: avoid;
   margin-bottom: 16px;
-  background: #fff;
+  background: var(--panel);
   border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #f1f1f1;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--panel-border);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
 }
 .cover {
   position: relative;
   width: 100%;
   min-height: 240px;
-  background: #f6f7f9;
+  background: var(--badge);
 }
 .cover img {
   position: relative;
@@ -497,14 +513,19 @@ const markLoaded = (card) => {
 .img-skeleton {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, #f1f2f3 25%, #e5e7eb 50%, #f1f2f3 75%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--badge) 90%, #fff) 25%,
+    color-mix(in srgb, var(--badge) 80%, #fff) 50%,
+    color-mix(in srgb, var(--badge) 90%, #fff) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 .img-skeleton {
   position: absolute;
   inset: 0;
-  background: #f2f2f2;
+  background: var(--badge);
   z-index: 1;
 }
 .floating-tag {
@@ -523,12 +544,12 @@ const markLoaded = (card) => {
 .card-title {
   font-weight: 700;
   font-size: 14px;
-  color: #111;
+  color: var(--fg);
   margin-bottom: 6px;
 }
 .card-meta {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   margin-bottom: 8px;
 }
 .card-footer {
@@ -536,7 +557,7 @@ const markLoaded = (card) => {
   justify-content: flex-start;
   gap: 12px;
   font-size: 13px;
-  color: #555;
+  color: var(--muted);
 }
 .icon-btn {
   display: inline-flex;
@@ -544,12 +565,12 @@ const markLoaded = (card) => {
   gap: 6px;
   padding: 6px 8px;
   border-radius: 12px;
-  background: #f8f8f8;
+  background: var(--badge);
   border: none;
   cursor: pointer;
 }
 .icon-btn :deep(.stat-icon) {
-  color: #b5b5b5;
+  color: color-mix(in srgb, var(--fg) 50%, transparent);
 }
 .icon-btn :deep(.stat-icon.liked) {
   color: #ff2442;
@@ -561,7 +582,7 @@ const markLoaded = (card) => {
 .no-more {
   text-align: center;
   padding: 12px;
-  color: #777;
+  color: var(--muted);
 }
 .sentinel {
   height: 1px;

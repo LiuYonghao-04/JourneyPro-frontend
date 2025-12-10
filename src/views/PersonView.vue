@@ -17,7 +17,7 @@
           <div v-if="isSelf" class="avatar-mask">Change</div>
         </div>
         <div class="info">
-          <h2>{{ displayUserName }}</h2>
+          <h2 style="color: var(--muted);" >{{ displayUserName }}</h2>
           <div class="meta">
             {{ userIdLabel }}
             <span class="link" :class="{ inert: !isSelf }" @click="isSelf ? openFollowers() : null">
@@ -252,10 +252,10 @@ watch(
   display: grid;
   grid-template-columns: 240px 1fr;
   height: 100%;
-  background: #fafafa;
+  background: var(--badge);
 }
 .sidebar {
-  background: #fff;
+  background: var(--panel);
   border-right: 1px solid #ececec;
   padding: 18px 14px;
   display: flex;
@@ -263,7 +263,7 @@ watch(
   gap: 14px;
 }
 .logo {
-  color: #111;
+  color: var(--fg);
   font-weight: 800;
   font-size: 20px;
   padding: 8px 6px;
@@ -277,15 +277,15 @@ watch(
   padding: 10px 12px;
   border-radius: 12px;
   text-decoration: none;
-  color: #444;
+  color: var(--fg);
 }
 .nav-item.active,
 .nav-item:hover,
 .nav :global(.router-link-active.nav-item) {
-  background: #f2f3f5;
+  background: var(--badge);
 }
 .nav-item.muted {
-  color: #999;
+  color: var(--muted);
 }
 .content {
   overflow-y: auto;
@@ -295,7 +295,7 @@ watch(
   display: flex;
   gap: 16px;
   align-items: center;
-  background: #fff;
+  background: var(--panel);
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
@@ -305,7 +305,7 @@ watch(
   height: 120px;
   border-radius: 50%;
   overflow: hidden;
-  background: #f1f1f1;
+  background: var(--badge);
   position: relative;
   cursor: pointer;
 }
@@ -334,7 +334,7 @@ watch(
 }
 .meta,
 .stats {
-  color: #777;
+  color: var(--muted);
   display: flex;
   gap: 15px;
   font-size: 13px;
@@ -360,23 +360,25 @@ watch(
   border: none;
   padding: 10px 16px;
   border-radius: 20px;
-  background: #f1f2f6;
+  background: var(--badge);
+  color: var(--fg);
   cursor: pointer;
 }
 .tab.active {
-  background: #111;
+  background: var(--btn-primary);
+  color: var(--btn-text);
   color: #fff;
 }
 .grid {
   margin-top: 16px;
-  background: #fff;
+  background: var(--panel);
   border-radius: 14px;
   padding: 16px;
   min-height: 400px;
 }
 .empty {
   text-align: center;
-  color: #777;
+  color: var(--muted);
   padding: 60px 0;
 }
 .empty-icon {
@@ -389,7 +391,7 @@ watch(
   gap: 14px;
 }
 .card {
-  background: #f9f9f9;
+  background: var(--panel);
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid #eee;
@@ -407,16 +409,17 @@ watch(
 .img-skeleton {
   position: absolute;
   inset: 0;
-  background: #f3f3f3;
+  background: var(--badge);
 }
 .card-title {
   font-weight: 700;
   padding: 8px 10px 4px;
+  color: var(--muted);
 }
 .card-meta {
   padding: 0 10px 10px;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   display: flex;
   gap: 6px;
   align-items: center;
@@ -448,14 +451,14 @@ watch(
   height: 38px;
   border-radius: 50%;
   object-fit: cover;
-  background: #f3f3f3;
+  background: var(--badge);
 }
 .follower-name {
   font-weight: 600;
 }
 .follower-meta {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
 }
 .avatar-edit {
   display: flex;
@@ -470,9 +473,9 @@ watch(
 .avatar-preview {
   display: inline-flex;
   padding: 8px;
-  border: 1px solid #e6e8eb;
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--badge);
 }
 .avatar-preview img {
   width: 100px;
