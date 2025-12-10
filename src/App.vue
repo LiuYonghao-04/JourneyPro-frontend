@@ -41,7 +41,7 @@ import { useAuthStore } from './store/authStore'
 
 const auth = useAuthStore()
 const route = useRoute()
-const isPostsActive = computed(() => route.path.startsWith('/posts'))
+const isPostsActive = computed(() => route.path.startsWith('/posts') || route.path.startsWith('/notifications'))
 </script>
 
 <style>

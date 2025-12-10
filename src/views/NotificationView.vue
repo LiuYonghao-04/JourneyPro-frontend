@@ -39,7 +39,14 @@
         </div>
         <div v-else>
           <div v-for="(item, idx) in filteredItems" :key="idx" class="card">
-            <div class="avatar">
+            <RouterLink
+              class="avatar"
+              v-if="item.actor_id"
+              :to="`/person?userid=${item.actor_id}`"
+            >
+              <img :src="item.avatar_url || placeholder" />
+            </RouterLink>
+            <div class="avatar" v-else>
               <img :src="item.avatar_url || placeholder" />
             </div>
             <div class="body">
@@ -89,7 +96,9 @@
                   class="search-item"
                   @click="startChatWithUser(u)"
                 >
-                  <img :src="u.avatar_url || placeholder" class="chat-avatar" />
+                  <RouterLink :to="`/person?userid=${u.id}`">
+                    <img :src="u.avatar_url || placeholder" class="chat-avatar" />
+                  </RouterLink>
                   <div class="search-text">
                     <div class="chat-name">{{ u.nickname || u.username || ('User ' + u.id) }}</div>
                     <div class="chat-time">ID: {{ u.id }}</div>
@@ -105,7 +114,9 @@
               :class="{ active: activePeerId === c.peer_id }"
               @click="openConversation(c.peer_id)"
             >
-              <img class="chat-avatar" :src="c.avatar_url || placeholder" />
+              <RouterLink :to="`/person?userid=${c.peer_id}`">
+                <img class="chat-avatar" :src="c.avatar_url || placeholder" />
+              </RouterLink>
               <div class="chat-conv-main">
                 <div class="chat-conv-top">
                   <span class="chat-name">{{ c.nickname || ('User ' + c.peer_id) }}</span>

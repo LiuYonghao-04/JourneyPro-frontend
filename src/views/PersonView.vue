@@ -13,27 +13,28 @@
     <main class="content">
       <header class="profile">
         <div class="avatar-wrap">
-          <img :src="userAvatar" alt="avatar" />
+          <img :src="displayAvatar" alt="avatar" />
         </div>
         <div class="info">
-          <h2>{{ userName }}</h2>
+          <h2>{{ displayUserName }}</h2>
           <div class="meta">
             {{ userIdLabel }}
-            <span class="link" @click="openFollowers">Followers: {{ followerCount }}</span>
+            <span class="link" :class="{ inert: !isSelf }" @click="isSelf ? openFollowers() : null">
+              Followers: {{ followerCount }}
+            </span>
           </div>
           <div class="stats">
             <span> posts:{{ posts.length }}</span>
-            <span>favorites:{{ favs.length }} </span>
-            <span>likes:{{ likes.length }} </span>
-<!--            <span class="link" @click="openFollowers">Followers {{ followerCount }}</span>-->
+            <span v-if="isSelf">favorites:{{ favs.length }} </span>
+            <span v-if="isSelf">likes:{{ likes.length }} </span>
           </div>
         </div>
       </header>
 
       <div class="tabs">
         <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">Posts</button>
-        <button class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">Favorites</button>
-        <button class="tab" :class="{ active: tab === 'likes' }" @click="tab = 'likes'">Likes</button>
+        <button v-if="isSelf" class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">Favorites</button>
+        <button v-if="isSelf" class="tab" :class="{ active: tab === 'likes' }" @click="tab = 'likes'">Likes</button>
       </div>
 
       <section class="grid">
@@ -89,7 +90,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
@@ -97,10 +98,12 @@ import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'
+const AUTH_API = 'http://localhost:3001/api/auth'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const userId = computed(() => route.query.userid || auth.user?.id)
+const isSelf = computed(() => String(userId.value || '') === String(auth.user?.id || ''))
 const posts = ref([])
 const favs = ref([])
 const likes = ref([])
@@ -108,6 +111,7 @@ const tab = ref('posts')
 const loadedMap = ref({})
 const followers = ref([])
 const followerDialog = ref(false)
+const profile = ref(null)
 
 const fetchData = async () => {
   const uid = userId.value
@@ -129,12 +133,11 @@ const goDetail = (id) => {
   router.push(`/posts/postsid=${id}`)
 }
 
-const userName = computed(() => auth.user?.nickname || 'Traveler')
-const userAvatar = computed(() => auth.user?.avatar_url || 'https://placehold.co/120x120')
 const userIdLabel = computed(() => `User ID: ${userId.value || 'guest'}`)
-const currentList = computed(() =>
-  tab.value === 'posts' ? posts.value : tab.value === 'favs' ? favs.value : likes.value
-)
+const currentList = computed(() => {
+  if (!isSelf.value) return posts.value
+  return tab.value === 'posts' ? posts.value : tab.value === 'favs' ? favs.value : likes.value
+})
 const coverKey = (card) => card._dupKey || card.id
 const markLoaded = (card) => {
   const key = coverKey(card)
@@ -156,11 +159,46 @@ const fetchFollowers = async () => {
   }
 }
 
+const fetchProfile = async () => {
+  const uid = userId.value
+  if (!uid) {
+    profile.value = null
+    return
+  }
+  try {
+    const res = await axios.get(`${AUTH_API}/user`, { params: { id: uid } })
+    profile.value = res.data?.user || null
+  } catch (e) {
+    profile.value = null
+  }
+}
+
 const openFollowers = () => {
   followerDialog.value = true
 }
 
-onMounted(fetchData)
+const displayUserName = computed(() => profile.value?.nickname || auth.user?.nickname || 'Traveler')
+const displayAvatar = computed(() => profile.value?.avatar_url || auth.user?.avatar_url || 'https://placehold.co/120x120')
+
+onMounted(() => {
+  fetchData()
+  fetchProfile()
+})
+
+watch(
+  () => route.query.userid,
+  () => {
+    fetchData()
+    fetchProfile()
+  }
+)
+
+watch(
+  () => isSelf.value,
+  (val) => {
+    if (!val) tab.value = 'posts'
+  }
+)
 </script>
 
 <style scoped>
@@ -244,6 +282,11 @@ onMounted(fetchData)
 .meta .link:hover {
   color: #1677ff;
   text-decoration: underline;
+}
+.meta .link.inert {
+  pointer-events: none;
+  cursor: default;
+  text-decoration: none;
 }
 .tabs {
   margin-top: 18px;

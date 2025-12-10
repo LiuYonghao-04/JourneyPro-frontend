@@ -30,23 +30,29 @@
         </div>
 
         <div class="body">
-        <div class="author">
-          <img :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
-          <div class="author-info">
-            <div class="name">{{ post.user?.nickname || 'Traveler' }}</div>
-            <div class="time">{{ formatTime(post.created_at) }}</div>
+          <div class="author">
+            <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="avatar-link">
+              <img :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
+            </RouterLink>
+            <img v-else :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
+            <div class="author-info">
+              <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="name-link">
+                <div class="name">{{ post.user?.nickname || 'Traveler' }}</div>
+              </RouterLink>
+              <div v-else class="name">{{ post.user?.nickname || 'Traveler' }}</div>
+              <div class="time">{{ formatTime(post.created_at) }}</div>
+            </div>
+            <template v-if="auth.user && auth.user.id !== post.user?.id">
+              <el-button
+                class="follow-btn"
+                :type="following ? 'success' : 'primary'"
+                @click="toggleFollow"
+                plain
+              >
+                {{ following ? 'Following' : 'Follow' }}
+              </el-button>
+            </template>
           </div>
-          <template v-if="auth.user && auth.user.id !== post.user?.id">
-            <el-button
-              class="follow-btn"
-              :type="following ? 'success' : 'primary'"
-              @click="toggleFollow"
-              plain
-            >
-              {{ following ? 'Following' : 'Follow' }}
-            </el-button>
-          </template>
-        </div>
 
           <h2 class="title">{{ post.title }}</h2>
           <p class="text">{{ post.content }}</p>
@@ -61,21 +67,21 @@
               <span class="poi-cat" v-if="poiDetail?.category">{{ poiDetail.category }}</span>
               <span class="poi-cat" v-else-if="poiLoading">Loading...</span>
             </div>
-          <div class="poi-buttons">
-            <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View on map</el-button>
-            <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">
-              Add to route
-            </el-button>
+            <div class="poi-buttons">
+              <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View on map</el-button>
+              <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">
+                Add to route
+              </el-button>
+            </div>
+            <el-alert
+              v-if="alertMessage"
+              :title="alertMessage"
+              :type="alertType"
+              :closable="false"
+              show-icon
+              class="inline-alert"
+            />
           </div>
-          <el-alert
-            v-if="alertMessage"
-            :title="alertMessage"
-            :type="alertType"
-            :closable="false"
-            show-icon
-            class="inline-alert"
-          />
-        </div>
 
           <div class="stats">
             <button class="pill" @click="toggleLikePost">
@@ -113,38 +119,42 @@
         <div class="comment-list">
           <div v-for="c in comments" :key="c.id" class="comment-item">
             <div class="comment-head">
-              <img :src="c.user?.avatar_url || defaultAvatar" class="avatar" />
+              <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="avatar-link">
+                <img :src="c.user?.avatar_url || defaultAvatar" class="avatar" />
+              </RouterLink>
+              <img v-else :src="c.user?.avatar_url || defaultAvatar" class="avatar" />
               <div class="comment-meta">
-                <div class="name">{{ c.user?.nickname || 'Traveler' }}</div>
+                <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="name">
+                  {{ c.user?.nickname || 'Traveler' }}
+                </RouterLink>
+                <div v-else class="name">{{ c.user?.nickname || 'Traveler' }}</div>
                 <div class="time">{{ formatTime(c.created_at) }}</div>
               </div>
             </div>
             <div class="comment-body">{{ c.content }}</div>
-        <div class="comment-actions">
-          <button class="icon-link" @click="likeComment(c)">
-            <el-icon :class="['stat-icon', { liked: c._liked }]">
-              <component :is="c._liked ? CircleCheckFilled : CircleCheck" />
-            </el-icon>
-            <span>{{ c.like_count || 0 }}</span>
-          </button>
-          <button class="icon-link" @click="replyTarget = c.id">
-            Reply
-          </button>
-          <button
-            v-if="(c.replies?.length || 0) > 0"
-            class="icon-link"
-            @click="c._expanded = !c._expanded"
-          >
-            {{ c._expanded ? 'Collapse' : 'Expand' }}
-          </button>
-        </div>
+            <div class="comment-actions">
+              <button class="icon-link" @click="likeComment(c)">
+                <el-icon :class="['stat-icon', { liked: c._liked }]">
+                  <component :is="c._liked ? CircleCheckFilled : CircleCheck" />
+                </el-icon>
+                <span>{{ c.like_count || 0 }}</span>
+              </button>
+              <button class="icon-link" @click="replyTarget = c.id">Reply</button>
+              <button
+                v-if="(c.replies?.length || 0) > 0"
+                class="icon-link"
+                @click="c._expanded = !c._expanded"
+              >
+                {{ c._expanded ? 'Collapse' : 'Expand' }}
+              </button>
+            </div>
 
-        <div v-if="replyTarget === c.id" class="reply-box">
-          <el-input
-            v-model="replyText"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-            placeholder="Reply..."
+            <div v-if="replyTarget === c.id" class="reply-box">
+              <el-input
+                v-model="replyText"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                placeholder="Reply..."
               />
               <div class="reply-actions">
                 <el-button size="small" @click="submitComment(c)">Send</el-button>
@@ -152,17 +162,27 @@
               </div>
             </div>
 
-        <div v-if="c.replies?.length && c._expanded !== false" class="replies">
-          <div v-for="r in flattenReplies(c)" :key="r.id" class="reply-item">
-            <div class="comment-head reply-head">
-              <img :src="r.user?.avatar_url || defaultAvatar" class="avatar small" />
-            <div class="comment-meta reply-meta">
+            <div v-if="c.replies?.length && c._expanded !== false" class="replies">
+              <div v-for="r in flattenReplies(c)" :key="r.id" class="reply-item">
+                <div class="comment-head reply-head">
+                  <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="avatar-link">
+                    <img :src="r.user?.avatar_url || defaultAvatar" class="avatar small" />
+                  </RouterLink>
+                  <img v-else :src="r.user?.avatar_url || defaultAvatar" class="avatar small" />
+                  <div class="comment-meta reply-meta">
                     <div class="name" :class="{ muted: r._depth > 1 }">
                       <template v-if="r._depth > 1">
-                        {{ r.user?.nickname || 'Traveler' }} → {{ getReplyTargetName(r) }}
+                        <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="inline-link">
+                          {{ r.user?.nickname || 'Traveler' }}
+                        </RouterLink>
+                        <span v-else>{{ r.user?.nickname || 'Traveler' }}</span>
+                        → {{ getReplyTargetName(r) }}
                       </template>
                       <template v-else>
-                        {{ r.user?.nickname || 'Traveler' }}
+                        <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="inline-link">
+                          {{ r.user?.nickname || 'Traveler' }}
+                        </RouterLink>
+                        <span v-else>{{ r.user?.nickname || 'Traveler' }}</span>
                       </template>
                     </div>
                     <div class="time">{{ formatTime(r.created_at) }}</div>
@@ -230,10 +250,11 @@ const alertType = ref('success')
 
 const postId = computed(() => route.params.id)
 
-
 const goBack = () => {
   router.back()
 }
+
+const profileLink = (uid) => `/person?userid=${uid}`
 
 const formatTime = (time) => {
   if (!time) return ''
@@ -576,6 +597,9 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
 }
+.avatar-link {
+  display: inline-block;
+}
 .avatar {
   width: 48px;
   height: 48px;
@@ -590,6 +614,10 @@ onMounted(() => {
 .author-info .time {
   color: #777;
   font-size: 12px;
+}
+.name-link {
+  text-decoration: none;
+  color: inherit;
 }
 .title {
   margin: 6px 0;
@@ -709,6 +737,10 @@ onMounted(() => {
 .comment-meta .time {
   color: #777;
   font-size: 12px;
+}
+.inline-link {
+  text-decoration: none;
+  color: inherit;
 }
 .comment-body {
   margin: 6px 0;
