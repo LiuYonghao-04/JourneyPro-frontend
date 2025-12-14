@@ -4,7 +4,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue"
 import { useRouteStore } from "../store/routeStore"
 
 const routeStore = useRouteStore()
-const { totalDistance, totalDuration, steps, startAddress, endAddress } = storeToRefs(routeStore)
+const { totalDistance, totalDuration, steps, startAddress, endAddress, hoveredStepIndex } = storeToRefs(routeStore)
 const collapsed = ref(false)
 const hasRoute = computed(() => steps.value && steps.value.length > 0)
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
@@ -20,6 +20,13 @@ onBeforeUnmount(() => {
 })
 const toggle = () => {
   collapsed.value = !collapsed.value
+}
+
+const onStepEnter = (idx) => {
+  routeStore.setHoveredStep(idx, "list")
+}
+const onStepLeave = () => {
+  routeStore.clearHoveredStep("list")
 }
 </script>
 
@@ -38,9 +45,23 @@ const toggle = () => {
 
     <div v-if="!collapsed">
       <div class="steps" v-if="hasRoute">
-        <div class="step" v-for="(s, idx) in steps" :key="idx">
+        <div
+          class="step"
+          v-for="(s, idx) in steps"
+          :key="idx"
+          :class="{
+            active: hoveredStepIndex === idx,
+            waypoint: s.arrivalKind === 'waypoint',
+            destination: s.arrivalKind === 'destination',
+          }"
+          @mouseenter="onStepEnter(idx)"
+          @mouseleave="onStepLeave"
+        >
           <div class="step-num">{{ idx + 1 }}</div>
           <div class="step-body">
+            <div v-if="s.arrivalKind === 'waypoint'" class="badge">
+              Waypoint: {{ s.arrivalName }}
+            </div>
             <div class="instruction">{{ s.instruction }}</div>
             <div class="detail">
               <span v-if="s.road">{{ s.road }} | </span>{{ s.distance }} km | {{ s.duration }} min
@@ -123,6 +144,28 @@ const toggle = () => {
   border-radius: 10px;
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.step.active {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  transform: translateY(-1px);
+}
+.step.waypoint {
+  border-left: 4px solid #22c55e;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.35);
 }
 .step-num {
   width: 28px;
@@ -180,6 +223,18 @@ const toggle = () => {
 .directions-panel.light .step {
   background: #ffffff;
   border: 1px solid #e5e7eb;
+}
+.directions-panel.light .step.active {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+.directions-panel.light .step.waypoint {
+  border-left: 4px solid #22c55e;
+}
+.directions-panel.light .badge {
+  background: rgba(34, 197, 94, 0.12);
+  color: #166534;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 .directions-panel.light .step-num {
   background: #eef2f7;

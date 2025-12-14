@@ -24,6 +24,7 @@ let endMarker = null
 let poiLayer = null
 let routeLayer = null
 let baseLayer = null
+let highlightMarker = null
 const route = useRoute()
 
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
@@ -100,33 +101,133 @@ const fetchRoute = async () => {
     routeStore.totalDistance = (routeData.distance / 1000).toFixed(2)
     routeStore.totalDuration = (routeData.duration / 60).toFixed(1)
     routeStore.routeGeojson = { type: "Feature", geometry: routeData.geometry }
-    const steps =
-      routeData.legs?.flatMap((leg) =>
-        (leg.steps || []).map((s) => {
-          const maneuver = s.maneuver || {}
-          const type = maneuver.type || "Go"
-          const modifier = maneuver.modifier ? ` ${maneuver.modifier}` : ""
-          const road = s.name ? ` onto ${s.name}` : ""
-          const instruction =
-            maneuver.instruction || `${type}${modifier}${road}`.trim()
-          return {
-            instruction,
-            road: s.name || "",
-            distance: (s.distance / 1000).toFixed(2),
-            duration: Math.round(s.duration / 60),
-          }
-        })
-      ) || []
-    routeStore.steps = steps
+    const viaList = routeStore.viaPoints || []
+    const steps = []
+    ;(routeData.legs || []).forEach((leg, legIndex) => {
+      ;(leg.steps || []).forEach((s, stepIndex) => {
+        const maneuver = s.maneuver || {}
+        const type = (maneuver.type || "go").toString().toLowerCase()
+        const modifier = maneuver.modifier ? ` ${maneuver.modifier}` : ""
+        const road = s.name ? ` onto ${s.name}` : ""
+        const instruction =
+          maneuver.instruction || `${maneuver.type || "Go"}${modifier}${road}`.trim()
 
-    if (routeLayer) map.value.removeLayer(routeLayer)
-    routeLayer = L.geoJSON(routeData.geometry, {
-      style: { color: "#228BE6", weight: 6, opacity: 0.9 },
-    }).addTo(map.value)
-    map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
+        const location = Array.isArray(maneuver.location) ? maneuver.location : null // [lng, lat]
+
+        const item = {
+          instruction,
+          road: s.name || "",
+          distance: (s.distance / 1000).toFixed(2),
+          duration: Math.round(s.duration / 60),
+          maneuverType: type,
+          legIndex,
+          stepIndex,
+          location,
+        }
+
+        if (type === "arrive") {
+          if (legIndex < viaList.length) {
+            item.arrivalKind = "waypoint"
+            item.arrivalName = viaList[legIndex]?.name || `Waypoint ${legIndex + 1}`
+          } else {
+            item.arrivalKind = "destination"
+            item.arrivalName = "Destination"
+          }
+        }
+
+        steps.push(item)
+      })
+    })
+    routeStore.steps = steps
   } catch (e) {
     console.warn("Route fetch failed", e)
   }
+}
+
+const getRouteBaseStyle = () => ({
+  color: theme.value === "dark" ? "#3b82f6" : "#2563eb",
+  weight: 6,
+  opacity: 0.9,
+  interactive: true,
+})
+
+const getRouteHighlightStyle = () => ({
+  color: "#f97316",
+  weight: 7,
+  opacity: 0.95,
+  interactive: true,
+})
+
+const updateHoverVisuals = () => {
+  if (!map.value) return
+  const idx = routeStore.hoveredStepIndex
+
+  if (routeLayer) {
+    routeLayer.setStyle(idx === null ? getRouteBaseStyle() : getRouteHighlightStyle())
+  }
+
+  if (idx === null || idx === undefined) {
+    if (highlightMarker) {
+      map.value.removeLayer(highlightMarker)
+      highlightMarker = null
+    }
+    return
+  }
+  const step = routeStore.steps?.[idx]
+  if (!step || !Array.isArray(step.location)) return
+  const [lng, lat] = step.location
+  if (typeof lat !== "number" || typeof lng !== "number") return
+
+  if (!highlightMarker) {
+    highlightMarker = L.circleMarker([lat, lng], {
+      radius: 7,
+      color: "#f97316",
+      weight: 3,
+      fillColor: "#f97316",
+      fillOpacity: 0.6,
+    }).addTo(map.value)
+  } else {
+    highlightMarker.setLatLng([lat, lng])
+  }
+}
+
+let routeHoverRAF = null
+let lastRouteHoverLatLng = null
+const findNearestStepIndex = (latlng) => {
+  if (!map.value || !routeStore.steps || routeStore.steps.length === 0) return null
+  let bestIdx = null
+  let bestDist = Number.POSITIVE_INFINITY
+  for (let i = 0; i < routeStore.steps.length; i += 1) {
+    const s = routeStore.steps[i]
+    if (!s || !Array.isArray(s.location)) continue
+    const [lng, lat] = s.location
+    if (typeof lat !== "number" || typeof lng !== "number") continue
+    const d = map.value.distance(latlng, L.latLng(lat, lng))
+    if (d < bestDist) {
+      bestDist = d
+      bestIdx = i
+    }
+  }
+  return bestIdx
+}
+
+const handleRouteMouseMove = (evt) => {
+  if (!evt?.latlng) return
+  lastRouteHoverLatLng = evt.latlng
+  if (routeHoverRAF) return
+  routeHoverRAF = requestAnimationFrame(() => {
+    routeHoverRAF = null
+    if (!lastRouteHoverLatLng) return
+    const idx = findNearestStepIndex(lastRouteHoverLatLng)
+    if (typeof idx === "number") {
+      routeStore.setHoveredStep(idx, "map")
+    }
+  })
+}
+
+const handleRouteMouseOut = () => {
+  lastRouteHoverLatLng = null
+  routeStore.clearHoveredStep("map")
 }
 
 onMounted(() => {
@@ -146,6 +247,7 @@ onMounted(() => {
   themeObserver = new MutationObserver(() => {
     theme.value = document.body.getAttribute("data-theme") || "dark"
     applyBaseLayer()
+    updateHoverVisuals()
   })
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] })
 
@@ -251,12 +353,20 @@ onMounted(() => {
     (geojson) => {
       if (!geojson || !map.value || !geojson.geometry) return
       if (routeLayer) map.value.removeLayer(routeLayer)
-      routeLayer = L.geoJSON(geojson.geometry, {
-        style: { color: "#228BE6", weight: 6, opacity: 0.9 },
-      }).addTo(map.value)
+      routeLayer = L.geoJSON(geojson.geometry, { style: getRouteBaseStyle() }).addTo(map.value)
+      routeLayer.on("mousemove", handleRouteMouseMove)
+      routeLayer.on("mouseout", handleRouteMouseOut)
       map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
+      updateHoverVisuals()
     },
     { deep: true }
+  )
+
+  watch(
+    () => routeStore.hoveredStepIndex,
+    () => {
+      updateHoverVisuals()
+    }
   )
 
   watch(

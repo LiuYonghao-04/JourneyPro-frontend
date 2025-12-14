@@ -39,6 +39,8 @@ export const useRouteStore = defineStore('route', {
     recommendedPOIs: [],
     isLoading: false,
     viaPoints: loadViaPoints(),
+    hoveredStepIndex: null,
+    hoveredStepSource: null,
   }),
 
   actions: {
@@ -125,6 +127,18 @@ export const useRouteStore = defineStore('route', {
         console.error('fetchRecommendedPois error:', err)
       } finally {
         this.isLoading = false
+      }
+    },
+
+    setHoveredStep(index, source = null) {
+      this.hoveredStepIndex = typeof index === 'number' ? index : null
+      this.hoveredStepSource = source
+    },
+
+    clearHoveredStep(source = null) {
+      if (!source || this.hoveredStepSource === source) {
+        this.hoveredStepIndex = null
+        this.hoveredStepSource = null
       }
     },
   },
