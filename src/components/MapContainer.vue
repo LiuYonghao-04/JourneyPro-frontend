@@ -22,6 +22,7 @@ const routeStore = useRouteStore()
 let startMarker = null
 let endMarker = null
 let poiLayer = null
+let viaMarkerLayer = null
 let routeLayer = null
 let baseLayer = null
 let highlightMarker = null
@@ -51,7 +52,13 @@ const buildWaypointList = () => [
 let routeCoords = []
 let routeCoordsVersion = 0
 const stepRouteIdxCache = new Map()
+let stepRouteIndices = []
+let stepRouteIndicesMonotonic = true
 let lastCenteredStepIndex = null
+let routeAbortController = null
+let routeRequestSeq = 0
+let routeFetchTimer = null
+let autoFitEnabled = true
 
 function createColoredMarker(color, position, onDrag) {
   const markerHtml = `<div style="background-color:${color};
@@ -70,6 +77,40 @@ function createColoredMarker(color, position, onDrag) {
 
   if (onDrag) marker.on("dragend", onDrag)
   return marker
+}
+
+const createWaypointIcon = (label) =>
+  L.divIcon({
+    className: "jp-waypoint-icon",
+    html: `<div class="jp-waypoint-badge">${label}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  })
+
+const updateViaMarkers = () => {
+  if (!map.value || !viaMarkerLayer) return
+  viaMarkerLayer.clearLayers()
+  const list = routeStore.viaPoints || []
+  list.forEach((poi, idx) => {
+    if (!poi || typeof poi.lat !== "number" || typeof poi.lng !== "number") return
+    const title = poi.name || `Waypoint ${idx + 1}`
+    const marker = L.marker([poi.lat, poi.lng], {
+      icon: createWaypointIcon(idx + 1),
+      title,
+      keyboard: false,
+    })
+    marker.bindTooltip(title, {
+      direction: "top",
+      offset: [0, -10],
+      opacity: 0.95,
+      className: "jp-map-tooltip",
+    })
+    marker.on("click", () => {
+      if (!map.value) return
+      map.value.setView([poi.lat, poi.lng], Math.max(map.value.getZoom(), 15), { animate: true })
+    })
+    viaMarkerLayer.addLayer(marker)
+  })
 }
 
 const applyBaseLayer = () => {
@@ -97,9 +138,21 @@ const fetchRoute = async () => {
   const waypoints = buildWaypointList()
   if (waypoints.length < 2) return
   const coordStr = waypoints.map((wp) => `${wp.lng},${wp.lat}`).join(";")
+  const seq = (routeRequestSeq += 1)
+  if (routeAbortController) {
+    try {
+      routeAbortController.abort()
+    } catch (e) {
+      // ignore
+    }
+  }
+  routeAbortController = new AbortController()
+  routeStore.isRouting = true
+  routeStore.routeError = null
   try {
     const res = await axios.get(
-      `/osrm/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`
+      `/osrm/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`,
+      { signal: routeAbortController.signal }
     )
     const routeData = res.data?.routes?.[0]
     if (!routeData) return
@@ -108,6 +161,17 @@ const fetchRoute = async () => {
     routeStore.totalDuration = (routeData.duration / 60).toFixed(1)
     routeStore.routeGeojson = { type: "Feature", geometry: routeData.geometry }
     const viaList = routeStore.viaPoints || []
+    routeStore.legs = (routeData.legs || []).map((leg, idx) => {
+      const from = idx === 0 ? "Start" : viaList[idx - 1]?.name || `Waypoint ${idx}`
+      const to = idx < viaList.length ? viaList[idx]?.name || `Waypoint ${idx + 1}` : "Destination"
+      return {
+        index: idx,
+        from,
+        to,
+        distance: (leg.distance / 1000).toFixed(2),
+        duration: Math.round(leg.duration / 60),
+      }
+    })
     const steps = []
     ;(routeData.legs || []).forEach((leg, legIndex) => {
       ;(leg.steps || []).forEach((s, stepIndex) => {
@@ -126,9 +190,11 @@ const fetchRoute = async () => {
           distance: (s.distance / 1000).toFixed(2),
           duration: Math.round(s.duration / 60),
           maneuverType: type,
+          modifier: maneuver.modifier || "",
           legIndex,
           stepIndex,
           location,
+          geometry: s.geometry || null,
         }
 
         if (type === "arrive") {
@@ -146,18 +212,33 @@ const fetchRoute = async () => {
     })
     routeStore.steps = steps
   } catch (e) {
+    if (e?.code === "ERR_CANCELED" || e?.name === "CanceledError") return
     console.warn("Route fetch failed", e)
+    routeStore.routeError = "Route request failed."
+  } finally {
+    if (seq === routeRequestSeq) {
+      routeStore.isRouting = false
+    }
   }
+}
+
+const scheduleFetchRoute = (delayMs = 120) => {
+  if (routeFetchTimer) clearTimeout(routeFetchTimer)
+  routeFetchTimer = setTimeout(() => {
+    routeFetchTimer = null
+    fetchRoute()
+  }, delayMs)
 }
 
 const setRouteCoordsFromGeometry = (geometry) => {
   const coords = []
   if (!geometry) {
     routeCoords = []
-    routeCoordsVersion += 1
-    stepRouteIdxCache.clear()
-    return
-  }
+  routeCoordsVersion += 1
+  stepRouteIdxCache.clear()
+  stepRouteIndices = []
+  return
+}
 
   if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
     coords.push(...geometry.coordinates)
@@ -172,6 +253,7 @@ const setRouteCoordsFromGeometry = (geometry) => {
     .map((c) => ({ lng: c[0], lat: c[1] }))
   routeCoordsVersion += 1
   stepRouteIdxCache.clear()
+  stepRouteIndices = []
 }
 
 const getNearestRouteIndexForStep = (idx) => {
@@ -198,6 +280,86 @@ const getNearestRouteIndexForStep = (idx) => {
   }
   stepRouteIdxCache.set(idx, { v: routeCoordsVersion, i: bestIdx })
   return bestIdx
+}
+
+const rebuildStepRouteIndices = () => {
+  if (!routeCoords || routeCoords.length === 0) {
+    stepRouteIndices = []
+    return
+  }
+  if (!routeStore.steps || routeStore.steps.length === 0) {
+    stepRouteIndices = []
+    return
+  }
+
+  const indices = []
+  for (let i = 0; i < routeStore.steps.length; i += 1) {
+    const ri = getNearestRouteIndexForStep(i)
+    if (typeof ri !== "number") {
+      stepRouteIndices = []
+      return
+    }
+    indices.push(ri)
+  }
+
+  let mono = true
+  for (let i = 1; i < indices.length; i += 1) {
+    if (indices[i] < indices[i - 1]) {
+      mono = false
+      break
+    }
+  }
+  stepRouteIndices = indices
+  stepRouteIndicesMonotonic = mono
+}
+
+const findNearestRouteIndex = (latlng) => {
+  if (!routeCoords || routeCoords.length === 0 || !latlng) return null
+  let bestIdx = 0
+  let best = Number.POSITIVE_INFINITY
+  for (let i = 0; i < routeCoords.length; i += 1) {
+    const p = routeCoords[i]
+    const dLat = p.lat - latlng.lat
+    const dLng = p.lng - latlng.lng
+    const d = dLat * dLat + dLng * dLng
+    if (d < best) {
+      best = d
+      bestIdx = i
+    }
+  }
+  return bestIdx
+}
+
+const findStepIndexByRouteIndex = (routeIdx) => {
+  if (!stepRouteIndices || stepRouteIndices.length === 0) return null
+  if (typeof routeIdx !== "number") return null
+
+  if (stepRouteIndicesMonotonic) {
+    let lo = 0
+    let hi = stepRouteIndices.length - 1
+    let best = 0
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (stepRouteIndices[mid] <= routeIdx) {
+        best = mid
+        lo = mid + 1
+      } else {
+        hi = mid - 1
+      }
+    }
+    return best
+  }
+
+  let best = 0
+  let bestDiff = Number.POSITIVE_INFINITY
+  for (let i = 0; i < stepRouteIndices.length; i += 1) {
+    const diff = Math.abs(stepRouteIndices[i] - routeIdx)
+    if (diff < bestDiff) {
+      bestDiff = diff
+      best = i
+    }
+  }
+  return best
 }
 
 const getStepSegmentLatLngs = (idx) => {
@@ -331,7 +493,11 @@ const handleRouteMouseMove = (evt) => {
   routeHoverRAF = requestAnimationFrame(() => {
     routeHoverRAF = null
     if (!lastRouteHoverLatLng) return
-    const idx = findNearestStepIndex(lastRouteHoverLatLng)
+    const routeIdx = findNearestRouteIndex(lastRouteHoverLatLng)
+    const idx =
+      typeof routeIdx === "number"
+        ? findStepIndexByRouteIndex(routeIdx)
+        : findNearestStepIndex(lastRouteHoverLatLng)
     if (typeof idx === "number") {
       routeStore.setHoveredStep(idx, "map")
     }
@@ -348,6 +514,13 @@ onMounted(() => {
     [routeStore.startLat, routeStore.startLng],
     13
   )
+
+  map.value.on("dragstart", (e) => {
+    if (e?.originalEvent) autoFitEnabled = false
+  })
+  map.value.on("zoomstart", (e) => {
+    if (e?.originalEvent) autoFitEnabled = false
+  })
 
   const initialCfg = theme.value === "dark" ? BASE_LAYER_CONFIG.dark : BASE_LAYER_CONFIG.light
   baseLayer = L.tileLayer(initialCfg.url, {
@@ -380,7 +553,6 @@ onMounted(() => {
     routeStore.setStart(pos.lat, pos.lng)
     const addr = await reverseGeocode(pos.lat, pos.lng)
     routeStore.startAddress = addr
-    fetchRoute()
   })
 
   endMarker = createColoredMarker("red", [routeStore.endLat, routeStore.endLng], async () => {
@@ -388,20 +560,35 @@ onMounted(() => {
     routeStore.setEnd(pos.lat, pos.lng)
     const addr = await reverseGeocode(pos.lat, pos.lng)
     routeStore.endAddress = addr
-    fetchRoute()
+  })
+
+  startMarker.bindTooltip("Start", {
+    direction: "top",
+    offset: [0, -10],
+    opacity: 0.95,
+    className: "jp-map-tooltip",
+  })
+  endMarker.bindTooltip("End", {
+    direction: "top",
+    offset: [0, -10],
+    opacity: 0.95,
+    className: "jp-map-tooltip",
   })
 
   startMarker.addTo(map.value)
   endMarker.addTo(map.value)
 
-  fetchRoute()
+  viaMarkerLayer = L.layerGroup().addTo(map.value)
+  updateViaMarkers()
+
+  scheduleFetchRoute(0)
 
   watch(
     () => [routeStore.startLat, routeStore.startLng, routeStore.endLat, routeStore.endLng],
     async () => {
       startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
       endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
-      fetchRoute()
+      scheduleFetchRoute()
       await routeStore.fetchRecommendedPois()
     }
   )
@@ -409,7 +596,8 @@ onMounted(() => {
   watch(
     () => routeStore.viaPoints.map((poi) => `${poi.lat},${poi.lng}`),
     () => {
-      fetchRoute()
+      updateViaMarkers()
+      scheduleFetchRoute()
     },
     { deep: true }
   )
@@ -470,15 +658,47 @@ onMounted(() => {
       routeLayer.on("mousemove", handleRouteMouseMove)
       routeLayer.on("mouseout", handleRouteMouseOut)
       setRouteCoordsFromGeometry(geojson.geometry)
-      map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
+      rebuildStepRouteIndices()
+      if (autoFitEnabled) {
+        map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
+      }
       updateHoverVisuals()
     },
     { deep: true }
   )
 
   watch(
+    () => routeStore.steps,
+    () => {
+      rebuildStepRouteIndices()
+    }
+  )
+
+  watch(
     () => [routeStore.hoveredStepIndex, routeStore.hoveredStepSource],
     () => updateHoverVisuals()
+  )
+
+  watch(
+    () => routeStore.fitRouteNonce,
+    () => {
+      if (!map.value || !routeLayer) return
+      try {
+        map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30], animate: true })
+      } catch (e) {
+        // ignore
+      }
+    }
+  )
+
+  watch(
+    () => routeStore.focusPointNonce,
+    () => {
+      if (!map.value || !routeStore.focusPoint) return
+      const { lat, lng, zoom } = routeStore.focusPoint
+      if (typeof lat !== "number" || typeof lng !== "number") return
+      map.value.setView([lat, lng], zoom || map.value.getZoom(), { animate: true })
+    }
   )
 
   watch(
@@ -506,6 +726,14 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
+  if (routeFetchTimer) clearTimeout(routeFetchTimer)
+  if (routeAbortController) {
+    try {
+      routeAbortController.abort()
+    } catch (e) {
+      // ignore
+    }
+  }
 })
 </script>
 
@@ -518,5 +746,58 @@ onBeforeUnmount(() => {
   height: 100%;
   width: 100%;
   overflow: hidden;
+}
+
+:global(.jp-waypoint-icon) {
+  background: transparent;
+  border: none;
+}
+:global(.jp-waypoint-badge) {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25);
+}
+:global(body[data-theme='dark'] .jp-waypoint-badge) {
+  background: #0f1624;
+  color: #e5e7eb;
+  border: 1px solid rgba(96, 165, 250, 0.85);
+}
+:global(body[data-theme='light'] .jp-waypoint-badge) {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(37, 99, 235, 0.85);
+}
+
+:global(.jp-map-tooltip.leaflet-tooltip) {
+  background: var(--map-overlay-bg);
+  color: var(--map-overlay-fg);
+  border: 1px solid var(--map-overlay-border);
+  border-radius: 10px;
+  padding: 4px 8px;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.28);
+}
+:global(.jp-map-tooltip.leaflet-tooltip::before) {
+  border-top-color: var(--map-overlay-bg);
+}
+
+:global(body[data-theme='dark'] .leaflet-popup-content-wrapper),
+:global(body[data-theme='dark'] .leaflet-popup-tip) {
+  background: rgba(15, 22, 36, 0.95);
+  color: #e5e7eb;
+  border: 1px solid #243047;
+}
+:global(body[data-theme='light'] .leaflet-popup-content-wrapper),
+:global(body[data-theme='light'] .leaflet-popup-tip) {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
+}
+:global(.leaflet-popup-content-wrapper) {
+  border-radius: 14px;
 }
 </style>

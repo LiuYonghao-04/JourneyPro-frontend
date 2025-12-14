@@ -36,11 +36,17 @@ export const useRouteStore = defineStore('route', {
     steps: [],
     totalDistance: null,
     totalDuration: null,
+    legs: [],
     recommendedPOIs: [],
     isLoading: false,
+    isRouting: false,
+    routeError: null,
     viaPoints: loadViaPoints(),
     hoveredStepIndex: null,
     hoveredStepSource: null,
+    fitRouteNonce: 0,
+    focusPoint: null,
+    focusPointNonce: 0,
   }),
 
   actions: {
@@ -140,6 +146,16 @@ export const useRouteStore = defineStore('route', {
         this.hoveredStepIndex = null
         this.hoveredStepSource = null
       }
+    },
+
+    requestFitRoute() {
+      this.fitRouteNonce += 1
+    },
+
+    requestFocusPoint(lat, lng, zoom = 15) {
+      if (typeof lat !== 'number' || typeof lng !== 'number') return
+      this.focusPoint = { lat, lng, zoom }
+      this.focusPointNonce += 1
     },
   },
 })

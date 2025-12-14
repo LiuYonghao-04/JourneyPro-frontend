@@ -116,6 +116,11 @@ const clearAllViaPoints = () => {
   routeStore.clearViaPoints()
 }
 
+const focusViaPoint = (poi) => {
+  if (!poi || typeof poi.lat !== "number" || typeof poi.lng !== "number") return
+  routeStore.requestFocusPoint(poi.lat, poi.lng, 16)
+}
+
 const dragIndex = ref(null)
 const persistViaPoints = (list) => {
   try {
@@ -216,6 +221,7 @@ const clearEnd = () => {
           <el-tag
             type="success"
             closable
+            @click="focusViaPoint(poi)"
             @close="removeViaPoint(poi)"
           >
             {{ poi.name || `${poi.lat.toFixed(3)}, ${poi.lng.toFixed(3)}` }}

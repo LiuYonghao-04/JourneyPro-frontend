@@ -6,13 +6,15 @@
     </div>
 
     <div v-if="!collapsed">
-      <div v-if="pois.length === 0" class="empty">
+      <div v-if="loading" class="empty">Loading recommendations...</div>
+
+      <div v-else-if="pois.length === 0" class="empty">
         No recommendations yet. Plan a route first.
       </div>
 
       <ul v-else class="poi-list">
         <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
-          <div class="poi-info">
+          <div class="poi-info" @click="focusPoi(poi)">
             <div class="poi-name">{{ poi.name }}</div>
             <div class="poi-meta">
               <span>{{ poi.category }}</span>
@@ -55,6 +57,7 @@ onBeforeUnmount(() => {
 })
 
 const pois = computed(() => routeStore.recommendedPOIs || [])
+const loading = computed(() => routeStore.isLoading)
 const isViaPoint = (poi) => {
   return (routeStore.viaPoints || []).some((p) =>
     poi.id ? p.id === poi.id : p.lat === poi.lat && p.lng === poi.lng
@@ -67,6 +70,11 @@ const togglePoi = async (poi) => {
   } else {
     await routeStore.addViaPoint(poi)
   }
+}
+
+const focusPoi = (poi) => {
+  if (!poi || typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+  routeStore.requestFocusPoint(poi.lat, poi.lng, 16)
 }
 
 const toggle = () => {
@@ -135,6 +143,13 @@ const toggle = () => {
 .poi-info {
   flex: 1;
   margin-right: 8px;
+  cursor: pointer;
+}
+.poi-item:hover .poi-info {
+  opacity: 0.95;
+}
+.poi-item:hover .poi-name {
+  text-decoration: underline;
 }
 .poi-name {
   font-size: 15px;

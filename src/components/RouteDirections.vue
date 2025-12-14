@@ -4,7 +4,18 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue"
 import { useRouteStore } from "../store/routeStore"
 
 const routeStore = useRouteStore()
-const { totalDistance, totalDuration, steps, startAddress, endAddress, hoveredStepIndex, hoveredStepSource } = storeToRefs(routeStore)
+const {
+  totalDistance,
+  totalDuration,
+  steps,
+  legs,
+  startAddress,
+  endAddress,
+  hoveredStepIndex,
+  hoveredStepSource,
+  isRouting,
+  routeError,
+} = storeToRefs(routeStore)
 const collapsed = ref(false)
 const hasRoute = computed(() => steps.value && steps.value.length > 0)
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
@@ -22,12 +33,51 @@ onBeforeUnmount(() => {
 const toggle = () => {
   collapsed.value = !collapsed.value
 }
+const fitRoute = () => {
+  routeStore.requestFitRoute()
+}
 
 const onStepEnter = (idx) => {
   routeStore.setHoveredStep(idx, "list")
 }
 const onStepLeave = () => {
   routeStore.clearHoveredStep("list")
+}
+
+const legMetaByIndex = computed(() => {
+  const map = new Map()
+  ;(legs.value || []).forEach((l) => map.set(l.index, l))
+  return map
+})
+const isLegStart = (idx) => {
+  if (!steps.value || idx < 0 || idx >= steps.value.length) return false
+  if (idx === 0) return true
+  return steps.value[idx].legIndex !== steps.value[idx - 1].legIndex
+}
+const legLabel = (legIndex) => {
+  const meta = legMetaByIndex.value.get(legIndex)
+  if (!meta) return `Leg ${legIndex + 1}`
+  return `${meta.from} -> ${meta.to}`
+}
+const legSummary = (legIndex) => {
+  const meta = legMetaByIndex.value.get(legIndex)
+  if (!meta) return ""
+  return `${meta.distance} km | ${meta.duration} min`
+}
+
+const maneuverIconHtml = (s) => {
+  const type = (s?.maneuverType || "").toString().toLowerCase()
+  const modifier = (s?.modifier || "").toString().toLowerCase()
+
+  if (type === "depart") return "&#9654;"
+  if (type === "arrive") return "&#9679;"
+  if (type === "roundabout") return "&#8635;"
+  if (type === "uturn") return "&#8634;"
+
+  if (modifier.includes("left")) return "&#8592;"
+  if (modifier.includes("right")) return "&#8594;"
+  if (modifier.includes("straight")) return "&#8593;"
+  return "&#8593;"
 }
 
 let scrollTimer = null
@@ -60,39 +110,60 @@ watch(
       <div class="title">Directions</div>
       <div class="meta">{{ startAddress }} -> {{ endAddress }}</div>
       <div class="summary">
-        <span>{{ totalDistance ? totalDistance + ' km' : 'N/A' }}</span>
-        <span>|</span>
-        <span>{{ totalDuration ? totalDuration + ' min' : 'N/A' }}</span>
+        <template v-if="routeError">
+          <span class="error">{{ routeError }}</span>
+        </template>
+        <template v-else>
+          <span>{{ totalDistance ? totalDistance + ' km' : 'N/A' }}</span>
+          <span>|</span>
+          <span>{{ totalDuration ? totalDuration + ' min' : 'N/A' }}</span>
+          <span v-if="isRouting" class="loading">Updating...</span>
+        </template>
       </div>
-      <button class="collapse-btn">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
+      <div class="actions" @click.stop>
+        <button class="action-btn" @click="fitRoute">Fit</button>
+        <button class="collapse-btn" @click="toggle">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
+      </div>
     </div>
 
     <div v-if="!collapsed">
       <div class="steps" v-if="hasRoute" ref="stepsEl">
-        <div
-          class="step"
-          v-for="(s, idx) in steps"
-          :key="idx"
-          :class="{
-            active: hoveredStepIndex === idx,
-            waypoint: s.arrivalKind === 'waypoint',
-            destination: s.arrivalKind === 'destination',
-          }"
-          :data-step-index="idx"
-          @mouseenter="onStepEnter(idx)"
-          @mouseleave="onStepLeave"
-        >
-          <div class="step-num">{{ idx + 1 }}</div>
-          <div class="step-body">
-            <div v-if="s.arrivalKind === 'waypoint'" class="badge">
-              Waypoint: {{ s.arrivalName }}
-            </div>
-            <div class="instruction">{{ s.instruction }}</div>
-            <div class="detail">
-              <span v-if="s.road">{{ s.road }} | </span>{{ s.distance }} km | {{ s.duration }} min
+        <template v-for="(s, idx) in steps" :key="idx">
+          <div v-if="isLegStart(idx)" class="leg-header">
+            <div class="leg-title">{{ legLabel(s.legIndex) }}</div>
+            <div class="leg-meta">{{ legSummary(s.legIndex) }}</div>
+          </div>
+
+          <div
+            class="step"
+            :class="{
+              active: hoveredStepIndex === idx,
+              waypoint: s.arrivalKind === 'waypoint',
+              destination: s.arrivalKind === 'destination',
+            }"
+            :data-step-index="idx"
+            @mouseenter="onStepEnter(idx)"
+            @mouseleave="onStepLeave"
+          >
+            <div class="step-num">{{ idx + 1 }}</div>
+            <div class="step-body">
+              <div v-if="s.arrivalKind === 'waypoint'" class="badge">
+                Waypoint: {{ s.arrivalName }}
+              </div>
+              <div v-else-if="s.arrivalKind === 'destination'" class="badge destination-badge">
+                Destination
+              </div>
+
+              <div class="instruction">
+                <span class="icon" v-html="maneuverIconHtml(s)"></span>
+                <span>{{ s.instruction }}</span>
+              </div>
+              <div class="detail">
+                <span v-if="s.road">{{ s.road }} | </span>{{ s.distance }} km | {{ s.duration }} min
+              </div>
             </div>
           </div>
-        </div>
+        </template>
       </div>
       <div class="empty" v-else>Route not ready yet.</div>
     </div>
@@ -142,8 +213,31 @@ watch(
   align-items: center;
   font-weight: 600;
 }
-.collapse-btn {
+.loading {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--muted);
+}
+.error {
+  font-weight: 800;
+  font-size: 12px;
+  color: #ef4444;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   justify-self: end;
+}
+.action-btn {
+  border: 1px solid var(--map-overlay-border);
+  background: var(--map-overlay-bg);
+  color: var(--map-overlay-fg);
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.collapse-btn {
   border: 1px solid var(--map-overlay-border);
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
@@ -158,8 +252,23 @@ watch(
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
-  max-height: calc(100vh - 100px);
+  max-height: calc(80vh - 100px);
   padding-right: 8px;
+}
+.leg-header {
+  padding: 6px 10px 0;
+  margin-top: 6px;
+}
+.leg-title {
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--map-overlay-fg);
+  opacity: 0.9;
+}
+.leg-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .step {
   display: grid;
@@ -192,6 +301,11 @@ watch(
   color: #16a34a;
   border: 1px solid rgba(34, 197, 94, 0.35);
 }
+.destination-badge {
+  background: rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
 .step-num {
   width: 28px;
   height: 28px;
@@ -205,6 +319,21 @@ watch(
 }
 .instruction {
   font-weight: 600;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.icon {
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--map-overlay-fg);
+  flex: 0 0 20px;
+  font-weight: 900;
+  line-height: 1;
 }
 .detail {
   color: var(--muted);
@@ -245,9 +374,23 @@ watch(
   color: #0f172a;
   border: 1px solid #dfe3ea;
 }
+.directions-panel.light .action-btn {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
+}
+.directions-panel.light .loading {
+  color: #4b5563;
+}
 .directions-panel.light .step {
   background: #ffffff;
   border: 1px solid #e5e7eb;
+}
+.directions-panel.light .leg-title {
+  color: #0f172a;
+}
+.directions-panel.light .leg-meta {
+  color: #4b5563;
 }
 .directions-panel.light .step.active {
   border-color: #f97316;
@@ -261,8 +404,17 @@ watch(
   color: #166534;
   border: 1px solid rgba(34, 197, 94, 0.3);
 }
+.directions-panel.light .destination-badge {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border: 1px solid rgba(29, 78, 216, 0.2);
+}
 .directions-panel.light .step-num {
   background: #eef2f7;
+  color: #0f172a;
+}
+.directions-panel.light .icon {
+  background: rgba(15, 23, 42, 0.06);
   color: #0f172a;
 }
 </style>
