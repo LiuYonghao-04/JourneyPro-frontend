@@ -28,6 +28,17 @@ const route = useRoute()
 
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
 let themeObserver = null
+let currentAttribution = null
+const BASE_LAYER_CONFIG = {
+  dark: {
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attribution: "(c) OpenStreetMap contributors | Carto",
+  },
+  light: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "(c) OpenStreetMap contributors",
+  },
+}
 
 const buildWaypointList = () => [
   L.latLng(routeStore.startLat, routeStore.startLng),
@@ -54,26 +65,24 @@ function createColoredMarker(color, position, onDrag) {
   return marker
 }
 
-const createBaseLayer = () => {
-  if (theme.value === "dark") {
-    return L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 19,
-      attribution: "(c) OpenStreetMap contributors | Carto",
-    })
-  }
-  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "(c) OpenStreetMap contributors",
-  })
-}
-
 const applyBaseLayer = () => {
-  if (!map.value) return
-  if (baseLayer) {
-    map.value.removeLayer(baseLayer)
+  if (!map.value || !baseLayer || !map.value._loaded) return
+  const cfg = theme.value === "dark" ? BASE_LAYER_CONFIG.dark : BASE_LAYER_CONFIG.light
+  if (baseLayer._url !== cfg.url) {
+    const attributionControl = map.value.attributionControl
+    if (attributionControl && currentAttribution) {
+      attributionControl.removeAttribution(currentAttribution)
+    }
+    baseLayer.setUrl(cfg.url)
+    baseLayer.options.attribution = cfg.attribution
+    currentAttribution = cfg.attribution
+    if (attributionControl) {
+      attributionControl.addAttribution(currentAttribution)
+    }
   }
-  baseLayer = createBaseLayer()
-  baseLayer.addTo(map.value)
+  // Prevent tile/overlay drift after any layout changes.
+  requestAnimationFrame(() => map.value && map.value.invalidateSize(false))
+  setTimeout(() => map.value && map.value.invalidateSize(false), 120)
 }
 
 const fetchRoute = async () => {
@@ -126,7 +135,13 @@ onMounted(() => {
     13
   )
 
-  applyBaseLayer()
+  const initialCfg = theme.value === "dark" ? BASE_LAYER_CONFIG.dark : BASE_LAYER_CONFIG.light
+  baseLayer = L.tileLayer(initialCfg.url, {
+    maxZoom: 19,
+    attribution: initialCfg.attribution,
+  })
+  currentAttribution = initialCfg.attribution
+  baseLayer.addTo(map.value)
 
   themeObserver = new MutationObserver(() => {
     theme.value = document.body.getAttribute("data-theme") || "dark"
