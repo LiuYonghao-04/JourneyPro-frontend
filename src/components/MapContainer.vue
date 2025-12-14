@@ -25,6 +25,7 @@ let poiLayer = null
 let routeLayer = null
 let baseLayer = null
 let highlightMarker = null
+let highlightSegmentLayer = null
 const route = useRoute()
 
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
@@ -46,6 +47,11 @@ const buildWaypointList = () => [
   ...(routeStore.viaPoints || []).map((poi) => L.latLng(poi.lat, poi.lng)),
   L.latLng(routeStore.endLat, routeStore.endLng),
 ]
+
+let routeCoords = []
+let routeCoordsVersion = 0
+const stepRouteIdxCache = new Map()
+let lastCenteredStepIndex = null
 
 function createColoredMarker(color, position, onDrag) {
   const markerHtml = `<div style="background-color:${color};
@@ -144,6 +150,92 @@ const fetchRoute = async () => {
   }
 }
 
+const setRouteCoordsFromGeometry = (geometry) => {
+  const coords = []
+  if (!geometry) {
+    routeCoords = []
+    routeCoordsVersion += 1
+    stepRouteIdxCache.clear()
+    return
+  }
+
+  if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
+    coords.push(...geometry.coordinates)
+  } else if (geometry.type === "MultiLineString" && Array.isArray(geometry.coordinates)) {
+    geometry.coordinates.forEach((line) => {
+      if (Array.isArray(line)) coords.push(...line)
+    })
+  }
+
+  routeCoords = coords
+    .filter((c) => Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number")
+    .map((c) => ({ lng: c[0], lat: c[1] }))
+  routeCoordsVersion += 1
+  stepRouteIdxCache.clear()
+}
+
+const getNearestRouteIndexForStep = (idx) => {
+  if (!routeCoords || routeCoords.length === 0) return null
+  const step = routeStore.steps?.[idx]
+  if (!step || !Array.isArray(step.location)) return null
+  const [lng, lat] = step.location
+  if (typeof lat !== "number" || typeof lng !== "number") return null
+
+  const cached = stepRouteIdxCache.get(idx)
+  if (cached && cached.v === routeCoordsVersion) return cached.i
+
+  let bestIdx = 0
+  let best = Number.POSITIVE_INFINITY
+  for (let i = 0; i < routeCoords.length; i += 1) {
+    const p = routeCoords[i]
+    const dLat = p.lat - lat
+    const dLng = p.lng - lng
+    const d = dLat * dLat + dLng * dLng
+    if (d < best) {
+      best = d
+      bestIdx = i
+    }
+  }
+  stepRouteIdxCache.set(idx, { v: routeCoordsVersion, i: bestIdx })
+  return bestIdx
+}
+
+const getStepSegmentLatLngs = (idx) => {
+  const step = routeStore.steps?.[idx]
+  if (!step) return null
+
+  // Prefer per-step geometry if OSRM provides it.
+  if (step.geometry && step.geometry.type === "LineString" && Array.isArray(step.geometry.coordinates)) {
+    const seg = step.geometry.coordinates
+      .filter((c) => Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number")
+      .map((c) => [c[1], c[0]])
+    if (seg.length >= 2) return seg
+  }
+
+  const nextIdx = idx + 1 < (routeStore.steps?.length || 0) ? idx + 1 : null
+  const prevIdx = idx - 1 >= 0 ? idx - 1 : null
+
+  const startRouteIdx = getNearestRouteIndexForStep(idx)
+  const endRouteIdx = nextIdx !== null ? getNearestRouteIndexForStep(nextIdx) : null
+
+  if (startRouteIdx !== null && endRouteIdx !== null && endRouteIdx >= startRouteIdx) {
+    const seg = routeCoords.slice(startRouteIdx, endRouteIdx + 1).map((p) => [p.lat, p.lng])
+    if (seg.length >= 2) return seg
+  }
+
+  // Fallback to a small line between maneuver locations.
+  const a = step.location
+  const bStep = nextIdx !== null ? routeStore.steps?.[nextIdx] : prevIdx !== null ? routeStore.steps?.[prevIdx] : null
+  const b = bStep?.location
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return [
+      [a[1], a[0]],
+      [b[1], b[0]],
+    ]
+  }
+  return null
+}
+
 const getRouteBaseStyle = () => ({
   color: theme.value === "dark" ? "#3b82f6" : "#2563eb",
   weight: 6,
@@ -155,28 +247,44 @@ const getRouteHighlightStyle = () => ({
   color: "#f97316",
   weight: 7,
   opacity: 0.95,
-  interactive: true,
+  interactive: false,
 })
 
 const updateHoverVisuals = () => {
   if (!map.value) return
   const idx = routeStore.hoveredStepIndex
 
-  if (routeLayer) {
-    routeLayer.setStyle(idx === null ? getRouteBaseStyle() : getRouteHighlightStyle())
-  }
+  if (routeLayer) routeLayer.setStyle(getRouteBaseStyle())
 
   if (idx === null || idx === undefined) {
     if (highlightMarker) {
       map.value.removeLayer(highlightMarker)
       highlightMarker = null
     }
+    if (highlightSegmentLayer) {
+      map.value.removeLayer(highlightSegmentLayer)
+      highlightSegmentLayer = null
+    }
+    lastCenteredStepIndex = null
     return
   }
   const step = routeStore.steps?.[idx]
   if (!step || !Array.isArray(step.location)) return
   const [lng, lat] = step.location
   if (typeof lat !== "number" || typeof lng !== "number") return
+
+  const seg = getStepSegmentLatLngs(idx)
+  if (seg && seg.length >= 2) {
+    if (!highlightSegmentLayer) {
+      highlightSegmentLayer = L.polyline(seg, getRouteHighlightStyle()).addTo(map.value)
+    } else {
+      highlightSegmentLayer.setLatLngs(seg)
+      highlightSegmentLayer.setStyle(getRouteHighlightStyle())
+    }
+  } else if (highlightSegmentLayer) {
+    map.value.removeLayer(highlightSegmentLayer)
+    highlightSegmentLayer = null
+  }
 
   if (!highlightMarker) {
     highlightMarker = L.circleMarker([lat, lng], {
@@ -188,6 +296,11 @@ const updateHoverVisuals = () => {
     }).addTo(map.value)
   } else {
     highlightMarker.setLatLng([lat, lng])
+  }
+
+  if (routeStore.hoveredStepSource === "list" && lastCenteredStepIndex !== idx) {
+    lastCenteredStepIndex = idx
+    map.value.panTo([lat, lng], { animate: true, duration: 0.35 })
   }
 }
 
@@ -356,6 +469,7 @@ onMounted(() => {
       routeLayer = L.geoJSON(geojson.geometry, { style: getRouteBaseStyle() }).addTo(map.value)
       routeLayer.on("mousemove", handleRouteMouseMove)
       routeLayer.on("mouseout", handleRouteMouseOut)
+      setRouteCoordsFromGeometry(geojson.geometry)
       map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
       updateHoverVisuals()
     },
@@ -363,10 +477,8 @@ onMounted(() => {
   )
 
   watch(
-    () => routeStore.hoveredStepIndex,
-    () => {
-      updateHoverVisuals()
-    }
+    () => [routeStore.hoveredStepIndex, routeStore.hoveredStepSource],
+    () => updateHoverVisuals()
   )
 
   watch(

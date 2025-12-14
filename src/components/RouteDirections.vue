@@ -1,13 +1,14 @@
 <script setup>
 import { storeToRefs } from "pinia"
-import { ref, computed, onMounted, onBeforeUnmount } from "vue"
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue"
 import { useRouteStore } from "../store/routeStore"
 
 const routeStore = useRouteStore()
-const { totalDistance, totalDuration, steps, startAddress, endAddress, hoveredStepIndex } = storeToRefs(routeStore)
+const { totalDistance, totalDuration, steps, startAddress, endAddress, hoveredStepIndex, hoveredStepSource } = storeToRefs(routeStore)
 const collapsed = ref(false)
 const hasRoute = computed(() => steps.value && steps.value.length > 0)
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
+const stepsEl = ref(null)
 let themeObserver = null
 onMounted(() => {
   themeObserver = new MutationObserver(() => {
@@ -28,6 +29,29 @@ const onStepEnter = (idx) => {
 const onStepLeave = () => {
   routeStore.clearHoveredStep("list")
 }
+
+let scrollTimer = null
+const scrollToStep = async (idx) => {
+  if (!stepsEl.value) return
+  await nextTick()
+  const target = stepsEl.value.querySelector(`[data-step-index="${idx}"]`)
+  if (!target) return
+  const top = target.offsetTop - stepsEl.value.clientHeight / 2 + target.clientHeight / 2
+  stepsEl.value.scrollTo({ top: Math.max(0, top), behavior: "smooth" })
+}
+
+watch(
+  () => [hoveredStepIndex.value, hoveredStepSource.value, collapsed.value],
+  ([idx, source, isCollapsed]) => {
+    if (source !== "map") return
+    if (typeof idx !== "number") return
+    if (isCollapsed) collapsed.value = false
+    if (scrollTimer) clearTimeout(scrollTimer)
+    scrollTimer = setTimeout(() => {
+      scrollToStep(idx)
+    }, 120)
+  }
+)
 </script>
 
 <template>
@@ -44,7 +68,7 @@ const onStepLeave = () => {
     </div>
 
     <div v-if="!collapsed">
-      <div class="steps" v-if="hasRoute">
+      <div class="steps" v-if="hasRoute" ref="stepsEl">
         <div
           class="step"
           v-for="(s, idx) in steps"
@@ -54,6 +78,7 @@ const onStepLeave = () => {
             waypoint: s.arrivalKind === 'waypoint',
             destination: s.arrivalKind === 'destination',
           }"
+          :data-step-index="idx"
           @mouseenter="onStepEnter(idx)"
           @mouseleave="onStepLeave"
         >
