@@ -13,6 +13,9 @@ const {
   endAddress,
   hoveredStepIndex,
   hoveredStepSource,
+  pinnedStepIndex,
+  pinnedStepSource,
+  followRoute,
   isRouting,
   routeError,
 } = storeToRefs(routeStore)
@@ -37,11 +40,25 @@ const fitRoute = () => {
   routeStore.requestFitRoute()
 }
 
+const toggleFollow = () => {
+  followRoute.value = !followRoute.value
+  if (followRoute.value) routeStore.requestFitRoute()
+}
+
 const onStepEnter = (idx) => {
   routeStore.setHoveredStep(idx, "list")
 }
 const onStepLeave = () => {
   routeStore.clearHoveredStep("list")
+}
+
+const onStepClick = (idx) => {
+  routeStore.togglePinnedStep(idx, "list")
+  const step = steps.value?.[idx]
+  if (!step || !Array.isArray(step.location)) return
+  const [lng, lat] = step.location
+  if (typeof lat !== "number" || typeof lng !== "number") return
+  routeStore.requestFocusPoint(lat, lng, 16)
 }
 
 const legMetaByIndex = computed(() => {
@@ -95,11 +112,24 @@ watch(
   ([idx, source, isCollapsed]) => {
     if (source !== "map") return
     if (typeof idx !== "number") return
-    if (isCollapsed) collapsed.value = false
+    if (isCollapsed) return
     if (scrollTimer) clearTimeout(scrollTimer)
     scrollTimer = setTimeout(() => {
       scrollToStep(idx)
     }, 120)
+  }
+)
+
+watch(
+  () => [pinnedStepIndex.value, pinnedStepSource.value, collapsed.value],
+  ([idx, source, isCollapsed]) => {
+    if (source !== "map") return
+    if (typeof idx !== "number") return
+    if (isCollapsed) return
+    if (scrollTimer) clearTimeout(scrollTimer)
+    scrollTimer = setTimeout(() => {
+      scrollToStep(idx)
+    }, 80)
   }
 )
 </script>
@@ -108,6 +138,9 @@ watch(
   <div class="directions-panel" :class="[{ collapsed }, theme]">
     <div class="header" @click="toggle">
       <div class="title">Directions</div>
+      <button class="collapse-btn collapse-inline" @click.stop="toggle">
+        {{ collapsed ? 'Expand' : 'Collapse' }}
+      </button>
       <div class="meta">{{ startAddress }} -> {{ endAddress }}</div>
       <div class="summary">
         <template v-if="routeError">
@@ -122,7 +155,9 @@ watch(
       </div>
       <div class="actions" @click.stop>
         <button class="action-btn" @click="fitRoute">Fit</button>
-        <button class="collapse-btn" @click="toggle">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
+        <button class="action-btn follow-btn" :class="{ on: followRoute }" @click="toggleFollow">
+          {{ followRoute ? 'Auto-fit On' : 'Auto-fit Off' }}
+        </button>
       </div>
     </div>
 
@@ -138,12 +173,14 @@ watch(
             class="step"
             :class="{
               active: hoveredStepIndex === idx,
+              pinned: pinnedStepIndex === idx,
               waypoint: s.arrivalKind === 'waypoint',
               destination: s.arrivalKind === 'destination',
             }"
             :data-step-index="idx"
             @mouseenter="onStepEnter(idx)"
             @mouseleave="onStepLeave"
+            @click="onStepClick(idx)"
           >
             <div class="step-num">{{ idx + 1 }}</div>
             <div class="step-body">
@@ -202,6 +239,10 @@ watch(
   font-weight: 700;
   font-size: 16px;
 }
+.collapse-inline {
+  padding: 3px 10px;
+  font-size: 12px;
+}
 .meta {
   grid-column: 1 / span 2;
   color: var(--muted);
@@ -236,6 +277,11 @@ watch(
   border-radius: 10px;
   padding: 4px 10px;
   cursor: pointer;
+}
+.follow-btn.on {
+  background: var(--btn-primary);
+  border-color: transparent;
+  color: var(--btn-text);
 }
 .collapse-btn {
   border: 1px solid var(--map-overlay-border);
@@ -279,6 +325,11 @@ watch(
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);
   transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  cursor: pointer;
+}
+.step.pinned {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.16);
 }
 .step.active {
   border-color: #f97316;
@@ -310,7 +361,7 @@ watch(
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--map-overlay-bg);
+  background: rgba(96, 165, 250, 0.5);
   color: var(--map-overlay-fg);
   display: grid;
   place-items: center;
@@ -379,12 +430,21 @@ watch(
   color: #0f172a;
   border: 1px solid #dfe3ea;
 }
+.directions-panel.light .follow-btn.on {
+  background: var(--btn-primary);
+  border-color: transparent;
+  color: var(--btn-text);
+}
 .directions-panel.light .loading {
   color: #4b5563;
 }
 .directions-panel.light .step {
   background: #ffffff;
   border: 1px solid #e5e7eb;
+}
+.directions-panel.light .step.pinned {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.16);
 }
 .directions-panel.light .leg-title {
   color: #0f172a;

@@ -27,6 +27,8 @@ let routeLayer = null
 let baseLayer = null
 let highlightMarker = null
 let highlightSegmentLayer = null
+let pinnedMarker = null
+let pinnedSegmentLayer = null
 const route = useRoute()
 
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
@@ -58,7 +60,44 @@ let lastCenteredStepIndex = null
 let routeAbortController = null
 let routeRequestSeq = 0
 let routeFetchTimer = null
-let autoFitEnabled = true
+
+const refreshLayerPositions = (layer) => {
+  if (!layer) return
+
+  try {
+    if (typeof layer.getLatLng === "function" && typeof layer.setLatLng === "function") {
+      layer.setLatLng(layer.getLatLng())
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    if (typeof layer.redraw === "function") layer.redraw()
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    if (typeof layer.eachLayer === "function") {
+      layer.eachLayer((child) => refreshLayerPositions(child))
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+const refreshOverlayLayers = () => {
+  refreshLayerPositions(routeLayer)
+  refreshLayerPositions(startMarker)
+  refreshLayerPositions(endMarker)
+  refreshLayerPositions(viaMarkerLayer)
+  refreshLayerPositions(poiLayer)
+  refreshLayerPositions(highlightMarker)
+  refreshLayerPositions(highlightSegmentLayer)
+  refreshLayerPositions(pinnedMarker)
+  refreshLayerPositions(pinnedSegmentLayer)
+}
 
 function createColoredMarker(color, position, onDrag) {
   const markerHtml = `<div style="background-color:${color};
@@ -127,10 +166,27 @@ const applyBaseLayer = () => {
     if (attributionControl) {
       attributionControl.addAttribution(currentAttribution)
     }
+
+    baseLayer.once("load", () => {
+      if (!map.value) return
+      requestAnimationFrame(() => {
+        if (!map.value) return
+        map.value.invalidateSize(false)
+        refreshOverlayLayers()
+      })
+    })
   }
   // Prevent tile/overlay drift after any layout changes.
-  requestAnimationFrame(() => map.value && map.value.invalidateSize(false))
-  setTimeout(() => map.value && map.value.invalidateSize(false), 120)
+  requestAnimationFrame(() => {
+    if (!map.value) return
+    map.value.invalidateSize(false)
+    refreshOverlayLayers()
+  })
+  setTimeout(() => {
+    if (!map.value) return
+    map.value.invalidateSize(false)
+    refreshOverlayLayers()
+  }, 120)
 }
 
 const fetchRoute = async () => {
@@ -210,6 +266,8 @@ const fetchRoute = async () => {
         steps.push(item)
       })
     })
+    routeStore.clearHoveredStep()
+    routeStore.clearPinnedStep()
     routeStore.steps = steps
   } catch (e) {
     if (e?.code === "ERR_CANCELED" || e?.name === "CanceledError") return
@@ -234,11 +292,11 @@ const setRouteCoordsFromGeometry = (geometry) => {
   const coords = []
   if (!geometry) {
     routeCoords = []
-  routeCoordsVersion += 1
-  stepRouteIdxCache.clear()
-  stepRouteIndices = []
-  return
-}
+    routeCoordsVersion += 1
+    stepRouteIdxCache.clear()
+    stepRouteIndices = []
+    return
+  }
 
   if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
     coords.push(...geometry.coordinates)
@@ -412,6 +470,13 @@ const getRouteHighlightStyle = () => ({
   interactive: false,
 })
 
+const getRoutePinnedStyle = () => ({
+  color: "#a855f7",
+  weight: 7,
+  opacity: 0.85,
+  interactive: false,
+})
+
 const updateHoverVisuals = () => {
   if (!map.value) return
   const idx = routeStore.hoveredStepIndex
@@ -455,6 +520,7 @@ const updateHoverVisuals = () => {
       weight: 3,
       fillColor: "#f97316",
       fillOpacity: 0.6,
+      interactive: false,
     }).addTo(map.value)
   } else {
     highlightMarker.setLatLng([lat, lng])
@@ -463,6 +529,54 @@ const updateHoverVisuals = () => {
   if (routeStore.hoveredStepSource === "list" && lastCenteredStepIndex !== idx) {
     lastCenteredStepIndex = idx
     map.value.panTo([lat, lng], { animate: true, duration: 0.35 })
+  }
+}
+
+const updatePinnedVisuals = () => {
+  if (!map.value) return
+  const idx = routeStore.pinnedStepIndex
+
+  if (idx === null || idx === undefined) {
+    if (pinnedMarker) {
+      map.value.removeLayer(pinnedMarker)
+      pinnedMarker = null
+    }
+    if (pinnedSegmentLayer) {
+      map.value.removeLayer(pinnedSegmentLayer)
+      pinnedSegmentLayer = null
+    }
+    return
+  }
+
+  const step = routeStore.steps?.[idx]
+  if (!step || !Array.isArray(step.location)) return
+  const [lng, lat] = step.location
+  if (typeof lat !== "number" || typeof lng !== "number") return
+
+  const seg = getStepSegmentLatLngs(idx)
+  if (seg && seg.length >= 2) {
+    if (!pinnedSegmentLayer) {
+      pinnedSegmentLayer = L.polyline(seg, getRoutePinnedStyle()).addTo(map.value)
+    } else {
+      pinnedSegmentLayer.setLatLngs(seg)
+      pinnedSegmentLayer.setStyle(getRoutePinnedStyle())
+    }
+  } else if (pinnedSegmentLayer) {
+    map.value.removeLayer(pinnedSegmentLayer)
+    pinnedSegmentLayer = null
+  }
+
+  if (!pinnedMarker) {
+    pinnedMarker = L.circleMarker([lat, lng], {
+      radius: 6,
+      color: "#a855f7",
+      weight: 3,
+      fillColor: "#a855f7",
+      fillOpacity: 0.45,
+      interactive: false,
+    }).addTo(map.value)
+  } else {
+    pinnedMarker.setLatLng([lat, lng])
   }
 }
 
@@ -509,6 +623,18 @@ const handleRouteMouseOut = () => {
   routeStore.clearHoveredStep("map")
 }
 
+const handleRouteClick = (evt) => {
+  if (!evt?.latlng) return
+  const routeIdx = findNearestRouteIndex(evt.latlng)
+  const idx =
+    typeof routeIdx === "number"
+      ? findStepIndexByRouteIndex(routeIdx)
+      : findNearestStepIndex(evt.latlng)
+  if (typeof idx === "number") {
+    routeStore.togglePinnedStep(idx, "map")
+  }
+}
+
 onMounted(() => {
   map.value = L.map("map", { zoomControl: false }).setView(
     [routeStore.startLat, routeStore.startLng],
@@ -516,10 +642,16 @@ onMounted(() => {
   )
 
   map.value.on("dragstart", (e) => {
-    if (e?.originalEvent) autoFitEnabled = false
+    if (e?.originalEvent) routeStore.followRoute = false
   })
   map.value.on("zoomstart", (e) => {
-    if (e?.originalEvent) autoFitEnabled = false
+    if (e?.originalEvent) routeStore.followRoute = false
+  })
+  map.value.on("zoomend", () => {
+    refreshOverlayLayers()
+  })
+  map.value.on("resize", () => {
+    refreshOverlayLayers()
   })
 
   const initialCfg = theme.value === "dark" ? BASE_LAYER_CONFIG.dark : BASE_LAYER_CONFIG.light
@@ -534,6 +666,7 @@ onMounted(() => {
     theme.value = document.body.getAttribute("data-theme") || "dark"
     applyBaseLayer()
     updateHoverVisuals()
+    updatePinnedVisuals()
   })
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] })
 
@@ -657,12 +790,15 @@ onMounted(() => {
       routeLayer = L.geoJSON(geojson.geometry, { style: getRouteBaseStyle() }).addTo(map.value)
       routeLayer.on("mousemove", handleRouteMouseMove)
       routeLayer.on("mouseout", handleRouteMouseOut)
+      routeLayer.on("click", handleRouteClick)
       setRouteCoordsFromGeometry(geojson.geometry)
       rebuildStepRouteIndices()
-      if (autoFitEnabled) {
+      if (routeStore.followRoute) {
         map.value.fitBounds(routeLayer.getBounds(), { padding: [30, 30] })
       }
       updateHoverVisuals()
+      updatePinnedVisuals()
+      refreshOverlayLayers()
     },
     { deep: true }
   )
@@ -677,6 +813,11 @@ onMounted(() => {
   watch(
     () => [routeStore.hoveredStepIndex, routeStore.hoveredStepSource],
     () => updateHoverVisuals()
+  )
+
+  watch(
+    () => [routeStore.pinnedStepIndex, routeStore.pinnedStepSource],
+    () => updatePinnedVisuals()
   )
 
   watch(

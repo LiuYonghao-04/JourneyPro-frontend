@@ -13,7 +13,7 @@ const viaPoints = computed(() => routeStore.viaPoints || [])
 const locating = ref(false)
 const panelCollapsed = ref(false)
 
-const MAPBOX_TOKEN = '11111.ex'
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGVucnkwNCIsImEiOiJjbWo1Z3RtaHIxa2tiM2xzZjc3ZXAzNzFzIn0.fhmWGo_w7RVrrmDmGQJXog'
 const VIA_STORAGE_KEY = 'jp_via_points'
 
 let fetchTimer = null

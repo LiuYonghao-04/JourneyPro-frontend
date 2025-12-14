@@ -42,8 +42,11 @@ export const useRouteStore = defineStore('route', {
     isRouting: false,
     routeError: null,
     viaPoints: loadViaPoints(),
+    followRoute: true,
     hoveredStepIndex: null,
     hoveredStepSource: null,
+    pinnedStepIndex: null,
+    pinnedStepSource: null,
     fitRouteNonce: 0,
     focusPoint: null,
     focusPointNonce: 0,
@@ -145,6 +148,27 @@ export const useRouteStore = defineStore('route', {
       if (!source || this.hoveredStepSource === source) {
         this.hoveredStepIndex = null
         this.hoveredStepSource = null
+      }
+    },
+
+    setPinnedStep(index, source = null) {
+      this.pinnedStepIndex = typeof index === 'number' ? index : null
+      this.pinnedStepSource = source
+    },
+
+    clearPinnedStep(source = null) {
+      if (!source || this.pinnedStepSource === source) {
+        this.pinnedStepIndex = null
+        this.pinnedStepSource = null
+      }
+    },
+
+    togglePinnedStep(index, source = null) {
+      if (typeof index !== 'number') return
+      if (this.pinnedStepIndex === index) {
+        this.clearPinnedStep()
+      } else {
+        this.setPinnedStep(index, source)
       }
     },
 
