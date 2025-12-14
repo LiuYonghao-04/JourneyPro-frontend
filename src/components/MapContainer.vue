@@ -1,6 +1,6 @@
-﻿<script setup>
+<script setup>
 import axios from "axios"
-import { ref, onMounted, watch } from "vue"
+import { ref, onMounted, onBeforeUnmount, watch } from "vue"
 import { useRoute } from "vue-router"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
@@ -23,7 +23,11 @@ let startMarker = null
 let endMarker = null
 let poiLayer = null
 let routeLayer = null
+let baseLayer = null
 const route = useRoute()
+
+const theme = ref(document.body.getAttribute("data-theme") || "dark")
+let themeObserver = null
 
 const buildWaypointList = () => [
   L.latLng(routeStore.startLat, routeStore.startLng),
@@ -50,6 +54,28 @@ function createColoredMarker(color, position, onDrag) {
   return marker
 }
 
+const createBaseLayer = () => {
+  if (theme.value === "dark") {
+    return L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+      attribution: "(c) OpenStreetMap contributors | Carto",
+    })
+  }
+  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "(c) OpenStreetMap contributors",
+  })
+}
+
+const applyBaseLayer = () => {
+  if (!map.value) return
+  if (baseLayer) {
+    map.value.removeLayer(baseLayer)
+  }
+  baseLayer = createBaseLayer()
+  baseLayer.addTo(map.value)
+}
+
 const fetchRoute = async () => {
   if (!map.value) return
   const waypoints = buildWaypointList()
@@ -65,7 +91,6 @@ const fetchRoute = async () => {
     routeStore.totalDistance = (routeData.distance / 1000).toFixed(2)
     routeStore.totalDuration = (routeData.duration / 60).toFixed(1)
     routeStore.routeGeojson = { type: "Feature", geometry: routeData.geometry }
-    // flatten steps across all legs for turn-by-turn list
     const steps =
       routeData.legs?.flatMap((leg) =>
         (leg.steps || []).map((s) => {
@@ -101,10 +126,13 @@ onMounted(() => {
     13
   )
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "© OpenStreetMap contributors",
-  }).addTo(map.value)
+  applyBaseLayer()
+
+  themeObserver = new MutationObserver(() => {
+    theme.value = document.body.getAttribute("data-theme") || "dark"
+    applyBaseLayer()
+  })
+  themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] })
 
   async function reverseGeocode(lat, lng) {
     try {
@@ -237,6 +265,10 @@ onMounted(() => {
     },
     { immediate: true }
   )
+})
+
+onBeforeUnmount(() => {
+  if (themeObserver) themeObserver.disconnect()
 })
 </script>
 

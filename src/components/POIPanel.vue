@@ -1,5 +1,5 @@
-﻿<template>
-  <div class="poi-panel" :class="{ collapsed }">
+<template>
+  <div class="poi-panel" :class="[{ collapsed }, theme]">
     <div class="panel-head" @click="toggle">
       <h3 class="title">Recommended POIs</h3>
       <button class="collapse-btn">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
@@ -16,8 +16,8 @@
             <div class="poi-name">{{ poi.name }}</div>
             <div class="poi-meta">
               <span>{{ poi.category }}</span>
-              <span class="dot">·</span>
-              <span>人气 {{ poi.popularity }}</span>
+              <span class="dot">|</span>
+              <span>Popularity {{ poi.popularity }}</span>
             </div>
           </div>
           <button class="add-btn" @click="addPoiToRoute(poi)">Add</button>
@@ -28,14 +28,24 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 
 const routeStore = useRouteStore()
 const collapsed = ref(false)
+const theme = ref(document.body.getAttribute('data-theme') || 'dark')
+let themeObserver = null
 
 onMounted(() => {
   routeStore.fetchRecommendedPois()
+  themeObserver = new MutationObserver(() => {
+    theme.value = document.body.getAttribute('data-theme') || 'dark'
+  })
+  themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
+})
+
+onBeforeUnmount(() => {
+  if (themeObserver) themeObserver.disconnect()
 })
 
 const pois = computed(() => routeStore.recommendedPOIs || [])
@@ -56,14 +66,16 @@ const toggle = () => {
   left: 10px;
   width: 320px;
   z-index: 99999;
-  background: var(--panel);
+  background: var(--map-overlay-bg);
   border-radius: 16px;
   padding: 12px 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--map-overlay-border);
   max-height: 40vh;
   overflow: hidden;
   backdrop-filter: none;
+  color: var(--map-overlay-fg);
+  transition: background-color 1s ease, border-color 1s ease, color 1s ease;
 }
 .poi-panel.collapsed {
   height: 52px;
@@ -79,13 +91,13 @@ const toggle = () => {
 .title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--fg);
+  color: var(--map-overlay-fg);
   margin: 0;
 }
 .collapse-btn {
-  border: 1px solid var(--panel-border);
-  background: var(--badge);
-  color: var(--fg);
+  border: 1px solid var(--map-overlay-border);
+  background: var(--map-overlay-bg);
+  color: var(--map-overlay-fg);
   border-radius: 10px;
   padding: 4px 10px;
   cursor: pointer;
@@ -101,7 +113,7 @@ const toggle = () => {
   align-items: center;
   margin: 6px 0;
   padding: 6px 0;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--map-overlay-border);
 }
 .poi-info {
   flex: 1;
@@ -110,7 +122,7 @@ const toggle = () => {
 .poi-name {
   font-size: 15px;
   font-weight: 500;
-  color: var(--fg);
+  color: var(--map-overlay-fg);
 }
 .poi-meta {
   font-size: 12px;
@@ -139,5 +151,23 @@ const toggle = () => {
   color: var(--muted);
   text-align: center;
   padding: 12px 0;
+}
+
+.poi-panel.light {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
+}
+.poi-panel.light .title,
+.poi-panel.light .poi-name {
+  color: #0f172a;
+}
+.poi-panel.light .collapse-btn {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
+}
+.poi-panel.light .poi-item {
+  border-bottom: 1px solid #e5e7eb;
 }
 </style>

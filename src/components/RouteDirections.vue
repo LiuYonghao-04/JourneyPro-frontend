@@ -1,26 +1,38 @@
-﻿<script setup>
-import { storeToRefs } from 'pinia'
-import { ref, computed } from 'vue'
-import { useRouteStore } from '../store/routeStore'
+<script setup>
+import { storeToRefs } from "pinia"
+import { ref, computed, onMounted, onBeforeUnmount } from "vue"
+import { useRouteStore } from "../store/routeStore"
 
 const routeStore = useRouteStore()
-const { totalDistance, totalDuration, steps} = storeToRefs(routeStore)
+const { totalDistance, totalDuration, steps, startAddress, endAddress } = storeToRefs(routeStore)
 const collapsed = ref(false)
 const hasRoute = computed(() => steps.value && steps.value.length > 0)
-const toggle = () => { collapsed.value = !collapsed.value }
+const theme = ref(document.body.getAttribute("data-theme") || "dark")
+let themeObserver = null
+onMounted(() => {
+  themeObserver = new MutationObserver(() => {
+    theme.value = document.body.getAttribute("data-theme") || "dark"
+  })
+  themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] })
+})
+onBeforeUnmount(() => {
+  if (themeObserver) themeObserver.disconnect()
+})
+const toggle = () => {
+  collapsed.value = !collapsed.value
+}
 </script>
 
 <template>
-  <div class="directions-panel" :class="{ collapsed }">
+  <div class="directions-panel" :class="[{ collapsed }, theme]">
     <div class="header" @click="toggle">
       <div class="title">Directions</div>
-<!--      <div class="meta">{{ startAddress }} → {{ endAddress }}</div>-->
+      <div class="meta">{{ startAddress }} -> {{ endAddress }}</div>
       <div class="summary">
-        <span>{{ totalDistance ? totalDistance + ' km' : '—' }}</span>
-        <span>·</span>
-        <span>{{ totalDuration ? totalDuration + ' min' : '—' }}</span>
+        <span>{{ totalDistance ? totalDistance + ' km' : 'N/A' }}</span>
+        <span>|</span>
+        <span>{{ totalDuration ? totalDuration + ' min' : 'N/A' }}</span>
       </div>
-      <div></div>
       <button class="collapse-btn">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
     </div>
 
@@ -31,7 +43,7 @@ const toggle = () => { collapsed.value = !collapsed.value }
           <div class="step-body">
             <div class="instruction">{{ s.instruction }}</div>
             <div class="detail">
-              <span v-if="s.road">{{ s.road }} · </span>{{ s.distance }} km · {{ s.duration }} min
+              <span v-if="s.road">{{ s.road }} | </span>{{ s.distance }} km | {{ s.duration }} min
             </div>
           </div>
         </div>
@@ -49,13 +61,14 @@ const toggle = () => { collapsed.value = !collapsed.value }
   width: 320px;
   max-height: 70vh;
   overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
+  background: var(--map-overlay-bg);
+  border: 1px solid var(--map-overlay-border);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   border-radius: 16px;
   padding: 12px 14px;
-  color: var(--fg);
+  color: var(--map-overlay-fg);
   z-index: 1100;
+  transition: background-color 1s ease, border-color 1s ease, color 1s ease;
 }
 .directions-panel.collapsed {
   max-height: 70px;
@@ -85,9 +98,9 @@ const toggle = () => { collapsed.value = !collapsed.value }
 }
 .collapse-btn {
   justify-self: end;
-  border: 1px solid var(--panel-border);
-  background: var(--badge);
-  color: var(--fg);
+  border: 1px solid var(--map-overlay-border);
+  background: var(--map-overlay-bg);
+  color: var(--map-overlay-fg);
   border-radius: 10px;
   padding: 4px 10px;
   cursor: pointer;
@@ -106,15 +119,15 @@ const toggle = () => { collapsed.value = !collapsed.value }
   gap: 8px;
   padding: 8px;
   border-radius: 10px;
-  background: var(--badge);
-  border: 1px solid var(--badge-border);
+  background: var(--map-overlay-bg);
+  border: 1px solid var(--map-overlay-border);
 }
 .step-num {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--btn-primary);
-  color: var(--btn-text);
+  background: var(--map-overlay-bg);
+  color: var(--map-overlay-fg);
   display: grid;
   place-items: center;
   font-weight: 700;
@@ -130,5 +143,27 @@ const toggle = () => { collapsed.value = !collapsed.value }
 .empty {
   margin-top: 12px;
   color: var(--muted);
+}
+
+.directions-panel.light {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
+}
+.directions-panel.light .meta {
+  color: #4b5563;
+}
+.directions-panel.light .collapse-btn {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
+}
+.directions-panel.light .step {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+.directions-panel.light .step-num {
+  background: #eef2f7;
+  color: #0f172a;
 }
 </style>

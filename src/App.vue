@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div id="app">
     <header class="jp-header">
       <div class="jp-logo">
@@ -22,8 +22,8 @@
           @click="toggleTheme"
           aria-label="Toggle theme"
         >
-          <span class="switch-icon sun">☀️</span>
-          <span class="switch-icon moon">🌙</span>
+          <span class="switch-icon sun">&#9728;</span>
+          <span class="switch-icon moon">&#127769;</span>
           <span class="switch-thumb"></span>
         </button>
         <template v-if="!auth.user">
@@ -97,13 +97,16 @@ body {
   --bg-pattern: #0b1221;
   --fg: #e8ecf5;
   --muted: #c3c9d6;
-  --panel: rgba(255, 255, 255, 0.05);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --badge: rgba(255, 255, 255, 0.06);
-  --badge-border: rgba(255, 255, 255, 0.08);
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  --panel: #0f1624;
+  --panel-border: #1f2937;
+  --badge: #131c2c;
+  --badge-border: #1f2937;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
   --btn-primary: linear-gradient(120deg, #5a8cff, #7ae0ff);
   --btn-text: #0a0f1a;
+  --map-overlay-bg: #0f1624;
+  --map-overlay-border: #1f2937;
+  --map-overlay-fg: #e5e7eb;
 }
 :global(body[data-theme='dark']) {
   --bg-main: #0b1221;
@@ -112,30 +115,36 @@ body {
     #0b1221;
   --fg: #e8ecf5;
   --muted: #c3c9d6;
-  --panel: rgba(255, 255, 255, 0.05);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --badge: rgba(255, 255, 255, 0.06);
-  --badge-border: rgba(255, 255, 255, 0.08);
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  --panel: #0f1624;
+  --panel-border: #1f2937;
+  --badge: #131c2c;
+  --badge-border: #1f2937;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
   --btn-primary: linear-gradient(120deg, #5a8cff, #7ae0ff);
   --btn-text: #0a0f1a;
   --surface: rgba(255, 255, 255, 0.03);
+  --map-overlay-bg: rgba(15, 22, 36, 0.95);
+  --map-overlay-border: #243047;
+  --map-overlay-fg: #e5e7eb;
 }
 :global(body[data-theme='light']) {
-  --bg-main: #f6f8fb;
-  --bg-pattern: radial-gradient(circle at 20% 18%, rgba(255, 230, 190, 0.18), transparent 32%),
-    radial-gradient(circle at 78% 8%, rgba(188, 214, 255, 0.2), transparent 30%),
-    #f6f8fb;
-  --fg: #0c1220;
-  --muted: #4b5567;
+  --bg-main: #f7f9fc;
+  --bg-pattern: radial-gradient(circle at 20% 18%, rgba(255, 226, 196, 0.20), transparent 32%),
+    radial-gradient(circle at 78% 8%, rgba(192, 214, 255, 0.24), transparent 30%),
+    #f7f9fc;
+  --fg: #0f172a;
+  --muted: #4b5563;
   --panel: #ffffff;
-  --panel-border: #e8ebf2;
-  --badge: #f3f5fb;
-  --badge-border: #e3e7ef;
-  --shadow: 0 14px 36px rgba(15, 35, 52, 0.12);
+  --panel-border: #e5e7eb;
+  --badge: #eef2f7;
+  --badge-border: #e5e7eb;
+  --shadow: 0 14px 36px rgba(15, 35, 52, 0.14);
   --btn-primary: linear-gradient(120deg, #4d8cff, #74d8ff);
   --btn-text: #0a0f1a;
-  --surface: rgba(0, 0, 0, 0.02);
+  --surface: rgba(0, 0, 0, 0.03);
+  --map-overlay-bg: #ffffff;
+  --map-overlay-border: #dfe3ea;
+  --map-overlay-fg: #0f172a;
 }
 
 .jp-header {
