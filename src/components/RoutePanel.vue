@@ -11,24 +11,51 @@ const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeTo
 const viaPoints = computed(() => routeStore.viaPoints || [])
 const locating = ref(false)
 
-const AMAP_KEY = '7b3d51a4bac970421ba4ee69861bb326'
+// const AMAP_KEY = '7b3d51a4bac970421ba4ee69861bb326'
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGVucnkwNCIsImEiOiJjbWo1Z3RtaHIxa2tiM2xzZjc3ZXAzNzFzIn0.fhmWGo_w7RVrrmDmGQJXog'
 
 // 自动补全防抖 + 结果缓存 + 选择锁
 let fetchTimer = null
 let lastResults = []
 let lockFetch = false
 
-// Disabled Gaode autocomplete; returning empty suggestions
-const fetchSuggestions = (_queryString, cb) => {
-  lastResults = []
-  cb([])
+// Mapbox forward geocoding autocomplete (limited to London bbox)
+const LONDON_BBOX = [-0.489, 51.28, 0.236, 51.686] // [minLng, minLat, maxLng, maxLat]
+const LONDON_CENTER = [-0.1278, 51.5074]
+const fetchSuggestions = (queryString, cb) => {
+  if (lockFetch) return cb(lastResults)
+  if (!queryString) {
+    lastResults = []
+    return cb([])
+  }
+  if (fetchTimer) clearTimeout(fetchTimer)
+  fetchTimer = setTimeout(async () => {
+    try {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        queryString
+      )}.json?autocomplete=true&limit=5&language=en&proximity=${LONDON_CENTER[0]},${LONDON_CENTER[1]}&bbox=${LONDON_BBOX.join(
+        ','
+      )}&access_token=${MAPBOX_TOKEN}`
+      const res = await axios.get(url)
+      const features = res.data?.features || []
+      const results = features.map((f) => ({
+        value: f.place_name,
+        center: f.center, // [lng, lat]
+        id: f.id,
+      }))
+      lastResults = results
+      cb(results)
+    } catch (e) {
+      cb(lastResults)
+    }
+  }, 250)
 }
 
 const handleSelectStart = (item) => {
   lockFetch = true
   setTimeout(() => (lockFetch = false), 500)
   startAddress.value = item.value
-  const [lng, lat] = item.location.split(',')
+  const [lng, lat] = item.center || []
   routeStore.setStart(parseFloat(lat), parseFloat(lng))
 }
 
@@ -36,7 +63,7 @@ const handleSelectEnd = (item) => {
   lockFetch = true
   setTimeout(() => (lockFetch = false), 500)
   endAddress.value = item.value
-  const [lng, lat] = item.location.split(',')
+  const [lng, lat] = item.center || []
   routeStore.setEnd(parseFloat(lat), parseFloat(lng))
 }
 
