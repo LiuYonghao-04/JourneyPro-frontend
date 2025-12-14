@@ -20,7 +20,13 @@
               <span>Popularity {{ poi.popularity }}</span>
             </div>
           </div>
-          <button class="add-btn" @click="addPoiToRoute(poi)">Add</button>
+          <button
+            class="add-btn"
+            :class="{ danger: isViaPoint(poi) }"
+            @click="togglePoi(poi)"
+          >
+            {{ isViaPoint(poi) ? 'Delete' : 'Add' }}
+          </button>
         </li>
       </ul>
     </div>
@@ -49,9 +55,18 @@ onBeforeUnmount(() => {
 })
 
 const pois = computed(() => routeStore.recommendedPOIs || [])
+const isViaPoint = (poi) => {
+  return (routeStore.viaPoints || []).some((p) =>
+    poi.id ? p.id === poi.id : p.lat === poi.lat && p.lng === poi.lng
+  )
+}
 
-const addPoiToRoute = async (poi) => {
-  await routeStore.addViaPoint(poi)
+const togglePoi = async (poi) => {
+  if (isViaPoint(poi)) {
+    routeStore.removeViaPoint(poi)
+  } else {
+    await routeStore.addViaPoint(poi)
+  }
 }
 
 const toggle = () => {
@@ -147,6 +162,10 @@ const toggle = () => {
 }
 .add-btn:hover {
   filter: brightness(1.05);
+}
+.add-btn.danger {
+  background: #f43f5e;
+  color: #fff;
 }
 .empty {
   font-size: 14px;

@@ -11,8 +11,10 @@ const routeStore = useRouteStore()
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
 const viaPoints = computed(() => routeStore.viaPoints || [])
 const locating = ref(false)
+const panelCollapsed = ref(false)
 
 const MAPBOX_TOKEN = '11111.ex'
+const VIA_STORAGE_KEY = 'jp_via_points'
 
 let fetchTimer = null
 let lastResults = []
@@ -113,15 +115,52 @@ const removeViaPoint = (poi) => {
 const clearAllViaPoints = () => {
   routeStore.clearViaPoints()
 }
+
+const dragIndex = ref(null)
+const persistViaPoints = (list) => {
+  try {
+    localStorage.setItem(VIA_STORAGE_KEY, JSON.stringify(list))
+  } catch (e) {
+    // ignore
+  }
+}
+const handleDragStart = (idx) => {
+  dragIndex.value = idx
+}
+const handleDragOver = (evt) => {
+  evt.preventDefault()
+}
+const handleDrop = (idx) => {
+  if (dragIndex.value === null || dragIndex.value === idx) return
+  const list = [...viaPoints.value]
+  const [moved] = list.splice(dragIndex.value, 1)
+  list.splice(idx, 0, moved)
+  routeStore.viaPoints = list
+  persistViaPoints(list)
+  dragIndex.value = null
+}
+
+const clearStart = () => {
+  startAddress.value = ''
+}
+const clearEnd = () => {
+  endAddress.value = ''
+}
 </script>
 
 <template>
   <div class="control-panel" :class="currentTheme">
     <div class="header">
-      <img :src="logoSrc" class="logo" alt="JourneyPro Logo" />
-      <h2 class="title">JourneyPro</h2>
+      <div class="title-wrap">
+        <img :src="logoSrc" class="logo" alt="JourneyPro Logo" />
+        <h2 class="title">JourneyPro</h2>
+      </div>
+      <button class="collapse-btn" @click="panelCollapsed = !panelCollapsed">
+        {{ panelCollapsed ? 'Expand' : 'Collapse' }}
+      </button>
     </div>
 
+    <div v-if="!panelCollapsed">
     <el-form label-position="top" label-width="60px" size="small">
       <el-form-item label="Starting point">
         <el-autocomplete
@@ -133,6 +172,8 @@ const clearAllViaPoints = () => {
           :trigger-on-focus="true"
           :teleported="false"
           popper-class="jp-autocomplete"
+          clearable
+          @clear="clearStart"
         />
       </el-form-item>
 
@@ -146,6 +187,8 @@ const clearAllViaPoints = () => {
           :trigger-on-focus="true"
           :teleported="false"
           popper-class="jp-autocomplete"
+          clearable
+          @clear="clearEnd"
         />
       </el-form-item>
 
@@ -161,21 +204,30 @@ const clearAllViaPoints = () => {
         <el-button text size="small" @click="clearAllViaPoints">Clear</el-button>
       </div>
       <div class="tag-list">
-        <el-tag
-          v-for="poi in viaPoints"
+        <div
+          v-for="(poi, idx) in viaPoints"
           :key="poi.id || poi.name || `${poi.lat}-${poi.lng}`"
-          type="success"
-          closable
-          @close="removeViaPoint(poi)"
+          class="tag-draggable"
+          draggable="true"
+          @dragstart="handleDragStart(idx)"
+          @dragover="handleDragOver"
+          @drop="handleDrop(idx)"
         >
-          {{ poi.name || `${poi.lat.toFixed(3)}, ${poi.lng.toFixed(3)}` }}
-        </el-tag>
+          <el-tag
+            type="success"
+            closable
+            @close="removeViaPoint(poi)"
+          >
+            {{ poi.name || `${poi.lat.toFixed(3)}, ${poi.lng.toFixed(3)}` }}
+          </el-tag>
+        </div>
       </div>
     </div>
 
     <div class="coords">
       <span>Start: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br />
       <span>End: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}</span>
+    </div>
     </div>
   </div>
 </template>
@@ -199,8 +251,29 @@ const clearAllViaPoints = () => {
 .header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collapse-btn {
+  border: 1px solid var(--map-overlay-border);
+  background: var(--map-overlay-bg);
+  color: var(--map-overlay-fg);
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.control-panel.light .collapse-btn {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #dfe3ea;
 }
 
 .logo {
@@ -252,6 +325,30 @@ const clearAllViaPoints = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  max-height: 90px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.tag-draggable {
+  cursor: grab;
+}
+
+.tag-list::-webkit-scrollbar {
+  width: 8px;
+}
+.tag-list::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(80, 90, 110, 0.6);
+}
+.tag-list::-webkit-scrollbar-track {
+  background: var(--map-overlay-bg);
+}
+.control-panel.light .tag-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.7);
+}
+.control-panel.light .tag-list::-webkit-scrollbar-track {
+  background: #ffffff;
 }
 
 :global(body[data-theme='light']) .control-panel {
