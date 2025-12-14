@@ -273,5 +273,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div id="map" style="height: 100vh; width: 100vw;"></div>
+  <div id="map" class="map-canvas"></div>
 </template>
+
+<style scoped>
+.map-canvas {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+</style>

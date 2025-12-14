@@ -87,7 +87,7 @@ body,
 }
 body {
   transition: background-color 1s ease, color 1s ease;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 #app {
   overflow-x: hidden;

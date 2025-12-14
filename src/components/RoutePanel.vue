@@ -183,7 +183,7 @@ const clearAllViaPoints = () => {
 <style scoped>
 .control-panel {
   position: absolute;
-  top: 60px;
+  top: 10px;
   left: 10px;
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
@@ -191,7 +191,7 @@ const clearAllViaPoints = () => {
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   z-index: 1000;
-  width: 280px;
+  width: 300px;
   border: 1px solid var(--map-overlay-border);
   transition: background-color 1s ease, border-color 1s ease, color 1s ease;
 }

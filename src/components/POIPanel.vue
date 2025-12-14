@@ -64,11 +64,11 @@ const toggle = () => {
   position: absolute;
   bottom: 10px;
   left: 10px;
-  width: 320px;
+  width: 300px;
   z-index: 99999;
   background: var(--map-overlay-bg);
   border-radius: 16px;
-  padding: 12px 16px;
+  padding: 12px 8px 12px 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   border: 1px solid var(--map-overlay-border);
   max-height: 40vh;
@@ -106,6 +106,8 @@ const toggle = () => {
   overflow-y: auto;
   max-height: calc(50vh - 70px);
   margin-top: 10px;
+  padding:0 8px 0 20px;
+
 }
 .poi-item {
   display: flex;
@@ -151,6 +153,23 @@ const toggle = () => {
   color: var(--muted);
   text-align: center;
   padding: 12px 0;
+}
+
+.poi-panel ::-webkit-scrollbar {
+  width: 8px;
+}
+.poi-panel ::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(80, 90, 110, 0.6);
+}
+.poi-panel ::-webkit-scrollbar-track {
+  background: var(--map-overlay-bg);
+}
+.poi-panel.light ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.7);
+}
+.poi-panel.light ::-webkit-scrollbar-track {
+  background: #ffffff;
 }
 
 .poi-panel.light {

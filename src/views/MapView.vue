@@ -16,6 +16,9 @@ import POIPanel from '../components/POIPanel.vue'
 
 <style scoped>
 .map-page {
-  height: 100%;
+  position: relative;
+  height: calc(100vh - 56px);
+  width: 100vw;
+  overflow: hidden;
 }
 </style>

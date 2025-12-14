@@ -56,16 +56,16 @@ const toggle = () => {
 <style scoped>
 .directions-panel {
   position: absolute;
-  top: 60px;
-  right: 20px;
+  top: 10px;
+  right: 10px;
   width: 320px;
-  max-height: 70vh;
+  max-height: 80vh;
   overflow: hidden;
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   border-radius: 16px;
-  padding: 12px 14px;
+  padding: 12px 14px 24px 14px;
   color: var(--map-overlay-fg);
   z-index: 1100;
   transition: background-color 1s ease, border-color 1s ease, color 1s ease;
@@ -107,11 +107,13 @@ const toggle = () => {
 }
 .steps {
   margin-top: 10px;
+
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
-  max-height: calc(70vh - 100px);
+  max-height: calc(100vh - 100px);
+  padding-right: 8px;
 }
 .step {
   display: grid;
@@ -143,6 +145,23 @@ const toggle = () => {
 .empty {
   margin-top: 12px;
   color: var(--muted);
+}
+
+.directions-panel ::-webkit-scrollbar {
+  width: 8px;
+}
+.directions-panel ::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(80, 90, 110, 0.6);
+}
+.directions-panel ::-webkit-scrollbar-track {
+  background: var(--map-overlay-bg);
+}
+.directions-panel.light ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.7);
+}
+.directions-panel.light ::-webkit-scrollbar-track {
+  background: #ffffff;
 }
 
 .directions-panel.light {
