@@ -19,7 +19,7 @@
       </div>
     </aside>
 
-    <main class="content">
+    <main class="content" ref="contentEl">
       <header class="topbar">
         <div class="search">
           <el-input v-model="search" placeholder="Search what you love" clearable @input="handleSearch">
@@ -106,15 +106,21 @@
         </div>
         <div v-if="noMore" class="no-more">End of feed &middot; keep scrolling to loop</div>
       </section>
+
+      <transition name="back-top">
+        <button v-if="showBackTop" class="back-top" type="button" @click="scrollToTop" aria-label="Back to top">
+          <el-icon class="back-top-icon"><ArrowUpBold /></el-icon>
+        </button>
+      </transition>
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
-import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
+import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled, ArrowUpBold } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 
 const API_BASE = 'http://localhost:3001/api/posts'
@@ -237,6 +243,47 @@ const openDetail = (card) => {
   window.location.href = `/posts/postsid=${card.id}`
 }
 
+const contentEl = ref(null)
+const showBackTop = ref(false)
+const lastScrollEl = ref(null)
+
+const isInContentScope = (el) => {
+  const root = contentEl.value
+  if (!root) return true
+  return el === root || root.contains(el) || el.contains(root)
+}
+
+const pickScrollableEl = (el) => {
+  if (!(el instanceof HTMLElement)) return null
+  if (!isInContentScope(el)) return null
+  if (el === document.body || el === document.documentElement) return null
+  if (el.scrollHeight <= el.clientHeight + 2) return null
+  return el
+}
+
+const getDocumentScrollTop = () =>
+  window.scrollY || document.documentElement?.scrollTop || document.body?.scrollTop || 0
+
+const getActiveScrollTop = () => {
+  const active = pickScrollableEl(lastScrollEl.value) || pickScrollableEl(contentEl.value)
+  return active ? active.scrollTop : getDocumentScrollTop()
+}
+
+const onAnyScroll = (e) => {
+  const targetEl = pickScrollableEl(e?.target)
+  if (targetEl) lastScrollEl.value = targetEl
+  showBackTop.value = getActiveScrollTop() > 350
+}
+
+const scrollToTop = () => {
+  const active = pickScrollableEl(lastScrollEl.value) || pickScrollableEl(contentEl.value)
+  if (active) {
+    active.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 const replacePost = (updated) => {
   const idx = posts.value.findIndex((p) => p.id === updated.id)
   if (idx > -1) posts.value[idx] = { ...posts.value[idx], ...updated }
@@ -301,6 +348,14 @@ onMounted(() => {
   fetchTags()
   fetchPosts(true)
   setupInfiniteScroll()
+  document.addEventListener('scroll', onAnyScroll, { passive: true, capture: true })
+  window.addEventListener('scroll', onAnyScroll, { passive: true })
+  onAnyScroll()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('scroll', onAnyScroll, true)
+  window.removeEventListener('scroll', onAnyScroll)
 })
 
 const markLoaded = (card) => {
@@ -586,5 +641,42 @@ const markLoaded = (card) => {
 }
 .sentinel {
   height: 1px;
+}
+
+.back-top-enter-active,
+.back-top-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.back-top-enter-from,
+.back-top-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.back-top {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  z-index: 160000;
+}
+.back-top:hover {
+  transform: translateY(-2px);
+}
+.back-top:active {
+  transform: translateY(0);
+}
+.back-top-icon {
+  font-size: 18px;
 }
 </style>

@@ -11,6 +11,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.12.2",
     "element-plus": "^2.11.5",
     "leaflet": "^1.9.4",

@@ -21,7 +21,7 @@
 
       <section class="panel">
         <div class="media">
-          <el-carousel v-if="post.images?.length" height="520px" indicator-position="outside">
+          <el-carousel v-if="post.images?.length" height="520px">
             <el-carousel-item v-for="(img, idx) in post.images" :key="idx">
               <img :src="img" :alt="`image-${idx}`" class="media-img" />
             </el-carousel-item>
@@ -124,10 +124,12 @@
               </RouterLink>
               <img v-else :src="c.user?.avatar_url || defaultAvatar" class="avatar" />
               <div class="comment-meta">
-                <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="name">
-                  {{ c.user?.nickname || 'Traveler' }}
-                </RouterLink>
-                <div v-else class="name">{{ c.user?.nickname || 'Traveler' }}</div>
+                <div class="name">
+                  <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="inline-link">
+                    {{ c.user?.nickname || 'Traveler' }}
+                  </RouterLink>
+                  <span v-else>{{ c.user?.nickname || 'Traveler' }}</span>
+                </div>
                 <div class="time">{{ formatTime(c.created_at) }}</div>
               </div>
             </div>
@@ -518,10 +520,13 @@ onMounted(() => {
   grid-template-columns: 240px 1fr;
   height: 100%;
   background: var(--bg-main);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
 }
 .sidebar {
-  background: var(--panel);
-  border-right: 1px solid #ececec;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border-right: 1px solid var(--panel-border);
   padding: 18px 14px;
   display: flex;
   flex-direction: column;
@@ -556,6 +561,7 @@ onMounted(() => {
 .content {
   overflow-y: auto;
   padding: 18px 22px 40px;
+  scrollbar-gutter: stable;
 }
 .header {
   display: flex;
@@ -567,13 +573,27 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 60% 40%;
   gap: 18px;
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
   border-radius: 18px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-  padding: 16px;
+  box-shadow: var(--shadow);
+  padding: 16px 30px 16px 16px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 .media {
   width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--badge);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+}
+.media :deep(.el-carousel),
+.media :deep(.el-carousel__container) {
+  border-radius: 16px;
+}
+.media :deep(.el-carousel__container) {
+  overflow: hidden;
 }
 .media-img {
   width: 100%;
@@ -608,6 +628,10 @@ onMounted(() => {
   object-fit: cover;
   background: var(--badge);
 }
+.avatar.small {
+  width: 36px;
+  height: 36px;
+}
 .author-info .name {
   font-weight: 700;
   color: var(--fg);
@@ -623,6 +647,7 @@ onMounted(() => {
 .title {
   margin: 6px 0;
   color: var(--fg);
+  letter-spacing: -0.02em;
 }
 .text {
   line-height: 1.6;
@@ -669,11 +694,17 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--panel-border);
-  background: var(--badge);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 85%, transparent);
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
   border-radius: 16px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.pill:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--panel-border) 100%, transparent);
+  background: color-mix(in srgb, var(--badge) 90%, transparent);
 }
 .stat-icon {
   color: color-mix(in srgb, var(--fg) 50%, transparent);
@@ -690,10 +721,13 @@ onMounted(() => {
 }
 .comments {
   margin-top: 18px;
-  background: var(--panel);
-  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 18px;
   padding: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 .comments-header {
   display: flex;
@@ -712,9 +746,9 @@ onMounted(() => {
 }
 :deep(.el-input__wrapper),
 :deep(.el-textarea__inner) {
-  background: var(--panel) !important;
+  background: color-mix(in srgb, var(--badge) 70%, transparent) !important;
   color: var(--fg) !important;
-  border-color: var(--panel-border) !important;
+  border-color: color-mix(in srgb, var(--panel-border) 80%, transparent) !important;
 }
 :deep(.el-input__inner) {
   color: var(--fg);
@@ -727,9 +761,17 @@ onMounted(() => {
 }
 .comment-item,
 .reply-item {
-  background: var(--badge);
-  border-radius: 12px;
-  padding: 10px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+  border-radius: 16px;
+  padding: 14px;
+  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.comment-item:hover,
+.reply-item:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--panel-border) 100%, transparent);
+  background: color-mix(in srgb, var(--badge) 86%, transparent);
 }
 .reply-head .avatar.small {
   width: 36px;
@@ -750,6 +792,8 @@ onMounted(() => {
 }
 .comment-meta .name {
   font-weight: 600;
+  color: var(--fg);
+  line-height: 1.2;
 }
 .comment-meta .time {
   color: var(--muted);
@@ -759,9 +803,14 @@ onMounted(() => {
   text-decoration: none;
   color: inherit;
 }
+.inline-link:hover {
+  opacity: 0.92;
+}
 .comment-body {
   margin: 6px 0;
   color: var(--fg);
+  font-size: 15px;
+  line-height: 1.55;
 }
 .comment-actions {
   display: flex;
@@ -772,10 +821,18 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   border: none;
-  background: transparent;
+  background: color-mix(in srgb, var(--panel) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
+  border-radius: 999px;
   color: var(--muted);
   cursor: pointer;
-  padding: 4px 0;
+  padding: 6px 10px;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.icon-link:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--panel-border) 100%, transparent);
+  background: color-mix(in srgb, var(--panel) 42%, transparent);
 }
 .reply-box {
   margin-top: 8px;
@@ -787,8 +844,19 @@ onMounted(() => {
 }
 .replies {
   margin-top: 8px;
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--panel-border) 60%, transparent);
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+@media (max-width: 1100px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+  .media-placeholder {
+    height: 420px;
+  }
 }
 </style>
