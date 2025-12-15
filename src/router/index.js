@@ -7,6 +7,8 @@ import PersonView from '../views/PersonView.vue'
 import PostDetailView from '../views/PostDetailView.vue'
 import LoginView from '../views/LoginView.vue'
 import NotificationView from '../views/NotificationView.vue'
+import PrivacyView from '../views/PrivacyView.vue'
+import FastUxView from '../views/FastUxView.vue'
 import { useAuthStore } from '../store/authStore'
 
 const routes = [
@@ -60,6 +62,16 @@ const routes = [
         path: '/posts/postsid=:id',
         name: 'post-detail',
         component: PostDetailView,
+    },
+    {
+        path: '/privacy',
+        name: 'privacy',
+        component: PrivacyView,
+    },
+    {
+        path: '/fast-ux',
+        name: 'fast-ux',
+        component: FastUxView,
     },
 ]
 

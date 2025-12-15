@@ -77,9 +77,8 @@
           :is="f.to ? RouterLink : 'div'"
           :to="f.to"
           class="feature card"
-          :class="{ link: !!f.to, modal: !!f.modal }"
+          :class="{ link: !!f.to }"
           :key="f.title"
-          @click="handleFeatureClick(f)"
         >
           <div class="icon">{{ f.icon }}</div>
           <h3>{{ f.title }}</h3>
@@ -106,6 +105,65 @@
     </section>
 
     <section class="section" ref="sections">
+      <div class="section-header">
+        <p class="eyebrow">Spotlight</p>
+        <h2>Trending in Community</h2>
+        <p class="lede narrow">
+          Fresh inspiration from travelers. Open a post to see photos, comments, and the map location.
+        </p>
+      </div>
+
+      <div v-if="spotlightError" class="spotlight-error card">
+        <div class="title">Community is offline</div>
+        <div class="desc">Start the API server to load trending posts.</div>
+        <RouterLink class="btn ghost" to="/posts">Go to Community</RouterLink>
+      </div>
+
+      <div v-else class="grid spotlight-grid">
+        <div v-if="spotlightLoading" v-for="n in 5" :key="n" class="spotlight-card skeleton" />
+
+        <RouterLink
+          v-else
+          v-for="p in spotlightPosts"
+          :key="p.id"
+          :to="`/posts/postsid=${p.id}`"
+          class="spotlight-card link"
+        >
+          <div class="spotlight-cover" :class="{ empty: !coverOf(p) }">
+            <CroppedImage v-if="coverOf(p)" :src="coverOf(p)" :alt="p.title" class="spotlight-img" />
+            <div v-else class="spotlight-empty">No cover</div>
+          </div>
+          <div class="spotlight-body">
+            <div class="spotlight-title">{{ p.title || 'Untitled' }}</div>
+            <div class="spotlight-meta">
+              <span class="name">{{ p.user?.nickname || 'Guest' }}</span>
+<!--              <span class="dot">·</span>-->
+              <span class="date">{{ formatShortDate(p.created_at) }}</span>
+            </div>
+            <div class="spotlight-stats">
+              <span class="stat">
+                <el-icon class="stat-ic"><CircleCheck /></el-icon>
+                {{ p.like_count || 0 }}
+              </span>
+              <span class="stat">
+                <el-icon class="stat-ic"><Star /></el-icon>
+                {{ p.favorite_count || 0 }}
+              </span>
+              <span class="stat views">
+                <el-icon class="stat-ic"><View /></el-icon>
+                {{ p.view_count || 0 }}
+              </span>
+            </div>
+          </div>
+        </RouterLink>
+      </div>
+
+      <div class="spotlight-more">
+        <RouterLink class="btn ghost" to="/posts">Browse Community</RouterLink>
+      </div>
+    </section>
+
+    <section class="section" ref="sections">
       <div class="cta card">
         <div>
           <p class="eyebrow">Ready?</p>
@@ -123,22 +181,20 @@
         </div>
       </div>
     </section>
-    <div v-if="modalContent" class="feature-modal" @click.self="closeModal">
-      <div class="feature-modal__card">
-        <h3>{{ modalContent.title }}</h3>
-        <p>{{ modalContent.body }}</p>
-        <button class="btn primary" @click="closeModal">Close</button>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import axios from 'axios'
+import { CircleCheck, Star, View } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
+import CroppedImage from '../components/CroppedImage.vue'
 
 const auth = useAuthStore()
+
+const API_POSTS = 'http://localhost:3001/api/posts'
 
 
 
@@ -175,37 +231,16 @@ const features = [
     title: 'Privacy-first',
     desc: 'Control what you share and with whom.',
     tags: ['secure'],
-    modal: 'privacy',
+    to: '/privacy',
   },
   {
     icon: '\u26A1',
     title: 'Fast UX',
     desc: 'Lightweight, animated, and delightful.',
     tags: ['fast'],
-    modal: 'ux',
+    to: '/fast-ux',
   },
 ]
-
-const activeModal = ref(null)
-const modalCopy = {
-  privacy: {
-    title: 'Privacy-first',
-    body: 'We only store the minimum needed, and you control visibility for posts, routes, and profile.',
-  },
-  ux: {
-    title: 'Fast UX',
-    body: 'Preloading key assets, lean API responses, and animation throttling keep the experience snappy.',
-  },
-}
-const modalContent = computed(() => (activeModal.value ? modalCopy[activeModal.value] : null))
-const handleFeatureClick = (f) => {
-  if (f.modal) {
-    activeModal.value = f.modal
-  }
-}
-const closeModal = () => {
-  activeModal.value = null
-}
 
 const steps = [
   { title: 'Discover', desc: 'Browse community posts and curated POIs.' },
@@ -214,6 +249,34 @@ const steps = [
 ]
 
 const sections = ref([])
+
+const spotlightLoading = ref(true)
+const spotlightError = ref('')
+const spotlightPosts = ref([])
+
+const coverOf = (post) => post?.cover_image || (Array.isArray(post?.images) ? post.images[0] : '')
+
+const formatShortDate = (ts) => {
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const fetchSpotlight = async () => {
+  spotlightLoading.value = true
+  spotlightError.value = ''
+  try {
+    const res = await axios.get(API_POSTS, { params: { limit: 5, offset: 0, sort: 'hot' } })
+    spotlightPosts.value = res.data?.data || []
+  } catch (e) {
+    spotlightError.value = 'offline'
+  } finally {
+    spotlightLoading.value = false
+  }
+}
 
 const tilt = ref({ x: 0, y: 0 })
 const parallaxStyle = computed(() => ({
@@ -313,6 +376,8 @@ onMounted(() => {
   )
   els.forEach((el) => observer.observe(el))
 
+  fetchSpotlight()
+
   if (introLocked.value) {
     document.body.style.overflow = 'hidden'
 
@@ -349,6 +414,8 @@ onBeforeUnmount(() => {
     #0b1221;
   --fg: #e8ecf5;
   --muted: #c3c9d6;
+  --accent: #7fb1ff;
+  --accent-strong: #8ad8ff;
   --panel: rgba(255, 255, 255, 0.05);
   --panel-border: rgba(255, 255, 255, 0.08);
   --badge: rgba(255, 255, 255, 0.06);
@@ -365,6 +432,8 @@ onBeforeUnmount(() => {
     #f6f8fb;
   --fg: rgba(17, 28, 43, 0.8);
   --muted: #4b5567;
+  --accent: #2563eb;
+  --accent-strong: #0ea5e9;
   --panel: #ffffff;
   --panel-border: #e8ebf2;
   --badge: #f3f5fb;
@@ -384,7 +453,8 @@ onBeforeUnmount(() => {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: var(--bg-pattern);
   transition: background 1s ease, color 1s ease;
-}
+  overflow-x: hidden;
+ }
 .intro {
   min-height: 100vh;
   display: grid;
@@ -504,7 +574,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.08em;
 }
 .intro-sub {
-  color: #c3c9d6;
+  color: var(--muted);
   margin: 10px 0 18px;
   font-size: 16px;
 }
@@ -542,7 +612,7 @@ onBeforeUnmount(() => {
   }
 }
 .scroll-hint {
-  color: #7fb1ff;
+  color: var(--accent);
   text-decoration: none;
   font-weight: 600;
 }
@@ -613,12 +683,12 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 .hero-visual .card .desc {
-  color: #c3c9d6;
+  color: var(--muted);
   margin-top: 4px;
   font-size: 14px;
 }
 .eyebrow {
-  color: #7fb1ff;
+  color: var(--accent);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 700;
@@ -630,7 +700,7 @@ h1 {
   line-height: 1.1;
 }
 h1 span {
-  color: #8ad8ff;
+  color: var(--accent-strong);
 }
 .lede {
   color: var(--muted);
@@ -803,27 +873,134 @@ h1 span {
   color: var(--fg);
 }
 
-.feature-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3000;
+.spotlight-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
-.feature-modal__card {
+.spotlight-card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+  transition: transform 0.25s ease, border-color 0.2s;
+}
+.spotlight-card.link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.spotlight-card:hover {
+  transform: translateY(-6px);
+  border-color: color-mix(in srgb, var(--accent-strong) 40%, var(--panel-border));
+}
+.spotlight-cover {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--badge);
+}
+.spotlight-img {
+  width: 100%;
+  height: 100%;
+}
+.spotlight-cover.empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--badge) 90%, #fff),
+    color-mix(in srgb, var(--panel) 85%, #fff)
+  );
+}
+.spotlight-empty {
+  font-size: 12px;
+  font-weight: 700;
+}
+.spotlight-body {
+  padding-top: 12px;
+}
+.spotlight-title {
+  font-weight: 800;
   color: var(--fg);
-  padding: 24px;
+  font-size: 15px;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.spotlight-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.spotlight-meta .name {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--fg) 80%, var(--muted));
+}
+.spotlight-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.spotlight-stats .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--badge);
+  border: 1px solid var(--badge-border);
+}
+.spotlight-stats .stat-ic {
+  color: var(--accent);
+}
+.spotlight-more {
+  margin-top: 24px;
+}
+.spotlight-error.card {
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
   border-radius: 16px;
   box-shadow: var(--shadow);
-  max-width: 420px;
-  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
 }
-.feature.card.modal {
-  cursor: pointer;
+.spotlight-error .title {
+  font-weight: 800;
+}
+.spotlight-error .desc {
+  color: var(--muted);
+}
+.spotlight-card.skeleton {
+  height: 280px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--badge) 92%, #fff) 25%,
+    color-mix(in srgb, var(--badge) 82%, #fff) 50%,
+    color-mix(in srgb, var(--badge) 92%, #fff) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 @media (max-width: 900px) {
@@ -842,9 +1019,6 @@ h1 span {
   }
 }
 </style>
-
-
-
 
 
 
