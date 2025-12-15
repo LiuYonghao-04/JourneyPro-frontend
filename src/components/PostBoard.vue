@@ -80,7 +80,7 @@
               <div class="card-title">{{ card.title }}</div>
               <div class="card-meta">
                 <span>{{ card.user?.nickname || 'Guest' }}</span>
-                <span v-if="card.tags?.length"> · {{ card.tags.slice(0, 2).join(' / ') }}</span>
+                <span v-if="card.tags?.length"> &middot; {{ card.tags.slice(0, 2).join(' / ') }}</span>
               </div>
               <div class="card-footer">
                 <button class="icon-btn" @click.stop="toggleLike(card)">
@@ -104,7 +104,7 @@
         <div v-if="loading && posts.length > 0" class="skeleton-more">
           <div v-for="n in 3" :key="n" class="skeleton-card small" />
         </div>
-        <div v-if="noMore" class="no-more">End of feed · keep scrolling to loop</div>
+        <div v-if="noMore" class="no-more">End of feed &middot; keep scrolling to loop</div>
       </section>
     </main>
   </div>

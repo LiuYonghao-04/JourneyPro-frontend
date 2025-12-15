@@ -25,7 +25,7 @@ export const useAuthStore = defineStore('auth', {
         })
         const data = await res.json()
         if (!res.ok || !data.success) {
-          throw new Error('登录失败，请检查账号或密码')
+          throw new Error('Login failed. Please check your username or password.')
         }
         this.setUser(data.user)
         this.token = data.token
@@ -49,7 +49,7 @@ export const useAuthStore = defineStore('auth', {
         })
         const data = await res.json()
         if (!res.ok || !data.success) {
-          throw new Error('注册失败，账号可能已存在')
+          throw new Error('Register failed. The username may already exist.')
         }
         this.setUser(data.user)
         this.token = data.token

@@ -69,7 +69,7 @@
           <div class="field">
             <div class="label-row">
               <label>Images</label>
-              <span class="hint">First image becomes cover · drag to reorder</span>
+              <span class="hint">First image becomes cover &middot; drag to reorder</span>
             </div>
             <el-input v-model="imageInput" placeholder="https://...jpg">
               <template #append>
@@ -86,7 +86,14 @@
                 @dragover.prevent
                 @drop="onDrop(idx, $event)"
               >
-                <button class="thumb-delete" @click.stop="removeImage(idx)">✕</button>
+                <button
+                  class="thumb-delete"
+                  type="button"
+                  aria-label="Remove image"
+                  @click.stop="removeImage(idx)"
+                >
+                  &times;
+                </button>
                 <div class="thumb-badge" v-if="idx === 0">Cover</div>
                 <img :src="img" :alt="`img-${idx}`" />
               </div>
@@ -140,7 +147,8 @@
               <div class="poi-text">
                 <div class="poi-title">{{ selectedPoi.name }}</div>
                 <div class="poi-meta">
-                  {{ selectedPoi.category || 'POI' }} · {{ selectedPoi.city || '' }}
+                  {{ selectedPoi.category || 'POI' }}
+                  <template v-if="selectedPoi.city"> &middot; {{ selectedPoi.city }}</template>
                 </div>
               </div>
             </div>
@@ -170,7 +178,9 @@
               <div class="card-title">{{ form.title || 'Untitled' }}</div>
               <div class="card-meta">
                 <span>{{ auth.user?.nickname || 'Guest' }}</span>
-                <span v-if="selectedTags.length || extraTags.length"> · {{ [...selectedTags, ...extraTags].join(' / ') }}</span>
+                <span v-if="selectedTags.length || extraTags.length">
+                  &middot; {{ [...selectedTags, ...extraTags].join(' / ') }}
+                </span>
               </div>
               <p class="card-text">{{ snippet }}</p>
               <div class="card-foot">

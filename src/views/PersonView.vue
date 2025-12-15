@@ -40,7 +40,7 @@
 
       <section class="grid">
         <div v-if="currentList.length === 0" class="empty">
-          <div class="empty-icon">🌱</div>
+          <div class="empty-icon">&#127793;</div>
           <p>No content yet.</p>
         </div>
         <div v-else class="cards">
@@ -64,7 +64,7 @@
                 <component :is="card._liked ? CircleCheckFilled : CircleCheck" />
               </el-icon>
               <span>{{ card.like_count || 0 }}</span>
-              <span class="dot">·</span>
+              <span class="dot">&middot;</span>
               <el-icon :class="['stat-icon', 'fav', { active: card._fav }]">
                 <component :is="card._fav ? StarFilled : Star" />
               </el-icon>

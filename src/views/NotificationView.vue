@@ -14,7 +14,7 @@
     <main class="content">
       <header class="top">
         <h2>Notifications</h2>
-        <div class="hint">Likes · Favorites · Comments</div>
+        <div class="hint">Likes &middot; Favorites &middot; Comments</div>
       </header>
 
       <section v-if="!auth.user" class="empty">
@@ -148,7 +148,7 @@
                 <div class="chat-toolbar">
                   <el-popover placement="top-start" width="240" trigger="click" v-model:visible="emojiVisible">
                     <template #reference>
-                      <el-button size="small" text>😀 Emoji</el-button>
+                      <el-button size="small" text>Emoji</el-button>
                     </template>
                     <div class="emoji-grid">
                       <span v-for="(em, idx) in emojis" :key="idx" class="emoji-cell" @click="addEmoji(em)">
@@ -214,7 +214,55 @@ const chatLoading = ref(false)
 const chatSending = ref(false)
 const messageContainer = ref(null)
 const emojiVisible = ref(false)
-const emojis = ['😀','😃','😄','😁','😆','🥹','😊','😉','😍','😘','😜','🤪','😎','🤔','🤨','😴','😷','🤒','🤕','🤮','🥳','🤯','😇','😭','😡','👍','👎','🙏','👏','👌','🤝','💪','🔥','✨','❤️','💔','💯','🎉','🎁','🌟','🍀','🍔','🍕','🍜','🍣','🍺','☕️']
+const emojis = [
+  '\u{1F600}',
+  '\u{1F603}',
+  '\u{1F604}',
+  '\u{1F601}',
+  '\u{1F606}',
+  '\u{1F979}',
+  '\u{1F60A}',
+  '\u{1F609}',
+  '\u{1F60D}',
+  '\u{1F618}',
+  '\u{1F61C}',
+  '\u{1F92A}',
+  '\u{1F60E}',
+  '\u{1F914}',
+  '\u{1F928}',
+  '\u{1F634}',
+  '\u{1F637}',
+  '\u{1F912}',
+  '\u{1F915}',
+  '\u{1F92E}',
+  '\u{1F973}',
+  '\u{1F92F}',
+  '\u{1F607}',
+  '\u{1F62D}',
+  '\u{1F621}',
+  '\u{1F44D}',
+  '\u{1F44E}',
+  '\u{1F64F}',
+  '\u{1F44F}',
+  '\u{1F44C}',
+  '\u{1F91D}',
+  '\u{1F4AA}',
+  '\u{1F525}',
+  '\u{2728}',
+  '\u{2764}\u{FE0F}',
+  '\u{1F494}',
+  '\u{1F4AF}',
+  '\u{1F389}',
+  '\u{1F381}',
+  '\u{1F31F}',
+  '\u{1F340}',
+  '\u{1F354}',
+  '\u{1F355}',
+  '\u{1F35C}',
+  '\u{1F363}',
+  '\u{1F37A}',
+  '\u{2615}\u{FE0F}',
+]
 const searchKey = ref('')
 const searchResults = ref([])
 const searchLoading = ref(false)

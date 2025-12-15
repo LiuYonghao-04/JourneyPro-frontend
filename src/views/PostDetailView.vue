@@ -15,7 +15,7 @@
       <div class="header">
         <el-button text @click="goBack">Back</el-button>
         <div class="meta">
-          <span>Post · {{ postId }}</span>
+          <span>Post #{{ postId }}</span>
         </div>
       </div>
 
@@ -176,7 +176,7 @@
                           {{ r.user?.nickname || 'Traveler' }}
                         </RouterLink>
                         <span v-else>{{ r.user?.nickname || 'Traveler' }}</span>
-                        → {{ getReplyTargetName(r) }}
+                        &rarr; {{ getReplyTargetName(r) }}
                       </template>
                       <template v-else>
                         <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="inline-link">

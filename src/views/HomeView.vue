@@ -143,18 +143,47 @@ const auth = useAuthStore()
 
 
 const heroCards = [
-  { icon: '🧭', title: 'Smart map', desc: 'Clean UI, focus on your route.'},
-  { icon: '📍', title: 'POI precision', desc: 'Curated stops that match your vibe.'},
-  { icon: '🤝', title: 'Community', desc: 'Learn from locals and fellow travelers.'},
+  { icon: '\u{1F9ED}', title: 'Smart map', desc: 'Clean UI, focus on your route.' },
+  { icon: '\u{1F4CD}', title: 'POI precision', desc: 'Curated stops that match your vibe.' },
+  { icon: '\u{1F91D}', title: 'Community', desc: 'Learn from locals and fellow travelers.' },
 ]
 
 
 const features = [
-  { icon: '🧭', title: 'Adaptive routing', desc: 'Dynamic routes with POI-aware suggestions.', tags: ['live', 'safe'], to: '/map' },
-  { icon: '📚', title: 'POI library', desc: 'Search by mood, theme, or distance.', tags: ['food', 'sights'] },
-  { icon: '💬', title: 'Social layer', desc: 'Posts, likes, saves, and chat in real time.', tags: ['social', 'realtime'], to: '/posts' },
-  { icon: '🔒', title: 'Privacy-first', desc: 'Control what you share and with whom.', tags: ['secure'], modal: 'privacy' },
-  { icon: '⚡', title: 'Fast UX', desc: 'Lightweight, animated, and delightful.', tags: ['fast'], modal: 'ux' },
+  {
+    icon: '\u{1F9ED}',
+    title: 'Adaptive routing',
+    desc: 'Dynamic routes with POI-aware suggestions.',
+    tags: ['live', 'safe'],
+    to: '/map',
+  },
+  {
+    icon: '\u{1F4DA}',
+    title: 'POI library',
+    desc: 'Search by mood, theme, or distance.',
+    tags: ['food', 'sights'],
+  },
+  {
+    icon: '\u{1F4AC}',
+    title: 'Social layer',
+    desc: 'Posts, likes, saves, and chat in real time.',
+    tags: ['social', 'realtime'],
+    to: '/posts',
+  },
+  {
+    icon: '\u{1F512}',
+    title: 'Privacy-first',
+    desc: 'Control what you share and with whom.',
+    tags: ['secure'],
+    modal: 'privacy',
+  },
+  {
+    icon: '\u26A1',
+    title: 'Fast UX',
+    desc: 'Lightweight, animated, and delightful.',
+    tags: ['fast'],
+    modal: 'ux',
+  },
 ]
 
 const activeModal = ref(null)
@@ -813,7 +842,6 @@ h1 span {
   }
 }
 </style>
-
 
 
 
