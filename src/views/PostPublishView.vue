@@ -73,7 +73,7 @@
             </div>
             <el-input v-model="imageInput" placeholder="https://...jpg">
               <template #append>
-                <el-button type="primary" @click="addImage" :disabled="!imageInput.trim()">Add</el-button>
+                <el-button type="primary" @click="startAddImageCrop" :disabled="!imageInput.trim()">Add</el-button>
               </template>
             </el-input>
             <div class="thumbs" v-if="images.length">
@@ -95,10 +95,11 @@
                   &times;
                 </button>
                 <div class="thumb-badge" v-if="idx === 0">Cover</div>
-                <img :src="img" :alt="`img-${idx}`" />
-              </div>
-            </div>
-          </div>
+                 <CroppedImage :src="img" :alt="`img-${idx}`" class="thumb-img" />
+                 <div class="thumb-mask" role="button" tabindex="0" @click.stop="openCropForIndex(idx)">Change</div>
+               </div>
+             </div>
+           </div>
 
           <div class="field">
             <div class="label-row">
@@ -171,7 +172,7 @@
           <h3 class="card-title">Live preview</h3>
           <div class="card">
             <div class="cover" :class="{ empty: !coverImage }">
-              <img v-if="coverImage" :src="coverImage" alt="cover" />
+              <CroppedImage v-if="coverImage" :src="coverImage" alt="cover" class="cover-img" />
               <div v-else class="placeholder">Cover will appear here</div>
             </div>
             <div class="card-body">
@@ -190,9 +191,21 @@
             </div>
           </div>
         </div>
-      </section>
-    </main>
-  </div>
+          </section>
+        </main>
+      </div>
+
+      <ImageCropperDialog
+        v-model="imageCropOpen"
+        :src="imageCropSrc"
+        title="Crop image"
+        :aspect-ratio="4 / 3"
+        :output-width="720"
+        :output-height="540"
+        :preview-width="180"
+        :initial-crop="imageCropInitial"
+        @confirm="onImageCropConfirm"
+      />
 </template>
 
 <script setup>
@@ -200,6 +213,10 @@ import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import ImageCropperDialog from '../components/ImageCropperDialog.vue'
+import CroppedImage from '../components/CroppedImage.vue'
+import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
+import { proxiedImageSrc } from '../utils/imageProxy'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const TAG_API = 'http://localhost:3001/api/posts/tags/list'
@@ -215,6 +232,11 @@ const tagOptions = ref([])
 const selectedTags = reactive([])
 const images = ref([])
 const imageInput = ref('')
+const imageCropOpen = ref(false)
+const imageCropSrc = ref('')
+const imageCropInitial = ref(null)
+const imageCropBaseUrl = ref('')
+const imageEditingIndex = ref(null)
 const poiInput = ref('')
 const poiOptions = ref([])
 const poiLoading = ref(false)
@@ -243,11 +265,49 @@ const toggleTag = (tag) => {
   else selectedTags.push(tag)
 }
 
-const addImage = () => {
-  const url = imageInput.value.trim()
-  if (!url) return
-  images.value = [...images.value, url]
-  imageInput.value = ''
+const startAddImageCrop = () => {
+  const raw = (imageInput.value || '').trim()
+  if (!raw) return
+  imageEditingIndex.value = null
+  const parsed = parseUrlWithCrop(raw)
+  imageCropBaseUrl.value = parsed.baseUrl || raw
+  imageCropInitial.value = parsed.crop
+  imageCropSrc.value = proxiedImageSrc(imageCropBaseUrl.value)
+  imageCropOpen.value = true
+}
+
+const openCropForIndex = (idx) => {
+  const raw = images.value?.[idx]
+  if (!raw) return
+  imageEditingIndex.value = idx
+  const parsed = parseUrlWithCrop(raw)
+  imageCropBaseUrl.value = parsed.baseUrl || raw
+  imageCropInitial.value = parsed.crop
+  imageCropSrc.value = proxiedImageSrc(imageCropBaseUrl.value)
+  imageCropOpen.value = true
+}
+
+const onImageCropConfirm = async (crop) => {
+  try {
+    const base = imageCropBaseUrl.value || parseUrlWithCrop(imageInput.value).baseUrl || imageInput.value
+    const url = buildUrlWithCrop(base, crop)
+    if (imageEditingIndex.value === null || imageEditingIndex.value === undefined) {
+      images.value = [...images.value, url]
+      imageInput.value = ''
+    } else {
+      const idx = imageEditingIndex.value
+      const list = [...images.value]
+      list[idx] = url
+      images.value = list
+    }
+    alertType.value = 'success'
+    alertMessage.value = 'Image cropped.'
+  } catch {
+    alertType.value = 'error'
+    alertMessage.value = 'Image crop failed. Please try again.'
+  } finally {
+    imageCropOpen.value = false
+  }
 }
 
 const removeImage = (idx) => {
@@ -390,6 +450,17 @@ watch(
   () => ({ ...form, selectedTags: [...selectedTags], images: [...images.value], poi: selectedPoi.value, poiInput: poiInput.value }),
   () => saveDraft(),
   { deep: true }
+)
+
+watch(
+  () => imageCropOpen.value,
+  (open) => {
+    if (open) return
+    imageCropSrc.value = ''
+    imageEditingIndex.value = null
+    imageCropInitial.value = null
+    imageCropBaseUrl.value = ''
+  }
 )
 </script>
 
@@ -547,16 +618,38 @@ label {
   height: 100%;
   object-fit: cover;
 }
+.thumb-img {
+  width: 100%;
+  height: 100%;
+}
 .thumb.draggable {
   cursor: grab;
+}
+.thumb-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 2;
+}
+.thumb:hover .thumb-mask {
+  opacity: 1;
 }
 .thumb-delete {
   position: absolute;
   top: 6px;
   left: 6px;
+  z-index: 3;
   border: none;
   background: rgba(0, 0, 0, 0.6);
-  color: var(--fg);
+  color: #fff;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -567,8 +660,9 @@ label {
   position: absolute;
   bottom: 6px;
   left: 6px;
+  z-index: 3;
   background: rgba(0, 0, 0, 0.6);
-  color: var(--fg);
+  color: #fff;
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 10px;
@@ -645,7 +739,8 @@ label {
 }
 .cover {
   background: var(--badge);
-  height: 220px;
+  width: 100%;
+  aspect-ratio: 4 / 3;
   display: grid;
   place-items: center;
 }
@@ -653,6 +748,10 @@ label {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.cover-img {
+  width: 100%;
+  height: 100%;
 }
 .cover.empty {
   background: linear-gradient(

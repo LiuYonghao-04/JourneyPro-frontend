@@ -44,10 +44,10 @@
               v-if="item.actor_id"
               :to="`/person?userid=${item.actor_id}`"
             >
-              <img :src="item.avatar_url || placeholder" />
+              <CroppedImage :src="item.avatar_url || placeholder" class="avatar-img" :aspect-ratio="1" />
             </RouterLink>
             <div class="avatar" v-else>
-              <img :src="item.avatar_url || placeholder" />
+              <CroppedImage :src="item.avatar_url || placeholder" class="avatar-img" :aspect-ratio="1" />
             </div>
             <div class="body">
               <div class="row">
@@ -97,7 +97,7 @@
                   @click="startChatWithUser(u)"
                 >
                   <RouterLink :to="`/person?userid=${u.id}`">
-                    <img :src="u.avatar_url || placeholder" class="chat-avatar" />
+                    <CroppedImage :src="u.avatar_url || placeholder" class="chat-avatar" :aspect-ratio="1" />
                   </RouterLink>
                   <div class="search-text">
                     <div class="chat-name">{{ u.nickname || u.username || ('User ' + u.id) }}</div>
@@ -115,7 +115,7 @@
               @click="openConversation(c.peer_id)"
             >
               <RouterLink :to="`/person?userid=${c.peer_id}`">
-                <img class="chat-avatar" :src="c.avatar_url || placeholder" />
+                <CroppedImage class="chat-avatar" :src="c.avatar_url || placeholder" :aspect-ratio="1" />
               </RouterLink>
               <div class="chat-conv-main">
                 <div class="chat-conv-top">
@@ -183,6 +183,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import CroppedImage from '../components/CroppedImage.vue'
 
 const API_BASE = 'http://localhost:3001/api/notifications'
 const CHAT_BASE = 'http://localhost:3001/api/chat'
@@ -620,11 +621,17 @@ watch(
 .card:last-child {
   border-bottom: none;
 }
-.avatar img {
+.avatar {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+}
+.avatar-img {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  object-fit: cover;
   background: var(--badge);
 }
 .body {

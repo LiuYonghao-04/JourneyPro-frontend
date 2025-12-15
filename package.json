@@ -13,6 +13,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.12.2",
+    "cropperjs": "^1.6.2",
     "element-plus": "^2.11.5",
     "leaflet": "^1.9.4",
     "leaflet-routing-machine": "^3.2.12",

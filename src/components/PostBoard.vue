@@ -68,11 +68,12 @@
           >
             <div class="cover" v-if="card.cover_image || (card.images && card.images[0])">
               <div v-if="!loadedMap[card._dupKey || card.id]" class="img-skeleton" />
-              <img
+              <CroppedImage
                 :src="card.cover_image || card.images?.[0]"
                 :alt="card.title"
                 loading="lazy"
-                @load="markLoaded(card)"
+                class="cover-img"
+                @load="() => markLoaded(card)"
               />
               <div class="floating-tag" v-if="card.tags?.length">{{ card.tags[0] }}</div>
             </div>
@@ -122,6 +123,7 @@ import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled, ArrowUpBold } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
+import CroppedImage from './CroppedImage.vue'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const auth = useAuthStore()
@@ -557,13 +559,9 @@ const markLoaded = (card) => {
   min-height: 240px;
   background: var(--badge);
 }
-.cover img {
-  position: relative;
+.cover-img {
   width: 100%;
-  height: 100%;
   min-height: 240px;
-  display: block;
-  object-fit: cover;
 }
 .img-skeleton {
   position: absolute;

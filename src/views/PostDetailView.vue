@@ -23,7 +23,7 @@
         <div class="media">
           <el-carousel v-if="post.images?.length" height="520px">
             <el-carousel-item v-for="(img, idx) in post.images" :key="idx">
-              <img :src="img" :alt="`image-${idx}`" class="media-img" />
+              <CroppedImage :src="img" :alt="`image-${idx}`" class="media-img" />
             </el-carousel-item>
           </el-carousel>
           <div v-else class="media-placeholder">No image</div>
@@ -32,9 +32,9 @@
         <div class="body">
           <div class="author">
             <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="avatar-link">
-              <img :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
+              <CroppedImage :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
             </RouterLink>
-            <img v-else :src="post.user?.avatar_url || defaultAvatar" class="avatar" />
+            <CroppedImage v-else :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
             <div class="author-info">
               <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="name-link">
                 <div class="name">{{ post.user?.nickname || 'Traveler' }}</div>
@@ -120,9 +120,9 @@
           <div v-for="c in comments" :key="c.id" class="comment-item">
             <div class="comment-head">
               <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="avatar-link">
-                <img :src="c.user?.avatar_url || defaultAvatar" class="avatar" />
+                <CroppedImage :src="c.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
               </RouterLink>
-              <img v-else :src="c.user?.avatar_url || defaultAvatar" class="avatar" />
+              <CroppedImage v-else :src="c.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
               <div class="comment-meta">
                 <div class="name">
                   <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="inline-link">
@@ -168,9 +168,9 @@
               <div v-for="r in flattenReplies(c)" :key="r.id" class="reply-item">
                 <div class="comment-head reply-head">
                   <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="avatar-link">
-                    <img :src="r.user?.avatar_url || defaultAvatar" class="avatar small" />
+                    <CroppedImage :src="r.user?.avatar_url || defaultAvatar" class="avatar small" :aspect-ratio="1" />
                   </RouterLink>
-                  <img v-else :src="r.user?.avatar_url || defaultAvatar" class="avatar small" />
+                  <CroppedImage v-else :src="r.user?.avatar_url || defaultAvatar" class="avatar small" :aspect-ratio="1" />
                   <div class="comment-meta reply-meta">
                     <div class="name" :class="{ muted: r._depth > 1 }">
                       <template v-if="r._depth > 1">
@@ -228,6 +228,7 @@ import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
+import CroppedImage from '../components/CroppedImage.vue'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'

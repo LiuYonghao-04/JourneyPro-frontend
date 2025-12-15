@@ -13,7 +13,7 @@
     <main class="content">
       <header class="profile">
         <div class="avatar-wrap" @click="isSelf && openAvatarDialog()">
-          <img :src="displayAvatar" alt="avatar" />
+          <CroppedImage :src="displayAvatar" alt="avatar" class="avatar-img" :aspect-ratio="1" />
           <div v-if="isSelf" class="avatar-mask">Change</div>
         </div>
         <div class="info">
@@ -52,10 +52,11 @@
           >
             <div class="cover" v-if="card.cover_image || card.images?.[0]">
               <div v-if="!loadedMap[coverKey(card)]" class="img-skeleton" />
-              <img
+              <CroppedImage
                 :src="card.cover_image || card.images?.[0]"
                 loading="lazy"
-                @load="markLoaded(card)"
+                class="cover-img"
+                @load="() => markLoaded(card)"
               />
             </div>
             <div class="card-title">{{ card.title }}</div>
@@ -79,7 +80,7 @@
   <el-dialog v-model="followerDialog" title="Followers" width="360px">
     <div class="followers-list" v-if="followers.length">
       <div v-for="f in followers" :key="f.id" class="follower-item">
-        <img :src="f.avatar_url || 'https://placehold.co/80x80'" class="follower-avatar" />
+        <CroppedImage :src="f.avatar_url || 'https://placehold.co/80x80'" class="follower-avatar" :aspect-ratio="1" />
         <div>
           <div class="follower-name">{{ f.nickname || 'Traveler' }}</div>
           <div class="follower-meta">ID: {{ f.user_id }}</div>
@@ -94,13 +95,26 @@
       <el-input v-model="avatarInput" placeholder="https://..."></el-input>
       <div class="avatar-actions">
         <el-button size="small" @click="randomAvatar">Random</el-button>
-        <el-button type="primary" size="small" @click="saveAvatar">Save</el-button>
+        <el-button type="primary" size="small" @click="startAvatarCrop">Save</el-button>
       </div>
-      <div class="avatar-preview">
-        <img :src="avatarInput || displayAvatar" alt="preview" />
+      <div class="avatar-preview clickable" role="button" tabindex="0" @click="startAvatarCrop">
+        <CroppedImage :src="avatarInput || displayAvatar" alt="preview" class="avatar-preview-img" :aspect-ratio="1" />
+        <div class="avatar-preview-mask">Change</div>
       </div>
     </div>
   </el-dialog>
+
+  <ImageCropperDialog
+    v-model="avatarCropOpen"
+    :src="avatarCropSrc"
+    title="Crop avatar"
+    :aspect-ratio="1"
+    :output-width="120"
+    :output-height="120"
+    :preview-width="160"
+    :initial-crop="avatarCropInitial"
+    @confirm="onAvatarCropConfirm"
+  />
 </template>
 
 <script setup>
@@ -109,6 +123,10 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
+import ImageCropperDialog from '../components/ImageCropperDialog.vue'
+import CroppedImage from '../components/CroppedImage.vue'
+import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
+import { proxiedImageSrc } from '../utils/imageProxy'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'
@@ -128,6 +146,10 @@ const followerDialog = ref(false)
 const profile = ref(null)
 const avatarDialog = ref(false)
 const avatarInput = ref('')
+const avatarCropOpen = ref(false)
+const avatarCropSrc = ref('')
+const avatarCropInitial = ref(null)
+const avatarCropBaseUrl = ref('')
 
 const fetchData = async () => {
   const uid = userId.value
@@ -204,9 +226,23 @@ const randomAvatar = () => {
   avatarInput.value = `https://picsum.photos/seed/jp_post${seed}_cover/120/120`
 }
 
-const saveAvatar = async () => {
-  const url = (avatarInput.value || '').trim()
-  if (!url) return
+const startAvatarCrop = () => {
+  if (!isSelf.value) return
+  const raw = (avatarInput.value || '').trim()
+  if (!raw) {
+    alert('Please enter an image URL first.')
+    return
+  }
+  const parsed = parseUrlWithCrop(raw)
+  avatarCropBaseUrl.value = parsed.baseUrl || raw
+  avatarCropInitial.value = parsed.crop
+  avatarCropSrc.value = proxiedImageSrc(avatarCropBaseUrl.value)
+  avatarCropOpen.value = true
+}
+
+const persistAvatarUrl = async (finalUrl) => {
+  const url = String(finalUrl || '').trim()
+  if (!url) return false
   try {
     const res = await axios.post(`${AUTH_API}/avatar`, {
       user_id: auth.user?.id,
@@ -216,10 +252,26 @@ const saveAvatar = async () => {
     if (updated) {
       profile.value = updated
       auth.setUser(updated)
-      avatarDialog.value = false
+      return true
     }
-  } catch (e) {
+  } catch {
     // ignore
+  }
+  return false
+}
+
+const onAvatarCropConfirm = async (crop) => {
+  try {
+    const base = avatarCropBaseUrl.value || parseUrlWithCrop(avatarInput.value).baseUrl || avatarInput.value
+    const finalUrl = buildUrlWithCrop(base, crop)
+    avatarInput.value = finalUrl
+    const ok = await persistAvatarUrl(finalUrl)
+    if (!ok) throw new Error('save failed')
+    avatarDialog.value = false
+  } catch {
+    alert('Avatar update failed. Please try again.')
+  } finally {
+    avatarCropOpen.value = false
   }
 }
 
@@ -243,6 +295,16 @@ watch(
   () => isSelf.value,
   (val) => {
     if (!val) tab.value = 'posts'
+  }
+)
+
+watch(
+  () => avatarCropOpen.value,
+  (open) => {
+    if (open) return
+    avatarCropSrc.value = ''
+    avatarCropInitial.value = null
+    avatarCropBaseUrl.value = ''
   }
 )
 </script>
@@ -309,9 +371,9 @@ watch(
   position: relative;
   cursor: pointer;
 }
-.avatar-wrap img {
+.avatar-img {
   width: 100%;
-  object-fit: cover;
+  height: 100%;
 }
 .avatar-mask {
   position: absolute;
@@ -396,13 +458,12 @@ watch(
   border: 1px solid #eee;
   cursor: pointer;
 }
-.card .cover img {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
-}
 .card .cover {
   position: relative;
+  height: 180px;
+}
+.cover-img {
+  width: 100%;
   height: 180px;
 }
 .img-skeleton {
@@ -471,15 +532,37 @@ watch(
 }
 .avatar-preview {
   display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
   padding: 8px;
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   background: var(--badge);
+  position: relative;
 }
-.avatar-preview img {
+.avatar-preview.clickable {
+  cursor: pointer;
+}
+.avatar-preview-mask {
+  position: absolute;
+  inset: 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-weight: 700;
+  font-size: 13px;
+  pointer-events: none;
+}
+.avatar-preview:hover .avatar-preview-mask {
+  opacity: 1;
+}
+.avatar-preview-img {
   width: 100px;
   height: 100px;
-  object-fit: cover;
   border-radius: 10px;
 }
 </style>
