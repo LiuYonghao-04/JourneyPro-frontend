@@ -7,30 +7,40 @@
 
     <div v-if="!collapsed">
       <div v-if="loading" class="empty">Loading recommendations...</div>
+      <div v-else>
+        <div v-if="profileHint" class="profile-hint">
+          <span class="hint-label">For you</span>
+          <span class="hint-tags">{{ profileHint }}</span>
+        </div>
 
-      <div v-else-if="pois.length === 0" class="empty">
-        No recommendations yet. Plan a route first.
-      </div>
+        <div v-if="pois.length === 0" class="empty">
+          No recommendations yet. Plan a route first.
+        </div>
 
-      <ul v-else class="poi-list">
-        <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
-          <div class="poi-info" @click="focusPoi(poi)">
-            <div class="poi-name">{{ poi.name }}</div>
-            <div class="poi-meta">
-              <span>{{ poi.category }}</span>
-              <span class="dot">|</span>
-              <span>Popularity {{ poi.popularity }}</span>
+        <ul v-else class="poi-list">
+          <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
+            <div class="poi-info" @click="focusPoi(poi)">
+              <div class="poi-name">{{ poi.name }}</div>
+              <div class="poi-meta">
+                <span>{{ poi.category }}</span>
+                <span class="dot">|</span>
+                <span>Popularity {{ poi.popularity }}</span>
+              </div>
+              <div v-if="poi.reason" class="poi-reason">{{ poi.reason }}</div>
+              <div v-if="poi.match_tags?.length" class="poi-tags">
+                <span v-for="tag in poi.match_tags.slice(0, 3)" :key="tag" class="poi-tag">#{{ tag }}</span>
+              </div>
             </div>
-          </div>
-          <button
-            class="add-btn"
-            :class="{ danger: isViaPoint(poi) }"
-            @click="togglePoi(poi)"
-          >
-            {{ isViaPoint(poi) ? 'Delete' : 'Add' }}
-          </button>
-        </li>
-      </ul>
+            <button
+              class="add-btn"
+              :class="{ danger: isViaPoint(poi) }"
+              @click="togglePoi(poi)"
+            >
+              {{ isViaPoint(poi) ? 'Delete' : 'Add' }}
+            </button>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
@@ -58,6 +68,15 @@ onBeforeUnmount(() => {
 
 const pois = computed(() => routeStore.recommendedPOIs || [])
 const loading = computed(() => routeStore.isLoading)
+const profile = computed(() => routeStore.recommendationProfile || null)
+const profileHint = computed(() => {
+  if (!profile.value?.personalized) return ''
+  const tags = Array.isArray(profile.value.tags) ? profile.value.tags : []
+  const categories = Array.isArray(profile.value.categories) ? profile.value.categories : []
+  const combined = [...tags, ...categories].filter(Boolean)
+  const unique = [...new Set(combined)].slice(0, 4)
+  return unique.join(', ')
+})
 const isViaPoint = (poi) => {
   return (routeStore.viaPoints || []).some((p) =>
     poi.id ? p.id === poi.id : p.lat === poi.lat && p.lng === poi.lng
@@ -163,6 +182,26 @@ const toggle = () => {
   align-items: center;
   gap: 4px;
 }
+.poi-reason {
+  font-size: 12px;
+  color: var(--map-overlay-fg);
+  opacity: 0.85;
+  margin-top: 4px;
+}
+.poi-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.poi-tag {
+  font-size: 11px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--badge) 70%, transparent);
+  border: 1px solid var(--map-overlay-border);
+  padding: 2px 6px;
+  border-radius: 999px;
+}
 .dot {
   color: var(--muted);
 }
@@ -187,6 +226,22 @@ const toggle = () => {
   color: var(--muted);
   text-align: center;
   padding: 12px 0;
+}
+.profile-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
+  border: 1px solid var(--map-overlay-border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.hint-label {
+  font-weight: 600;
+  color: var(--map-overlay-fg);
 }
 
 .poi-panel ::-webkit-scrollbar {

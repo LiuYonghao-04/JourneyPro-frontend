@@ -731,6 +731,7 @@ onMounted(() => {
     () => {
       updateViaMarkers()
       scheduleFetchRoute()
+      routeStore.fetchRecommendedPois()
     },
     { deep: true }
   )

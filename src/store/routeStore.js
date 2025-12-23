@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import L from 'leaflet'
+import { useAuthStore } from './authStore'
 
 const STORAGE_KEY = 'jp_via_points'
 
@@ -38,6 +39,7 @@ export const useRouteStore = defineStore('route', {
     totalDuration: null,
     legs: [],
     recommendedPOIs: [],
+    recommendationProfile: null,
     isLoading: false,
     isRouting: false,
     routeError: null,
@@ -119,21 +121,34 @@ export const useRouteStore = defineStore('route', {
     async fetchRecommendedPois() {
       this.isLoading = true
       try {
+        const auth = useAuthStore()
         const start = `${this.startLng},${this.startLat}`
         const end = `${this.endLng},${this.endLat}`
-        const url = `http://localhost:3001/api/route/recommend?start=${start}&end=${end}`
+        const via = (this.viaPoints || [])
+          .filter((poi) => typeof poi?.lat === 'number' && typeof poi?.lng === 'number')
+          .map((poi) => `${poi.lng},${poi.lat}`)
+          .join(';')
+        const params = new URLSearchParams({ start, end })
+        if (via) params.set('via', via)
+        if (auth.user?.id) params.set('user_id', auth.user.id)
+        const url = `http://localhost:3001/api/route/recommend?${params.toString()}`
 
         const res = await fetch(url)
         const data = await res.json()
 
         if (data.recommended_pois || data.recommendations) {
           this.recommendedPOIs = data.recommended_pois || data.recommendations
+          this.recommendationProfile = data.profile || null
           console.log('Recommended via points loaded', this.recommendedPOIs.length)
         } else {
           console.warn('No recommendation data returned', data)
+          this.recommendedPOIs = []
+          this.recommendationProfile = null
         }
       } catch (err) {
         console.error('fetchRecommendedPois error:', err)
+        this.recommendedPOIs = []
+        this.recommendationProfile = null
       } finally {
         this.isLoading = false
       }

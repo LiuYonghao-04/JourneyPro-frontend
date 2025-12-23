@@ -266,7 +266,9 @@ const formatTime = (time) => {
 
 const fetchPost = async () => {
   await loadReactions()
-  const res = await axios.get(`${API_BASE}/${postId.value}`)
+  const res = await axios.get(`${API_BASE}/${postId.value}`, {
+    params: { user_id: auth.user?.id },
+  })
   const data = res.data?.data
   post.value = {
     ...data,
