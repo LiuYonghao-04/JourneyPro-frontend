@@ -32,6 +32,68 @@
         </div>
       </header>
 
+      <section v-if="isSelf" class="reco-insights">
+        <div class="reco-card">
+          <div class="reco-title">Recommendation balance</div>
+          <div class="reco-sub">Distance {{ distancePercent }}% · Interest {{ interestPercent }}%</div>
+          <el-slider v-model="interestSlider" :min="0" :max="100" :show-tooltip="true" />
+          <div class="reco-scale">
+            <span>Distance-first</span>
+            <span>Interest-first</span>
+          </div>
+        </div>
+
+        <div class="reco-card">
+          <div class="reco-title">Your interests</div>
+          <div v-if="interestProfile?.signals" class="reco-sub">
+            Likes {{ interestProfile.signals.likes }} · Favorites {{ interestProfile.signals.favorites }} · Views
+            {{ interestProfile.signals.views }}
+          </div>
+
+          <div v-if="interestLoading" class="reco-empty">Loading...</div>
+          <div v-else-if="!interestProfile?.personalized" class="reco-empty">
+            Interact with posts to build your profile.
+          </div>
+          <div v-else class="interest-sections">
+            <div class="interest-section">
+              <div class="section-title">Tags</div>
+              <div v-for="item in interestTags" :key="item.name" class="bar-item">
+                <div class="bar-row">
+                  <span class="bar-label">#{{ item.name }}</span>
+                  <span class="bar-value">{{ item.percent }}%</span>
+                </div>
+                <el-progress :percentage="item.percent" :stroke-width="10" :show-text="false" />
+              </div>
+              <div v-if="otherTagPercent > 0" class="bar-item">
+                <div class="bar-row">
+                  <span class="bar-label">Other</span>
+                  <span class="bar-value">{{ otherTagPercent }}%</span>
+                </div>
+                <el-progress :percentage="otherTagPercent" :stroke-width="10" :show-text="false" />
+              </div>
+            </div>
+
+            <div class="interest-section">
+              <div class="section-title">POI categories</div>
+              <div v-for="item in interestCategories" :key="item.name" class="bar-item">
+                <div class="bar-row">
+                  <span class="bar-label">{{ item.name }}</span>
+                  <span class="bar-value">{{ item.percent }}%</span>
+                </div>
+                <el-progress :percentage="item.percent" :stroke-width="10" :show-text="false" />
+              </div>
+              <div v-if="otherCategoryPercent > 0" class="bar-item">
+                <div class="bar-row">
+                  <span class="bar-label">Other</span>
+                  <span class="bar-value">{{ otherCategoryPercent }}%</span>
+                </div>
+                <el-progress :percentage="otherCategoryPercent" :stroke-width="10" :show-text="false" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div class="tabs">
         <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">Posts</button>
         <button v-if="isSelf" class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">Favorites</button>
@@ -123,6 +185,7 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
+import { useRouteStore } from '../store/routeStore'
 import ImageCropperDialog from '../components/ImageCropperDialog.vue'
 import CroppedImage from '../components/CroppedImage.vue'
 import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
@@ -134,6 +197,7 @@ const AUTH_API = 'http://localhost:3001/api/auth'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const routeStore = useRouteStore()
 const userId = computed(() => route.query.userid || auth.user?.id)
 const isSelf = computed(() => String(userId.value || '') === String(auth.user?.id || ''))
 const posts = ref([])
@@ -278,9 +342,29 @@ const onAvatarCropConfirm = async (crop) => {
 const displayUserName = computed(() => profile.value?.nickname || auth.user?.nickname || 'Traveler')
 const displayAvatar = computed(() => profile.value?.avatar_url || auth.user?.avatar_url || 'https://placehold.co/120x120')
 
+const interestSlider = computed({
+  get() {
+    return Math.round(((routeStore.recoInterestWeight ?? 0.5) * 100))
+  },
+  set(val) {
+    const num = Number(val)
+    const normalized = Number.isFinite(num) ? num / 100 : 0.5
+    routeStore.setRecoInterestWeight(normalized)
+  },
+})
+const interestPercent = computed(() => interestSlider.value)
+const distancePercent = computed(() => 100 - interestSlider.value)
+const interestProfile = computed(() => routeStore.userInterestProfile || null)
+const interestLoading = computed(() => routeStore.interestProfileLoading)
+const interestTags = computed(() => interestProfile.value?.tags?.items || [])
+const otherTagPercent = computed(() => Number(interestProfile.value?.tags?.other_percent) || 0)
+const interestCategories = computed(() => interestProfile.value?.categories?.items || [])
+const otherCategoryPercent = computed(() => Number(interestProfile.value?.categories?.other_percent) || 0)
+
 onMounted(() => {
   fetchData()
   fetchProfile()
+  if (auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
 })
 
 watch(
@@ -288,6 +372,7 @@ watch(
   () => {
     fetchData()
     fetchProfile()
+    if (isSelf.value && auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
   }
 )
 
@@ -295,6 +380,7 @@ watch(
   () => isSelf.value,
   (val) => {
     if (!val) tab.value = 'posts'
+    if (val && auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
   }
 )
 
@@ -361,6 +447,70 @@ watch(
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+.reco-insights {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.reco-card {
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  border: 1px solid #eee;
+}
+.reco-title {
+  font-weight: 800;
+  color: var(--fg);
+  margin-bottom: 6px;
+}
+.reco-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.reco-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.reco-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px 0;
+}
+.interest-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.interest-section .section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+.bar-item {
+  margin-bottom: 10px;
+}
+.bar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.bar-label {
+  color: var(--fg);
+  opacity: 0.8;
+}
+.bar-value {
+  color: var(--muted);
 }
 .avatar-wrap {
   width: 120px;
@@ -564,5 +714,14 @@ watch(
   width: 100px;
   height: 100px;
   border-radius: 10px;
+}
+
+@media (max-width: 1100px) {
+  .reco-insights {
+    grid-template-columns: 1fr;
+  }
+  .interest-sections {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

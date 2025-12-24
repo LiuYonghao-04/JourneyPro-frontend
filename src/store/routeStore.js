@@ -3,6 +3,9 @@ import L from 'leaflet'
 import { useAuthStore } from './authStore'
 
 const STORAGE_KEY = 'jp_via_points'
+const RECO_WEIGHT_KEY = 'jp_reco_interest_weight'
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 
 function loadViaPoints() {
   if (typeof window === 'undefined') return []
@@ -25,6 +28,29 @@ function saveViaPoints(list) {
   }
 }
 
+function loadRecoInterestWeight() {
+  if (typeof window === 'undefined') return 0.5
+  try {
+    const raw = localStorage.getItem(RECO_WEIGHT_KEY)
+    const num = Number(raw)
+    if (!Number.isFinite(num)) return 0.5
+    // Support storing as 0..1 or 0..100.
+    const normalized = num > 1 ? num / 100 : num
+    return clamp(normalized, 0, 1)
+  } catch (e) {
+    return 0.5
+  }
+}
+
+function saveRecoInterestWeight(weight) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(RECO_WEIGHT_KEY, String(weight))
+  } catch (e) {
+    // ignore
+  }
+}
+
 export const useRouteStore = defineStore('route', {
   state: () => ({
     startAddress: 'London_center',
@@ -40,6 +66,9 @@ export const useRouteStore = defineStore('route', {
     legs: [],
     recommendedPOIs: [],
     recommendationProfile: null,
+    recoInterestWeight: loadRecoInterestWeight(),
+    userInterestProfile: null,
+    interestProfileLoading: false,
     isLoading: false,
     isRouting: false,
     routeError: null,
@@ -118,6 +147,37 @@ export const useRouteStore = defineStore('route', {
       saveViaPoints(this.viaPoints)
     },
 
+    setRecoInterestWeight(weight) {
+      const num = Number(weight)
+      if (!Number.isFinite(num)) return
+      this.recoInterestWeight = clamp(num, 0, 1)
+      saveRecoInterestWeight(this.recoInterestWeight)
+    },
+
+    async fetchUserInterestProfile(userId) {
+      const uid = Number(userId)
+      if (!Number.isFinite(uid) || !uid) {
+        this.userInterestProfile = null
+        return
+      }
+
+      this.interestProfileLoading = true
+      try {
+        const url = `http://localhost:3001/api/recommendation/profile?user_id=${uid}`
+        const res = await fetch(url)
+        const data = await res.json()
+        if (!res.ok || !data?.success) {
+          this.userInterestProfile = null
+          return
+        }
+        this.userInterestProfile = data
+      } catch (e) {
+        this.userInterestProfile = null
+      } finally {
+        this.interestProfileLoading = false
+      }
+    },
+
     async fetchRecommendedPois() {
       this.isLoading = true
       try {
@@ -131,6 +191,7 @@ export const useRouteStore = defineStore('route', {
         const params = new URLSearchParams({ start, end })
         if (via) params.set('via', via)
         if (auth.user?.id) params.set('user_id', auth.user.id)
+        params.set('interest_weight', String(this.recoInterestWeight ?? 0.5))
         const url = `http://localhost:3001/api/route/recommend?${params.toString()}`
 
         const res = await fetch(url)

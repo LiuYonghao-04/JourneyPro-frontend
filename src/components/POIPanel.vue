@@ -13,6 +13,14 @@
           <span class="hint-tags">{{ profileHint }}</span>
         </div>
 
+        <div class="tuning">
+          <div class="tuning-row">
+            <span class="tuning-side">Distance {{ distancePercent }}%</span>
+            <span class="tuning-side">Interest {{ interestPercent }}%</span>
+          </div>
+          <el-slider v-model="tuningValue" :min="0" :max="100" :show-tooltip="false" @change="applyTuning" />
+        </div>
+
         <div v-if="pois.length === 0" class="empty">
           No recommendations yet. Plan a route first.
         </div>
@@ -77,6 +85,21 @@ const profileHint = computed(() => {
   const unique = [...new Set(combined)].slice(0, 4)
   return unique.join(', ')
 })
+const tuningValue = computed({
+  get() {
+    return Math.round(((routeStore.recoInterestWeight ?? 0.5) * 100))
+  },
+  set(val) {
+    const num = Number(val)
+    const normalized = Number.isFinite(num) ? num / 100 : 0.5
+    routeStore.setRecoInterestWeight(normalized)
+  },
+})
+const interestPercent = computed(() => tuningValue.value)
+const distancePercent = computed(() => 100 - tuningValue.value)
+const applyTuning = () => {
+  routeStore.fetchRecommendedPois()
+}
 const isViaPoint = (poi) => {
   return (routeStore.viaPoints || []).some((p) =>
     poi.id ? p.id === poi.id : p.lat === poi.lat && p.lng === poi.lng
@@ -242,6 +265,25 @@ const toggle = () => {
 .hint-label {
   font-weight: 600;
   color: var(--map-overlay-fg);
+}
+.tuning {
+  margin-top: 10px;
+  padding: 8px 10px 2px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 70%, transparent);
+  border: 1px solid var(--map-overlay-border);
+}
+.tuning-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.tuning-side {
+  color: var(--muted);
+  opacity: 0.8;
 }
 
 .poi-panel ::-webkit-scrollbar {
