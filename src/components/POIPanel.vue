@@ -98,7 +98,7 @@ const tuningValue = computed({
 const interestPercent = computed(() => tuningValue.value)
 const distancePercent = computed(() => 100 - tuningValue.value)
 const applyTuning = () => {
-  routeStore.fetchRecommendedPois()
+  routeStore.reorderRecommendedPois()
 }
 const isViaPoint = (poi) => {
   return (routeStore.viaPoints || []).some((p) =>

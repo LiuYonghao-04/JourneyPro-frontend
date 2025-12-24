@@ -7,6 +7,8 @@ const RECO_WEIGHT_KEY = 'jp_reco_interest_weight'
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 
+let recoSettingsSaveTimer = null
+
 function loadViaPoints() {
   if (typeof window === 'undefined') return []
   try {
@@ -152,6 +154,83 @@ export const useRouteStore = defineStore('route', {
       if (!Number.isFinite(num)) return
       this.recoInterestWeight = clamp(num, 0, 1)
       saveRecoInterestWeight(this.recoInterestWeight)
+
+      this.reorderRecommendedPois()
+
+      const auth = useAuthStore()
+      if (!auth.user?.id) return
+      if (recoSettingsSaveTimer) clearTimeout(recoSettingsSaveTimer)
+      recoSettingsSaveTimer = setTimeout(() => {
+        recoSettingsSaveTimer = null
+        this.saveRecoSettingsToServer(auth.user.id)
+      }, 500)
+    },
+
+    async fetchRecoSettingsFromServer(userId) {
+      const uid = Number(userId)
+      if (!Number.isFinite(uid) || !uid) return
+
+      try {
+        const url = `http://localhost:3001/api/recommendation/settings?user_id=${uid}`
+        const res = await fetch(url)
+        const data = await res.json()
+        if (!res.ok || !data?.success) return
+
+        const raw = Number(data.interest_weight)
+        if (!Number.isFinite(raw)) return
+        const normalized = raw > 1 ? raw / 100 : raw
+        // Apply server value without scheduling a save back.
+        this.recoInterestWeight = clamp(normalized, 0, 1)
+        saveRecoInterestWeight(this.recoInterestWeight)
+        this.reorderRecommendedPois()
+      } catch (e) {
+        // ignore
+      }
+    },
+
+    async saveRecoSettingsToServer(userId) {
+      const uid = Number(userId)
+      if (!Number.isFinite(uid) || !uid) return
+
+      const auth = useAuthStore()
+      if (!auth.user?.id || Number(auth.user.id) !== uid) return
+
+      try {
+        await fetch('http://localhost:3001/api/recommendation/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: uid,
+            interest_weight: this.recoInterestWeight ?? 0.5,
+          }),
+        })
+      } catch (e) {
+        // ignore
+      }
+    },
+
+    reorderRecommendedPois() {
+      if (!Array.isArray(this.recommendedPOIs) || this.recommendedPOIs.length === 0) return
+      const iw = clamp(Number(this.recoInterestWeight ?? 0.5), 0, 1)
+      const dw = 1 - iw
+      const compute = (p) =>
+        (Number(p?.distance_score) || 0) * dw + (Number(p?.interest_score) || 0) * iw
+
+      this.recommendedPOIs = [...this.recommendedPOIs].sort((a, b) => {
+        const sa = compute(a)
+        const sb = compute(b)
+        if (sb !== sa) return sb - sa
+        const ba = Number(a?.base_score) || 0
+        const bb = Number(b?.base_score) || 0
+        if (bb !== ba) return bb - ba
+        const pa = Number(a?.popularity) || 0
+        const pb = Number(b?.popularity) || 0
+        if (pb !== pa) return pb - pa
+        const da = Number(a?.distance) || 0
+        const db = Number(b?.distance) || 0
+        if (da !== db) return da - db
+        return (Number(a?.id) || 0) - (Number(b?.id) || 0)
+      })
     },
 
     async fetchUserInterestProfile(userId) {
@@ -200,6 +279,7 @@ export const useRouteStore = defineStore('route', {
         if (data.recommended_pois || data.recommendations) {
           this.recommendedPOIs = data.recommended_pois || data.recommendations
           this.recommendationProfile = data.profile || null
+          this.reorderRecommendedPois()
           console.log('Recommended via points loaded', this.recommendedPOIs.length)
         } else {
           console.warn('No recommendation data returned', data)

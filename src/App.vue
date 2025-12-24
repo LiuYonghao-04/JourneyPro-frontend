@@ -57,10 +57,12 @@
 
 <script setup>
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect, watch } from 'vue'
 import { useAuthStore } from './store/authStore'
+import { useRouteStore } from './store/routeStore'
 
 const auth = useAuthStore()
+const routeStore = useRouteStore()
 const route = useRoute()
 const isPostsActive = computed(() => route.path.startsWith('/posts') || route.path.startsWith('/notifications'))
 const isLoginPage = computed(() => route.name === 'login')
@@ -74,6 +76,15 @@ watchEffect(() => {
 const toggleTheme = () => {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
+
+watch(
+  () => auth.user?.id,
+  (uid) => {
+    if (!uid) return
+    routeStore.fetchRecoSettingsFromServer(uid)
+  },
+  { immediate: true }
+)
 </script>
 
 <style>
