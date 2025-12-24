@@ -144,11 +144,11 @@
                     id="jpDeviceRoute"
                     class="mini-route"
                     pathLength="100"
-                    d="M46 560 C 120 500, 190 470, 250 452 S 318 388, 336 312"
+                    d="M46 500 C 120 470, 190 458, 250 442 S 318 388, 336 312"
                   />
 
-                  <circle class="mini-pin a" cx="46" cy="560" r="8" />
-                  <circle class="mini-pin b" cx="250" cy="452" r="8" />
+                  <circle class="mini-pin a" cx="46" cy="500" r="8" />
+                  <circle class="mini-pin b" cx="250" cy="442" r="8" />
                   <circle class="mini-pin c" cx="336" cy="312" r="8" />
 
                   <circle v-if="!reduceMotion" class="mini-traveler" r="6">
@@ -160,7 +160,7 @@
 
                 <div class="device-sheet">
                   <div class="sheet-title">Recommended stops</div>
-                  <div class="sheet-row" v-for="p in demoSortedPois" :key="p.name">
+                  <div class="sheet-row" v-for="p in demoSortedPois.slice(0, 3)" :key="p.name">
                     <div class="sheet-ic">{{ p.icon }}</div>
                     <div class="sheet-main">
                       <div class="sheet-name">{{ p.name }}</div>
@@ -353,11 +353,18 @@
         <div class="section-inner">
           <div class="section-head">
             <h2 class="section-title">Scroll-driven details.</h2>
-            <p class="section-sub">Keep scrolling &mdash; cards flip to reveal what's underneath.</p>
+            <p class="section-sub">Click a card &mdash; it flips to reveal what's underneath.</p>
           </div>
 
           <div class="showcase-grid">
-            <div class="flip-card" style="--start: 0.08; --k: 2.8571">
+            <button
+              class="flip-card"
+              :class="{ flipped: showcaseFlip[0] }"
+              type="button"
+              :aria-pressed="showcaseFlip[0] ? 'true' : 'false'"
+              aria-label="Flip card: Recommendation and Signals"
+              @click="toggleShowcaseFlip(0)"
+            >
               <div class="flip-inner">
                 <div class="flip-face front">
                   <div class="flip-eyebrow">Recommendation</div>
@@ -379,9 +386,16 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
 
-            <div class="flip-card" style="--start: 0.18; --k: 2.8571">
+            <button
+              class="flip-card"
+              :class="{ flipped: showcaseFlip[1] }"
+              type="button"
+              :aria-pressed="showcaseFlip[1] ? 'true' : 'false'"
+              aria-label="Flip card: Navigation and Community"
+              @click="toggleShowcaseFlip(1)"
+            >
               <div class="flip-inner">
                 <div class="flip-face front">
                   <div class="flip-eyebrow">Navigation</div>
@@ -404,11 +418,11 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
 
           <div class="showcase-note">
-            Tip: this "pin + animate" pattern is how Apple-style pages feel like you're moving through content.
+            Tip: scroll still drives the scene; click drives the flip.
           </div>
         </div>
       </div>
@@ -724,6 +738,13 @@ const demoSortedPois = computed(() => {
     .sort((a, b) => b.score - a.score)
 })
 
+const showcaseFlip = ref([false, false])
+const toggleShowcaseFlip = (index) => {
+  const list = showcaseFlip.value
+  const next = list.map((isFlipped, i) => (i === index ? !isFlipped : false))
+  showcaseFlip.value = next
+}
+
 const spotlightLoading = ref(true)
 const spotlightError = ref('')
 const spotlightPosts = ref([])
@@ -937,6 +958,10 @@ onBeforeUnmount(() => {
   opacity: 1;
   transform: translateY(0);
 }
+.scene.jp-reveal,
+.scene.jp-reveal.is-visible {
+  transform: none;
+}
 
 .eyebrow {
   letter-spacing: 0.08em;
@@ -962,6 +987,7 @@ onBeforeUnmount(() => {
   padding: 28px 20px;
   box-sizing: border-box;
   overflow: hidden;
+  background: var(--jp-home-bg);
 }
 
 .hero-bg {
@@ -1176,8 +1202,6 @@ onBeforeUnmount(() => {
 .device-map {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
 }
 .mini-road {
   stroke: rgba(255, 255, 255, 0.18);
@@ -1215,14 +1239,14 @@ onBeforeUnmount(() => {
   right: 12px;
   bottom: 12px;
   border-radius: 22px;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.32);
+  padding: 10px 10px 9px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.14));
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(18px) saturate(180%);
   z-index: 3;
 }
 :global(body[data-theme='light']) .device-sheet {
-  background: rgba(255, 255, 255, 0.78);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.78));
   border-color: rgba(29, 29, 31, 0.10);
 }
 .sheet-title {
@@ -1232,7 +1256,7 @@ onBeforeUnmount(() => {
   opacity: 0.92;
 }
 .sheet-row {
-  margin-top: 10px;
+  margin-top: 8px;
   display: grid;
   grid-template-columns: 28px 1fr auto;
   gap: 10px;
@@ -1340,7 +1364,9 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   display: grid;
   align-content: start;
-  overflow: visible;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--jp-home-bg);
 }
 
 .scene-props {
@@ -1353,39 +1379,50 @@ onBeforeUnmount(() => {
   height: 150vh;
 }
 
-.scene-props .props {
-  transform: translateY(calc((0.55 - var(--p)) * 70px));
-  transition: transform 0.12s linear;
+.scene-props .scene-sticky {
+  z-index: 30;
+  opacity: calc(1 - clamp(0, (var(--p) - 0.88) * 8, 1));
+  transition: opacity 0.12s linear;
 }
-.scene-props .prop:nth-child(1) {
-  transform: translateY(calc((0.6 - var(--p)) * 36px));
+.scene-tiles .scene-sticky {
+  z-index: 25;
+  opacity: calc(1 - clamp(0, (var(--p) - 0.88) * 8, 1));
+  transition: opacity 0.12s linear;
 }
-.scene-props .prop:nth-child(2) {
-  transform: translateY(calc((0.5 - var(--p)) * 44px));
-}
-.scene-props .prop:nth-child(3) {
-  transform: translateY(calc((0.4 - var(--p)) * 58px));
-}
-.scene-props .prop:nth-child(4) {
-  transform: translateY(calc((0.3 - var(--p)) * 72px));
+.scene-showcase .scene-sticky {
+  z-index: 20;
+  opacity: calc(1 - clamp(0, (var(--p) - 0.88) * 8, 1));
+  transition: opacity 0.12s linear;
 }
 
-.scene-tiles .section-head {
-  transform: translateY(calc((0.55 - var(--p)) * 46px));
+.scene-props .props {
+  transform: translateY(calc((0.5 - var(--p)) * 48px));
   transition: transform 0.12s linear;
+  will-change: transform;
+}
+
+.scene-tiles .section-inner {
+  transform: translateY(calc((0.5 - var(--p)) * 46px));
+  transition: transform 0.12s linear;
+  will-change: transform;
 }
 .scene-tiles .tiles-grid {
-  transform: translateY(calc((0.55 - var(--p)) * 120px)) scale(calc(0.96 + var(--p) * 0.04));
+  transform: scale(calc(0.98 + var(--p) * 0.02));
+  transform-origin: top center;
   transition: transform 0.12s linear;
+  will-change: transform;
 }
 
-.scene-showcase .section-head {
-  transform: translateY(calc((0.55 - var(--p)) * 42px));
+.scene-showcase .section-inner {
+  transform: translateY(calc((0.5 - var(--p)) * 44px));
   transition: transform 0.12s linear;
+  will-change: transform;
 }
 .scene-showcase .showcase-grid {
-  transform: translateY(calc((0.5 - var(--p)) * 120px));
+  transform: scale(calc(0.985 + var(--p) * 0.015));
+  transform-origin: top center;
   transition: transform 0.12s linear;
+  will-change: transform;
 }
 
 .section {
@@ -1606,21 +1643,45 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 .flip-card {
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
   border-radius: 32px;
   background: var(--jp-surface);
   border: 1px solid var(--jp-border);
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
   perspective: 1200px;
   min-height: 280px;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+.flip-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(127, 127, 127, 0.22);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.16);
+}
+.flip-card:active {
+  transform: translateY(0);
+}
+.flip-card:focus-visible {
+  outline: 2px solid var(--jp-accent);
+  outline-offset: 4px;
 }
 .flip-inner {
   height: 100%;
   border-radius: inherit;
   position: relative;
   transform-style: preserve-3d;
-  --fp: clamp(0, calc((var(--p) - var(--start, 0)) * var(--k, 2.8571)), 1);
-  transform: rotateY(calc(var(--fp) * 180deg));
-  transition: transform 0.12s linear;
+  transform: rotateY(0deg);
+  transition: transform 0.65s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+.flip-card.flipped .flip-inner {
+  transform: rotateY(180deg);
 }
 .flip-face {
   position: absolute;
@@ -1956,11 +2017,10 @@ onBeforeUnmount(() => {
     padding: 56px 18px;
   }
   .scene-props .props,
-  .scene-tiles .section-head,
+  .scene-tiles .section-inner,
   .scene-tiles .tiles-grid,
-  .scene-showcase .section-head,
-  .scene-showcase .showcase-grid,
-  .flip-inner {
+  .scene-showcase .section-inner,
+  .scene-showcase .showcase-grid {
     transform: none !important;
   }
   .props {
@@ -1993,9 +2053,9 @@ onBeforeUnmount(() => {
   .route,
   .mini-route,
   .scene-props .props,
-  .scene-tiles .section-head,
+  .scene-tiles .section-inner,
   .scene-tiles .tiles-grid,
-  .scene-showcase .section-head,
+  .scene-showcase .section-inner,
   .scene-showcase .showcase-grid,
   .flip-inner,
   .scroll-dot {
@@ -2003,11 +2063,10 @@ onBeforeUnmount(() => {
     animation: none !important;
   }
   .scene-props .props,
-  .scene-tiles .section-head,
+  .scene-tiles .section-inner,
   .scene-tiles .tiles-grid,
-  .scene-showcase .section-head,
-  .scene-showcase .showcase-grid,
-  .flip-inner {
+  .scene-showcase .section-inner,
+  .scene-showcase .showcase-grid {
     transform: none !important;
   }
 }
