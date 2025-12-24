@@ -67,11 +67,16 @@ const route = useRoute()
 const isPostsActive = computed(() => route.path.startsWith('/posts') || route.path.startsWith('/notifications'))
 const isLoginPage = computed(() => route.name === 'login')
 const isRegisterPage = computed(() => route.name === 'register')
+const isHomePage = computed(() => route.name === 'home' || route.path === '/home')
 
 const theme = ref(localStorage.getItem('jp_theme') || 'dark')
 watchEffect(() => {
   document.body.setAttribute('data-theme', theme.value)
   localStorage.setItem('jp_theme', theme.value)
+})
+
+watchEffect(() => {
+  document.body.classList.toggle('jp-home', isHomePage.value)
 })
 const toggleTheme = () => {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
@@ -119,7 +124,7 @@ body {
   --map-overlay-border: #1f2937;
   --map-overlay-fg: #e5e7eb;
 }
-:global(body[data-theme='dark']) {
+body[data-theme='dark'] {
   --bg-main: #0b1221;
   --bg-pattern: radial-gradient(circle at 20% 20%, rgba(110, 143, 255, 0.12), transparent 30%),
     radial-gradient(circle at 80% 0%, rgba(255, 118, 174, 0.14), transparent 28%),
@@ -138,7 +143,7 @@ body {
   --map-overlay-border: #243047;
   --map-overlay-fg: #e5e7eb;
 }
-:global(body[data-theme='light']) {
+body[data-theme='light'] {
   --bg-main: #f7f9fc;
   --bg-pattern: radial-gradient(circle at 20% 18%, rgba(255, 226, 196, 0.20), transparent 32%),
     radial-gradient(circle at 78% 8%, rgba(192, 214, 255, 0.24), transparent 30%),
@@ -158,6 +163,15 @@ body {
   --map-overlay-fg: #0f172a;
 }
 
+body.jp-home[data-theme='dark'] {
+  --bg-main: #050506;
+  --fg: #f5f5f7;
+}
+body.jp-home[data-theme='light'] {
+  --bg-main: #f5f5f7;
+  --fg: #1d1d1f;
+}
+
 .jp-header {
   height: 56px;
   padding: 0 24px;
@@ -165,9 +179,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #ffffff;
-  border-bottom: 1px solid #eee;
-  transition: background-color 1s ease, border-color 1s ease, color 1s ease;
+  background: color-mix(in srgb, var(--bg-main) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  color: var(--fg);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease;
   position: fixed;
   top: 0;
   left: 0;
@@ -175,11 +192,20 @@ body {
   z-index: 2000;
 }
 
+body.jp-home .jp-header {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+body.jp-home.jp-home-scrolled .jp-header {
+  background: color-mix(in srgb, var(--bg-main) 72%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+
 .jp-logo a {
   font-weight: 700;
   font-size: 18px;
   text-decoration: none;
-  color: #222;
+  color: var(--fg);
 }
 
 .jp-nav {
@@ -189,7 +215,7 @@ body {
 
 .jp-nav-link {
   text-decoration: none;
-  color: #555;
+  color: color-mix(in srgb, var(--fg) 76%, transparent);
   font-size: 14px;
   padding: 4px 10px;
   border-radius: 999px;
@@ -284,7 +310,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #333;
+  color: var(--fg);
 }
 
 .nickname {

@@ -1,191 +1,570 @@
 <template>
-  <div class="page" :style="parallaxStyle" @mousemove="handleMouse">
-    <!-- Removed floating blobs -->
+  <div class="page" ref="pageEl" @scroll.passive="onScroll">
+    <nav class="side-nav" aria-label="On this page">
+      <button
+        v-for="item in navItems"
+        :key="item.key"
+        type="button"
+        class="side-nav-item"
+        :class="{ active: activeAnchor === item.key }"
+        :aria-current="activeAnchor === item.key ? 'page' : null"
+        @click="scrollToAnchor(item.key)"
+      >
+        <span class="side-nav-dot" aria-hidden="true"></span>
+        <span class="side-nav-text">{{ item.label }}</span>
+      </button>
+    </nav>
 
-    <section class="intro" ref="sections">
-      <div class="intro-text" :style="introStyle">
-        <div class="intro-logo">JourneyPro</div>
-        <p class="intro-sub">Where routes meet stories</p>
-        <div class="intro-anim">
-          <span class="pulse"></span>
-          <span class="pulse"></span>
-          <span class="pulse"></span>
+    <section class="hero" id="hero" ref="heroEl" :style="heroVars">
+      <div class="hero-sticky">
+        <div class="hero-bg" aria-hidden="true">
+          <svg class="hero-bg-svg" viewBox="0 0 1200 700" fill="none">
+            <defs>
+              <linearGradient id="jpRouteGrad" x1="0" y1="0" x2="1200" y2="700" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="var(--jp-accent)" stop-opacity="1" />
+                <stop offset="1" stop-color="var(--jp-accent-2)" stop-opacity="1" />
+              </linearGradient>
+              <radialGradient
+                id="jpGlow"
+                cx="0"
+                cy="0"
+                r="1"
+                gradientUnits="userSpaceOnUse"
+                gradientTransform="translate(620 280) rotate(90) scale(520 900)"
+              >
+                <stop offset="0" stop-color="var(--jp-accent)" stop-opacity="0.24" />
+                <stop offset="1" stop-color="transparent" stop-opacity="0" />
+              </radialGradient>
+              <filter id="jpSoftBlur" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="18" />
+              </filter>
+            </defs>
+
+            <rect x="-20" y="-20" width="1240" height="740" fill="url(#jpGlow)" />
+
+            <path class="road" d="M120 560 C 260 480, 410 430, 560 420 S 880 430, 1100 320" />
+            <path class="road" d="M160 200 C 320 320, 420 380, 520 420 S 720 520, 980 610" />
+            <path class="road" d="M240 620 C 360 560, 480 530, 600 500 S 780 420, 980 260" />
+            <path class="road" d="M80 340 C 220 310, 350 320, 480 360 S 760 470, 1120 520" />
+
+            <path
+              id="jpHeroRoute"
+              class="route"
+              pathLength="100"
+              d="M160 520 C 330 420, 460 360, 620 340 S 940 300, 1060 220"
+            />
+
+            <circle class="pin pin-a" cx="160" cy="520" r="10" />
+            <circle class="pin pin-b" cx="620" cy="340" r="10" />
+            <circle class="pin pin-c" cx="1060" cy="220" r="10" />
+
+            <circle v-if="!reduceMotion" class="traveler" r="8">
+              <animateMotion
+                dur="7.5s"
+                repeatCount="indefinite"
+                keyTimes="0;1"
+                keySplines="0.25 0.1 0.25 1"
+                calcMode="spline"
+              >
+                <mpath href="#jpHeroRoute" />
+              </animateMotion>
+            </circle>
+          </svg>
         </div>
-        <a class="scroll-hint" href="#main" @click.prevent="jumpToMain">Scroll to explore &darr;</a>
-      </div>
-      <div class="intro-scenery">
-        <div class="intro-mountain"></div>
-        <div
-          v-if="theme === 'light'"
-          class="intro-sun"
-          :style="sunStyle"
-        ></div>
-        <div
-          v-else
-          class="intro-moon"
-          :style="moonStyle"
-        ></div>
-<!--        <div class="intro-cloud cloud-a"></div>-->
-<!--        <div class="intro-cloud cloud-b"></div>-->
-      </div>
-    </section>
 
-    <header class="hero" id="main">
-      <div class="hero-bg"></div>
-      <div class="hero-content">
-        <p class="eyebrow">JourneyPro &middot; Intelligent Trip OS</p>
-        <h1>
-          Plan smart. <span>Explore deeper.</span>
-        </h1>
-        <p class="lede">
-          Not just shortest paths &mdash; discover food, scenery, and stories along every journey.
-        </p>
-        <div class="hero-actions">
-          <RouterLink class="btn primary" to="/map">Open Map</RouterLink>
-          <RouterLink class="btn ghost" to="/posts">Community</RouterLink>
-          <template v-if="!auth.user">
-            <RouterLink class="btn ghost" to="/login">Login</RouterLink>
-            <RouterLink class="btn ghost" to="/register">Register</RouterLink>
-          </template>
-        </div>
-        <div class="hero-badges">
-          <span class="badge">Live routing</span>
-          <span class="badge">POI discovery</span>
-          <span class="badge">Social planning</span>
-        </div>
-      </div>
-      <div class="hero-visual">
-        <div class="glass card" v-for="card in heroCards" :key="card.title">
-          <div class="icon">{{ card.icon }}</div>
-          <div class="title">{{ card.title }}</div>
-          <div class="desc">{{ card.desc }}</div>
-        </div>
-      </div>
-    </header>
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">JourneyPro</p>
+            <h1 class="hero-title">
+              Explore,
+              <span class="accent">personalized</span>.
+            </h1>
+            <p class="hero-lede">
+              POI recommendations that balance what you love and what's close &mdash; all along your route.
+            </p>
 
-    <section class="section" ref="sections">
-      <div class="section-header">
-        <p class="eyebrow">Why JourneyPro</p>
-        <h2>Three pillars for better trips</h2>
-        <p class="lede narrow">
-          Curated POIs, seamless routing, and a vibrant community to keep you inspired along the way.
-        </p>
-      </div>
-                  <div class="grid">
-        <component
-          v-for="f in features"
-          :is="f.to ? RouterLink : 'div'"
-          :to="f.to"
-          class="feature card"
-          :class="{ link: !!f.to }"
-          :key="f.title"
-        >
-          <div class="icon">{{ f.icon }}</div>
-          <h3>{{ f.title }}</h3>
-          <p>{{ f.desc }}</p>
-          <div class="chip" v-for="tag in f.tags" :key="tag">{{ tag }}</div>
-        </component>
-      </div>
-    </section>
-
-    <section class="section alt" ref="sections">
-      <div class="section-header">
-        <p class="eyebrow">Flow</p>
-        <h2>From idea to itinerary</h2>
-      </div>
-      <div class="timeline">
-        <div class="step" v-for="(step, idx) in steps" :key="step.title">
-          <div class="dot">{{ idx + 1 }}</div>
-          <div class="body">
-            <h4>{{ step.title }}</h4>
-            <p>{{ step.desc }}</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" ref="sections">
-      <div class="section-header">
-        <p class="eyebrow">Spotlight</p>
-        <h2>Trending in Community</h2>
-        <p class="lede narrow">
-          Fresh inspiration from travelers. Open a post to see photos, comments, and the map location.
-        </p>
-      </div>
-
-      <div v-if="spotlightError" class="spotlight-error card">
-        <div class="title">Community is offline</div>
-        <div class="desc">Start the API server to load trending posts.</div>
-        <RouterLink class="btn ghost" to="/posts">Go to Community</RouterLink>
-      </div>
-
-      <div v-else class="grid spotlight-grid">
-        <div v-if="spotlightLoading" v-for="n in 5" :key="n" class="spotlight-card skeleton" />
-
-        <RouterLink
-          v-else
-          v-for="p in spotlightPosts"
-          :key="p.id"
-          :to="`/posts/postsid=${p.id}`"
-          class="spotlight-card link"
-        >
-          <div class="spotlight-cover" :class="{ empty: !coverOf(p) }">
-            <CroppedImage v-if="coverOf(p)" :src="coverOf(p)" :alt="p.title" class="spotlight-img" />
-            <div v-else class="spotlight-empty">No cover</div>
-          </div>
-          <div class="spotlight-body">
-            <div class="spotlight-title">{{ p.title || 'Untitled' }}</div>
-            <div class="spotlight-meta">
-              <span class="name">{{ p.user?.nickname || 'Guest' }}</span>
-<!--              <span class="dot">·</span>-->
-              <span class="date">{{ formatShortDate(p.created_at) }}</span>
+            <div class="hero-actions">
+              <RouterLink class="btn primary" to="/map">Open Map</RouterLink>
+              <RouterLink class="btn ghost" to="/posts">Community</RouterLink>
+              <template v-if="!auth.user">
+                <RouterLink class="btn ghost" to="/login">Login</RouterLink>
+              </template>
             </div>
-            <div class="spotlight-stats">
-              <span class="stat">
-                <el-icon class="stat-ic"><CircleCheck /></el-icon>
-                {{ p.like_count || 0 }}
-              </span>
-              <span class="stat">
-                <el-icon class="stat-ic"><Star /></el-icon>
-                {{ p.favorite_count || 0 }}
-              </span>
-              <span class="stat views">
-                <el-icon class="stat-ic"><View /></el-icon>
-                {{ p.view_count || 0 }}
-              </span>
+
+            <div class="hero-metrics">
+              <div class="metric">
+                <div class="k">Interest x Distance</div>
+                <div class="v">User-controlled tuning</div>
+              </div>
+              <div class="metric">
+                <div class="k">Along-route POIs</div>
+                <div class="v">Start / End / Via-aware</div>
+              </div>
+              <div class="metric">
+                <div class="k">Signals</div>
+                <div class="v">Likes &middot; Favorites &middot; Views</div>
+              </div>
             </div>
           </div>
-        </RouterLink>
-      </div>
 
-      <div class="spotlight-more">
-        <RouterLink class="btn ghost" to="/posts">Browse Community</RouterLink>
-      </div>
-    </section>
+          <div class="hero-media">
+            <div class="device" role="img" aria-label="Animated route preview">
+              <div class="device-screen">
+                <div class="device-top">
+                  <div class="search-pill">Search along route</div>
+                  <div class="status-dot"></div>
+                </div>
 
-    <section class="section" ref="sections">
-      <div class="cta card">
-        <div>
-          <p class="eyebrow">Ready?</p>
-          <h2>Jump in and start planning</h2>
-          <p class="lede">Map a route, post inspiration, or save POIs you love.</p>
-          <div class="hero-actions">
-            <RouterLink class="btn primary" to="/posts/publish">Publish Inspiration</RouterLink>
-            <RouterLink class="btn ghost" to="/posts">Browse Community</RouterLink>
+                <svg class="device-map" viewBox="0 0 360 680" fill="none">
+                  <defs>
+                    <linearGradient id="jpDeviceGrad" x1="0" y1="0" x2="360" y2="680" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stop-color="rgba(255,255,255,0.10)" />
+                      <stop offset="1" stop-color="rgba(255,255,255,0.02)" />
+                    </linearGradient>
+                    <linearGradient
+                      id="jpDeviceRouteGrad"
+                      x1="0"
+                      y1="0"
+                      x2="360"
+                      y2="680"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0" stop-color="var(--jp-accent)" />
+                      <stop offset="1" stop-color="var(--jp-accent-2)" />
+                    </linearGradient>
+                  </defs>
+
+                  <rect x="0" y="0" width="360" height="680" rx="28" fill="url(#jpDeviceGrad)" />
+
+                  <path class="mini-road" d="M40 580 C 120 520, 180 480, 250 460 S 320 390, 340 300" />
+                  <path class="mini-road" d="M20 260 C 120 280, 180 330, 250 380 S 320 520, 350 640" />
+                  <path class="mini-road" d="M10 420 C 90 400, 150 390, 220 360 S 320 290, 360 240" />
+
+                  <path
+                    id="jpDeviceRoute"
+                    class="mini-route"
+                    pathLength="100"
+                    d="M46 560 C 120 500, 190 470, 250 452 S 318 388, 336 312"
+                  />
+
+                  <circle class="mini-pin a" cx="46" cy="560" r="8" />
+                  <circle class="mini-pin b" cx="250" cy="452" r="8" />
+                  <circle class="mini-pin c" cx="336" cy="312" r="8" />
+
+                  <circle v-if="!reduceMotion" class="mini-traveler" r="6">
+                    <animateMotion dur="6.2s" repeatCount="indefinite">
+                      <mpath href="#jpDeviceRoute" />
+                    </animateMotion>
+                  </circle>
+                </svg>
+
+                <div class="device-sheet">
+                  <div class="sheet-title">Recommended stops</div>
+                  <div class="sheet-row" v-for="p in demoSortedPois" :key="p.name">
+                    <div class="sheet-ic">{{ p.icon }}</div>
+                    <div class="sheet-main">
+                      <div class="sheet-name">{{ p.name }}</div>
+                      <div class="sheet-meta">{{ p.category }} &middot; {{ p.distanceKm.toFixed(1) }} km</div>
+                    </div>
+                    <div class="sheet-score">{{ Math.round(p.score * 100) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo">
+              <div class="demo-label">
+                <span>Distance {{ demoDistancePct }}%</span>
+                <span>Interest {{ demoInterestPct }}%</span>
+              </div>
+              <input class="demo-range" type="range" min="0" max="100" v-model.number="demoWeightPct" />
+              <div class="demo-hint">Slider changes ordering only &mdash; nothing disappears.</div>
+            </div>
           </div>
         </div>
-        <div class="cta-visual">
-          <div class="cta-bubble">Live ETA</div>
-          <div class="cta-bubble">Offline-ready</div>
-          <div class="cta-bubble">Multi-stop</div>
+
+        <div class="hero-scroll" aria-hidden="true">
+          <div class="scroll-dot"></div>
+          <div class="scroll-text">Scroll</div>
         </div>
       </div>
     </section>
+
+    <section class="scene scene-props jp-reveal" id="props" ref="propsEl" :style="propsVars">
+      <div class="scene-sticky">
+        <div class="section-inner">
+        <h2 class="section-title">Three things, done beautifully.</h2>
+        <p class="section-sub">Big typography, clean cards, and subtle motion &mdash; inspired by Apple-style product pages.</p>
+        <div class="props">
+          <div class="prop card">
+            <div class="prop-ic">01</div>
+            <h3 class="prop-title">Plan</h3>
+            <p class="prop-desc">Multi-stop routes, via points, and fast map preview.</p>
+          </div>
+          <div class="prop card">
+            <div class="prop-ic">02</div>
+            <h3 class="prop-title">Discover</h3>
+            <p class="prop-desc">POIs re-ranked by your interests and route proximity.</p>
+          </div>
+          <div class="prop card">
+            <div class="prop-ic">03</div>
+            <h3 class="prop-title">Share</h3>
+            <p class="prop-desc">Posts, likes, saves &mdash; turn trips into stories.</p>
+          </div>
+          <div class="prop card">
+            <div class="prop-ic">04</div>
+            <h3 class="prop-title">Personalize</h3>
+            <p class="prop-desc">Tune interest vs distance, and see your taste profile as percentages.</p>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="scene scene-tiles jp-reveal" id="explore" ref="tilesEl" :style="tilesVars">
+      <div class="scene-sticky">
+        <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">Made for your journey.</h2>
+          <p class="section-sub">A homepage that feels calm, premium, and alive.</p>
+        </div>
+
+        <div class="tiles-grid">
+          <RouterLink class="tile tile-wide link" to="/map">
+            <div class="tile-copy">
+              <p class="tile-eyebrow">Routing</p>
+              <div class="tile-title">A route-first map UI.</div>
+              <div class="tile-desc">Start &middot; End &middot; Via &mdash; then explore what's nearby.</div>
+              <div class="tile-cta">Open Map &rarr;</div>
+            </div>
+            <div class="tile-media">
+              <div class="mini-card">
+                <div class="mini-k">ETA</div>
+                <div class="mini-v">12 min</div>
+              </div>
+              <div class="mini-card">
+                <div class="mini-k">Stops</div>
+                <div class="mini-v">3</div>
+              </div>
+              <div class="mini-card">
+                <div class="mini-k">Match</div>
+                <div class="mini-v">Food</div>
+              </div>
+            </div>
+          </RouterLink>
+
+          <RouterLink class="tile link" :to="profileLink">
+            <div class="tile-copy">
+              <p class="tile-eyebrow">Profile</p>
+              <div class="tile-title">See what you're into.</div>
+              <div class="tile-desc">Your interest distribution is visualized as percentages.</div>
+              <div class="tile-cta">Open Profile &rarr;</div>
+            </div>
+            <div class="tile-media">
+              <div class="bars">
+                <div class="bar">
+                  <div class="bar-label">Food</div>
+                  <div class="bar-track"><span class="bar-fill" style="--w: 0.62"></span></div>
+                </div>
+                <div class="bar">
+                  <div class="bar-label">History</div>
+                  <div class="bar-track"><span class="bar-fill" style="--w: 0.28"></span></div>
+                </div>
+                <div class="bar">
+                  <div class="bar-label">Nature</div>
+                  <div class="bar-track"><span class="bar-fill" style="--w: 0.10"></span></div>
+                </div>
+              </div>
+            </div>
+          </RouterLink>
+
+          <RouterLink class="tile link" to="/posts">
+            <div class="tile-copy">
+              <p class="tile-eyebrow">Community</p>
+              <div class="tile-title">Trips become stories.</div>
+              <div class="tile-desc">Get inspiration from posts and save places you love.</div>
+              <div class="tile-cta">Browse Community &rarr;</div>
+            </div>
+            <div class="tile-media">
+              <div class="bubble">Photo</div>
+              <div class="bubble">Comment</div>
+              <div class="bubble">Save</div>
+            </div>
+          </RouterLink>
+
+          <RouterLink class="tile link" to="/fast-ux">
+            <div class="tile-copy">
+              <p class="tile-eyebrow">Experience</p>
+              <div class="tile-title">Fast, smooth UX.</div>
+              <div class="tile-desc">Keyboard shortcuts, refined panels, and responsive motion.</div>
+              <div class="tile-cta">Explore UX &rarr;</div>
+            </div>
+            <div class="tile-media">
+              <div class="mini-card">
+                <div class="mini-k">Shortcut</div>
+                <div class="mini-v">F</div>
+              </div>
+              <div class="mini-card">
+                <div class="mini-k">Pin</div>
+                <div class="mini-v">On</div>
+              </div>
+            </div>
+          </RouterLink>
+
+          <RouterLink class="tile link" to="/privacy">
+            <div class="tile-copy">
+              <p class="tile-eyebrow">Privacy</p>
+              <div class="tile-title">Control what you share.</div>
+              <div class="tile-desc">Clear settings and privacy-first defaults for every trip.</div>
+              <div class="tile-cta">Read Privacy &rarr;</div>
+            </div>
+            <div class="tile-media">
+              <div class="bubble">Settings</div>
+              <div class="bubble">Visibility</div>
+              <div class="bubble">Consent</div>
+            </div>
+          </RouterLink>
+
+          <RouterLink class="tile link" to="/notifications">
+            <div class="tile-copy">
+              <p class="tile-eyebrow">Updates</p>
+              <div class="tile-title">Stay in sync.</div>
+              <div class="tile-desc">Likes, favorites, and replies &mdash; all in one inbox.</div>
+              <div class="tile-cta">Open Inbox &rarr;</div>
+            </div>
+            <div class="tile-media">
+              <div class="mini-card">
+                <div class="mini-k">Likes</div>
+                <div class="mini-v">+8</div>
+              </div>
+              <div class="mini-card">
+                <div class="mini-k">Replies</div>
+                <div class="mini-v">2</div>
+              </div>
+            </div>
+          </RouterLink>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="scene scene-showcase jp-reveal" id="showcase" ref="showcaseEl" :style="showcaseVars">
+      <div class="scene-sticky">
+        <div class="section-inner">
+          <div class="section-head">
+            <h2 class="section-title">Scroll-driven details.</h2>
+            <p class="section-sub">Keep scrolling &mdash; cards flip to reveal what's underneath.</p>
+          </div>
+
+          <div class="showcase-grid">
+            <div class="flip-card" style="--start: 0.08; --k: 2.8571">
+              <div class="flip-inner">
+                <div class="flip-face front">
+                  <div class="flip-eyebrow">Recommendation</div>
+                  <div class="flip-title">Ordering, not filtering.</div>
+                  <div class="flip-desc">The slider changes the ranking of POIs &mdash; it won't hide categories.</div>
+                  <div class="flip-pills">
+                    <span class="pill">Distance</span>
+                    <span class="pill">Interest</span>
+                  </div>
+                </div>
+                <div class="flip-face back">
+                  <div class="flip-eyebrow">Signals</div>
+                  <div class="flip-title">Learn what you love.</div>
+                  <div class="flip-desc">Likes, favorites, and views contribute to a personal taste profile.</div>
+                  <div class="flip-pills">
+                    <span class="pill">Like</span>
+                    <span class="pill">Save</span>
+                    <span class="pill">View</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flip-card" style="--start: 0.18; --k: 2.8571">
+              <div class="flip-inner">
+                <div class="flip-face front">
+                  <div class="flip-eyebrow">Navigation</div>
+                  <div class="flip-title">Route-first UI.</div>
+                  <div class="flip-desc">Start / End / Via &mdash; then discover stops along the way.</div>
+                  <div class="flip-pills">
+                    <span class="pill">Start</span>
+                    <span class="pill">Via</span>
+                    <span class="pill">End</span>
+                  </div>
+                </div>
+                <div class="flip-face back">
+                  <div class="flip-eyebrow">Community</div>
+                  <div class="flip-title">Trips become stories.</div>
+                  <div class="flip-desc">Open a post and jump straight to the map location.</div>
+                  <div class="flip-pills">
+                    <span class="pill">Posts</span>
+                    <span class="pill">Photos</span>
+                    <span class="pill">Places</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="showcase-note">
+            Tip: this "pin + animate" pattern is how Apple-style pages feel like you're moving through content.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section flow jp-reveal" id="flow" ref="flowEl">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">From idea to itinerary.</h2>
+          <p class="section-sub">A simple workflow built into JourneyPro, from discovery to sharing.</p>
+        </div>
+
+        <div class="flow-grid">
+          <div class="flow-card card">
+            <div class="flow-num">01</div>
+            <div class="flow-title">Discover</div>
+            <div class="flow-desc">Browse community posts, search POIs, and save places you like.</div>
+          </div>
+          <div class="flow-card card">
+            <div class="flow-num">02</div>
+            <div class="flow-title">Plan</div>
+            <div class="flow-desc">Set start/end/via points, preview the route, and pin useful steps.</div>
+          </div>
+          <div class="flow-card card">
+            <div class="flow-num">03</div>
+            <div class="flow-title">Tune</div>
+            <div class="flow-desc">Choose how much interest vs distance matters &mdash; it only reorders results.</div>
+          </div>
+          <div class="flow-card card">
+            <div class="flow-num">04</div>
+            <div class="flow-title">Share</div>
+            <div class="flow-desc">Publish your trip as a post and help others discover new places.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section spotlight jp-reveal" id="spotlight" ref="spotlightEl">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">Community spotlight.</h2>
+          <RouterLink class="link-more" to="/posts">Browse all &rarr;</RouterLink>
+        </div>
+
+        <div v-if="spotlightError" class="spotlight-empty card">
+          <div class="spotlight-empty-title">Community is offline</div>
+          <div class="spotlight-empty-sub">Start the API server to load trending posts.</div>
+        </div>
+
+        <div v-else class="spotlight-rail" :class="{ loading: spotlightLoading }">
+          <div v-if="spotlightLoading" v-for="n in 6" :key="n" class="spotlight-card skeleton" />
+
+          <RouterLink
+            v-else
+            v-for="p in spotlightPosts"
+            :key="p.id"
+            :to="`/posts/postsid=${p.id}`"
+            class="spotlight-card link"
+          >
+            <div class="spotlight-cover" :class="{ empty: !coverOf(p) }">
+              <CroppedImage v-if="coverOf(p)" :src="coverOf(p)" :alt="p.title" class="spotlight-img" />
+              <div v-else class="spotlight-empty">No cover</div>
+            </div>
+            <div class="spotlight-body">
+              <div class="spotlight-title">{{ p.title || 'Untitled' }}</div>
+              <div class="spotlight-meta">
+                <span class="name">{{ p.user?.nickname || 'Guest' }}</span>
+                <span class="date">{{ formatShortDate(p.created_at) }}</span>
+              </div>
+              <div class="spotlight-stats">
+                <span class="stat">
+                  <el-icon class="stat-ic"><CircleCheck /></el-icon>
+                  {{ p.like_count || 0 }}
+                </span>
+                <span class="stat">
+                  <el-icon class="stat-ic"><Star /></el-icon>
+                  {{ p.favorite_count || 0 }}
+                </span>
+                <span class="stat">
+                  <el-icon class="stat-ic"><View /></el-icon>
+                  {{ p.view_count || 0 }}
+                </span>
+              </div>
+            </div>
+          </RouterLink>
+        </div>
+      </div>
+    </section>
+
+    <section class="section faq jp-reveal" id="faq" ref="faqEl">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">FAQ</h2>
+          <p class="section-sub">A few quick answers about the recommendation and privacy.</p>
+        </div>
+
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>Does the slider hide POIs if my interest is low?</summary>
+            <div class="faq-body">No. The slider only changes the display order (ranking) of the same recommended set.</div>
+          </details>
+          <details class="faq-item">
+            <summary>What signals are used for personalization?</summary>
+            <div class="faq-body">Likes, favorites, and views help build a taste profile, plus distance to your route.</div>
+          </details>
+          <details class="faq-item">
+            <summary>Can I sync my slider setting across devices?</summary>
+            <div class="faq-body">Yes. After login, the weight is loaded from the server and kept consistent across browsers.</div>
+          </details>
+          <details class="faq-item">
+            <summary>What if the community server is offline?</summary>
+            <div class="faq-body">The homepage will show a fallback state; start the API server to load spotlight posts.</div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="section cta jp-reveal" id="start" ref="ctaEl">
+      <div class="section-inner">
+        <div class="cta-card card">
+          <div class="cta-copy">
+            <p class="eyebrow">Ready?</p>
+            <h2 class="section-title">Start your next trip.</h2>
+            <p class="section-sub">Map a route, tune recommendations, and collect places you'll love.</p>
+            <div class="hero-actions">
+              <RouterLink class="btn primary" to="/map">Open Map</RouterLink>
+              <RouterLink class="btn ghost" to="/posts">Community</RouterLink>
+            </div>
+          </div>
+          <div class="cta-media">
+            <div class="cta-chip">Live routing</div>
+            <div class="cta-chip">POI discovery</div>
+            <div class="cta-chip">Interest profile</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="section-inner footer-inner">
+        <div class="footer-brand">
+          <div class="footer-logo">JourneyPro</div>
+          <div class="footer-sub">Intelligent Trip OS</div>
+        </div>
+        <div class="footer-links">
+          <RouterLink class="footer-link" to="/map">Map</RouterLink>
+          <RouterLink class="footer-link" to="/posts">Community</RouterLink>
+          <RouterLink class="footer-link" to="/privacy">Privacy</RouterLink>
+        </div>
+      </div>
+    </footer>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, Star, View } from '@element-plus/icons-vue'
@@ -196,59 +575,154 @@ const auth = useAuthStore()
 
 const API_POSTS = 'http://localhost:3001/api/posts'
 
+const pageEl = ref(null)
+const heroEl = ref(null)
+const propsEl = ref(null)
+const tilesEl = ref(null)
+const showcaseEl = ref(null)
+const flowEl = ref(null)
+const spotlightEl = ref(null)
+const faqEl = ref(null)
+const ctaEl = ref(null)
 
+const heroProgress = ref(0)
+const propsProgress = ref(0)
+const tilesProgress = ref(0)
+const showcaseProgress = ref(0)
 
-const heroCards = [
-  { icon: '\u{1F9ED}', title: 'Smart map', desc: 'Clean UI, focus on your route.' },
-  { icon: '\u{1F4CD}', title: 'POI precision', desc: 'Curated stops that match your vibe.' },
-  { icon: '\u{1F91D}', title: 'Community', desc: 'Learn from locals and fellow travelers.' },
+let rafId = 0
+
+const clamp = (n, min, max) => Math.min(Math.max(n, min), max)
+
+const navItems = [
+  { key: 'hero', label: 'Overview' },
+  { key: 'props', label: 'Pillars' },
+  { key: 'explore', label: 'Explore' },
+  { key: 'showcase', label: 'Showcase' },
+  { key: 'flow', label: 'Flow' },
+  { key: 'spotlight', label: 'Spotlight' },
+  { key: 'faq', label: 'FAQ' },
+  { key: 'start', label: 'Start' },
+]
+const activeAnchor = ref('hero')
+
+const heroVars = computed(() => ({
+  '--hero-p': String(heroProgress.value),
+}))
+
+const propsVars = computed(() => ({
+  '--p': String(propsProgress.value),
+}))
+const tilesVars = computed(() => ({
+  '--p': String(tilesProgress.value),
+}))
+const showcaseVars = computed(() => ({
+  '--p': String(showcaseProgress.value),
+}))
+
+const updateHeaderState = (scrollTop) => {
+  document.body.classList.toggle('jp-home-scrolled', scrollTop > 8)
+}
+
+const topInPage = (page, el) => {
+  if (!page || !el) return 0
+  const pageRect = page.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  return elRect.top - pageRect.top + page.scrollTop
+}
+
+const anchorElByKey = (key) => {
+  const map = {
+    hero: heroEl,
+    props: propsEl,
+    explore: tilesEl,
+    showcase: showcaseEl,
+    flow: flowEl,
+    spotlight: spotlightEl,
+    faq: faqEl,
+    start: ctaEl,
+  }
+  return map[key]?.value || null
+}
+
+const progressFor = (page, sectionEl) => {
+  if (!page || !sectionEl) return 0
+  const scrollTop = page.scrollTop
+  const start = sectionEl.offsetTop
+  const end = Math.max(start, start + sectionEl.offsetHeight - page.clientHeight)
+  const p = end === start ? 1 : (scrollTop - start) / (end - start)
+  return clamp(p, 0, 1)
+}
+
+const updateScrollProgress = () => {
+  const page = pageEl.value
+  if (!page) return
+
+  updateHeaderState(page.scrollTop)
+  heroProgress.value = progressFor(page, heroEl.value)
+  propsProgress.value = progressFor(page, propsEl.value)
+  tilesProgress.value = progressFor(page, tilesEl.value)
+  showcaseProgress.value = progressFor(page, showcaseEl.value)
+
+  const cursor = page.scrollTop + page.clientHeight * 0.35
+  let current = 'hero'
+  for (const item of navItems) {
+    const el = anchorElByKey(item.key)
+    if (!el) continue
+    const top = topInPage(page, el)
+    if (cursor >= top) current = item.key
+  }
+  activeAnchor.value = current
+}
+
+const scheduleUpdate = () => {
+  if (rafId) return
+  rafId = requestAnimationFrame(() => {
+    rafId = 0
+    updateScrollProgress()
+  })
+}
+
+const onScroll = () => {
+  scheduleUpdate()
+}
+
+const scrollToAnchor = (key) => {
+  const page = pageEl.value
+  const el = anchorElByKey(key)
+  if (!page || !el) return
+  const top = topInPage(page, el)
+  page.scrollTo({ top: Math.max(0, top - 12), behavior: 'smooth' })
+}
+
+const profileLink = computed(() => {
+  if (!auth.user?.id) return '/login'
+  return `/person?userid=${auth.user.id}`
+})
+
+const demoWeightPct = ref(50)
+const demoWeight = computed(() => clamp(Number(demoWeightPct.value || 0) / 100, 0, 1))
+const demoDistancePct = computed(() => Math.round((1 - demoWeight.value) * 100))
+const demoInterestPct = computed(() => Math.round(demoWeight.value * 100))
+
+const demoPois = [
+  { icon: 'F', name: 'Noodle House', category: 'Food', interest: 0.92, distanceKm: 1.2 },
+  { icon: 'H', name: 'City Museum', category: 'History', interest: 0.74, distanceKm: 3.8 },
+  { icon: 'F', name: 'Coffee Corner', category: 'Food', interest: 0.62, distanceKm: 0.8 },
+  { icon: 'N', name: 'Riverside Park', category: 'Nature', interest: 0.58, distanceKm: 2.1 },
 ]
 
-
-const features = [
-  {
-    icon: '\u{1F9ED}',
-    title: 'Adaptive routing',
-    desc: 'Dynamic routes with POI-aware suggestions.',
-    tags: ['live', 'safe'],
-    to: '/map',
-  },
-  {
-    icon: '\u{1F4DA}',
-    title: 'POI library',
-    desc: 'Search by mood, theme, or distance.',
-    tags: ['food', 'sights'],
-  },
-  {
-    icon: '\u{1F4AC}',
-    title: 'Social layer',
-    desc: 'Posts, likes, saves, and chat in real time.',
-    tags: ['social', 'realtime'],
-    to: '/posts',
-  },
-  {
-    icon: '\u{1F512}',
-    title: 'Privacy-first',
-    desc: 'Control what you share and with whom.',
-    tags: ['secure'],
-    to: '/privacy',
-  },
-  {
-    icon: '\u26A1',
-    title: 'Fast UX',
-    desc: 'Lightweight, animated, and delightful.',
-    tags: ['fast'],
-    to: '/fast-ux',
-  },
-]
-
-const steps = [
-  { title: 'Discover', desc: 'Browse community posts and curated POIs.' },
-  { title: 'Plan', desc: 'Add stops, reorder, and preview on the map.' },
-  { title: 'Share', desc: 'Publish, chat, and collaborate with friends.' },
-]
-
-const sections = ref([])
+const demoSortedPois = computed(() => {
+  const w = demoWeight.value
+  const maxD = Math.max(...demoPois.map((p) => p.distanceKm), 1)
+  return demoPois
+    .map((p) => {
+      const distanceScore = 1 - clamp(p.distanceKm / maxD, 0, 1)
+      const score = w * p.interest + (1 - w) * distanceScore
+      return { ...p, score }
+    })
+    .sort((a, b) => b.score - a.score)
+})
 
 const spotlightLoading = ref(true)
 const spotlightError = ref('')
@@ -269,7 +743,7 @@ const fetchSpotlight = async () => {
   spotlightLoading.value = true
   spotlightError.value = ''
   try {
-    const res = await axios.get(API_POSTS, { params: { limit: 5, offset: 0, sort: 'hot' } })
+    const res = await axios.get(API_POSTS, { params: { limit: 6, offset: 0, sort: 'hot' } })
     spotlightPosts.value = res.data?.data || []
   } catch (e) {
     spotlightError.value = 'offline'
@@ -278,749 +752,1263 @@ const fetchSpotlight = async () => {
   }
 }
 
-const tilt = ref({ x: 0, y: 0 })
-const parallaxStyle = computed(() => ({
-  '--px': `${tilt.value.x}px`,
-  '--py': `${tilt.value.y}px`,
-  '--intro-progress': introProgress.value,
-}))
-const introProgress = ref(0)
-const scrollHandler = ref(null)
-const wheelHandler = ref(null)
-const introLocked = ref(true)
-const introPlayed = ref(false)
-const theme = ref(document.body.getAttribute('data-theme') || 'dark')
-let themeObserver = null
-const introStyle = computed(() => {
-  if (introPlayed.value && !introLocked.value) {
-    return {
-      transform: 'translateY(0) scale(1)',
-      opacity: 1,
-      filter: 'none',
-    }
-  }
-  const p = Math.min(Math.max(introProgress.value, 0), 1.2)
-  const scale = 1 + p * 4.2 // dramatically fill screen
-  const translateY = 24 - p * 80
-  const opacity = Math.max(1 - p * 1.1, 0)
-  const blur = p * 6
-  return {
-    transform: `translateY(${translateY}px) scale(${scale})`,
-    opacity,
-    filter: `blur(${blur}px)`,
-  }
-})
-const sunStyle = computed(() => {
-  const isLight = theme.value === 'light'
-  if (!introLocked.value) return { opacity: isLight ? 1 : 0, filter: 'none' }
-  const p = Math.min(Math.max(introProgress.value, 0), 1) // 0 -> 1
-  if (!isLight) return { opacity: 0, filter: 'blur(6px)' }
-  if (p <= 0.15) return { opacity: 1, filter: 'none' }
-  const t = Math.min(Math.max((p - 0.15) / 0.35, 0), 1) // fade 15% -> 50%
-  const opacity = 1 - t
-  const blur = t * 8
-  return { opacity, filter: `blur(${blur}px)` }
-})
-
-const moonStyle = computed(() => {
-  const isDark = theme.value === 'dark'
-  if (!introLocked.value) return { opacity: isDark ? 1 : 0, filter: 'none' }
-  if (!isDark) return { opacity: 0, filter: 'blur(6px)' }
-  const p = Math.min(Math.max(introProgress.value, 0), 1)
-  if (p <= 0.15) return { opacity: 1, filter: 'none' }
-  const t = Math.min(Math.max((p - 0.15) / 0.35, 0), 1)
-  const opacity = 1 - t
-  const blur = t * 6
-  return { opacity, filter: `blur(${blur}px)` }
-})
-
-const handleMouse = (e) => {
-  const x = (e.clientX / window.innerWidth - 0.5) * 10
-  const y = (e.clientY / window.innerHeight - 0.5) * 10
-  tilt.value = { x, y }
-}
-
-const unlockIntro = () => {
-  introProgress.value = 0
-  introLocked.value = false
-  introPlayed.value = true
-  document.body.style.overflow = ''
-  if (wheelHandler.value) {
-    window.removeEventListener('wheel', wheelHandler.value)
-  }
-  const main = document.getElementById('main')
-  if (main) {
-    main.scrollIntoView({ behavior: 'smooth' })
-  }
-}
-
-const jumpToMain = () => {
-  introProgress.value = 0
-  unlockIntro()
-}
+let sectionObserver = null
+let motionQuery = null
+let motionListener = null
+const reduceMotion = ref(false)
 
 onMounted(() => {
-  themeObserver = new MutationObserver(() => {
-    theme.value = document.body.getAttribute('data-theme') || 'dark'
-  })
-  themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
+  motionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)') || null
+  if (motionQuery) {
+    reduceMotion.value = !!motionQuery.matches
+    motionListener = () => {
+      reduceMotion.value = !!motionQuery.matches
+    }
+    motionQuery.addEventListener?.('change', motionListener)
+    motionQuery.addListener?.(motionListener)
+  }
 
-  const els = document.querySelectorAll('.section, .hero, .intro')
-  const observer = new IntersectionObserver(
+  const revealEls = document.querySelectorAll('.jp-reveal')
+  sectionObserver = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) entry.target.classList.add('visible')
+        if (!entry.isIntersecting) return
+        entry.target.classList.add('is-visible')
       })
     },
-    { threshold: 0.2 }
+    { threshold: 0.16 }
   )
-  els.forEach((el) => observer.observe(el))
+  revealEls.forEach((el) => sectionObserver.observe(el))
 
   fetchSpotlight()
-
-  if (introLocked.value) {
-    document.body.style.overflow = 'hidden'
-
-    const onWheel = (e) => {
-      if (!introLocked.value) return
-      e.preventDefault()
-      const delta = e.deltaY || 0
-      const next = Math.min(Math.max(introProgress.value + delta * 0.0022, 0), 1)
-      introProgress.value = next
-      if (next >= 1) {
-        unlockIntro()
-      }
-    }
-    wheelHandler.value = onWheel
-    window.addEventListener('wheel', onWheel, { passive: false })
-  }
+  scheduleUpdate()
+  window.addEventListener('resize', scheduleUpdate)
 })
 
 onBeforeUnmount(() => {
-  tilt.value = { x: 0, y: 0 }
-  document.body.style.overflow = ''
-  if (wheelHandler.value) {
-    window.removeEventListener('wheel', wheelHandler.value)
+  document.body.classList.remove('jp-home-scrolled')
+  window.removeEventListener('resize', scheduleUpdate)
+  sectionObserver?.disconnect()
+  sectionObserver = null
+  if (motionQuery && motionListener) {
+    motionQuery.removeEventListener?.('change', motionListener)
+    motionQuery.removeListener?.(motionListener)
   }
-  themeObserver?.disconnect()
+  motionQuery = null
+  motionListener = null
+  if (rafId) cancelAnimationFrame(rafId)
+  rafId = 0
 })
 </script>
 
 <style scoped>
 :global(body[data-theme='dark']) {
-  --bg-main: #0b1221;
-  --bg-pattern: radial-gradient(circle at 20% 20%, rgba(110, 143, 255, 0.12), transparent 30%),
-    radial-gradient(circle at 80% 0%, rgba(255, 118, 174, 0.14), transparent 28%),
-    #0b1221;
-  --fg: #e8ecf5;
-  --muted: #c3c9d6;
-  --accent: #7fb1ff;
-  --accent-strong: #8ad8ff;
-  --panel: rgba(255, 255, 255, 0.05);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --badge: rgba(255, 255, 255, 0.06);
-  --badge-border: rgba(255, 255, 255, 0.08);
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
-  --btn-primary: linear-gradient(120deg, #5a8cff, #7ae0ff);
-  --btn-text: #0a0f1a;
-  --mountain-bg: linear-gradient(180deg, rgba(90, 120, 220, 0.35), rgba(8, 12, 22, 1));
+  --jp-home-bg: radial-gradient(1200px 900px at 20% -10%, rgba(0, 113, 227, 0.24), transparent 60%),
+    radial-gradient(900px 700px at 90% 10%, rgba(255, 59, 48, 0.14), transparent 55%),
+    #050506;
+  --jp-home-fg: #f5f5f7;
+  --jp-home-muted: rgba(245, 245, 247, 0.72);
+  --jp-surface: rgba(255, 255, 255, 0.06);
+  --jp-border: rgba(255, 255, 255, 0.12);
+  --jp-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
+  --jp-accent: #4da3ff;
+  --jp-accent-2: #a78bfa;
 }
+
 :global(body[data-theme='light']) {
-  --bg-main: #f6f8fb;
-  --bg-pattern: radial-gradient(circle at 20% 18%, rgba(255, 230, 190, 0.18), transparent 32%),
-    radial-gradient(circle at 78% 8%, rgba(188, 214, 255, 0.2), transparent 30%),
-    #f6f8fb;
-  --fg: rgba(17, 28, 43, 0.8);
-  --muted: #4b5567;
-  --accent: #2563eb;
-  --accent-strong: #0ea5e9;
-  --panel: #ffffff;
-  --panel-border: #e8ebf2;
-  --badge: #f3f5fb;
-  --badge-border: #e3e7ef;
-  --shadow: 0 14px 36px rgba(15, 35, 52, 0.12);
-  --btn-primary: linear-gradient(120deg, #4d8cff, #74d8ff);
-  --btn-text: #0a0f1a;
-  --mountain-bg: linear-gradient(180deg, rgba(255, 230, 200, 0.65), rgba(245, 247, 251, 1));
+  --jp-home-bg: radial-gradient(1200px 900px at 18% -10%, rgba(0, 113, 227, 0.14), transparent 60%),
+    radial-gradient(900px 700px at 90% 8%, rgba(255, 45, 85, 0.08), transparent 55%),
+    #f5f5f7;
+  --jp-home-fg: #1d1d1f;
+  --jp-home-muted: rgba(29, 29, 31, 0.7);
+  --jp-surface: rgba(255, 255, 255, 0.72);
+  --jp-border: rgba(29, 29, 31, 0.10);
+  --jp-shadow: 0 24px 60px rgba(0, 0, 0, 0.14);
+  --jp-accent: #1677ff;
+  --jp-accent-2: #7c3aed;
 }
-:global(body) {
-  background: var(--bg-main);
-  transition: background 1s ease, color 1s ease;
-}
- .page {
-  color: var(--fg);
-  min-height: 100%;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: var(--bg-pattern);
-  transition: background 1s ease, color 1s ease;
+
+.page {
+  height: calc(100vh - 56px);
+  overflow-y: auto;
   overflow-x: hidden;
- }
-.intro {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  position: relative;
-  overflow: hidden;
-  perspective: 1200px;
+  background: var(--jp-home-bg);
+  color: var(--jp-home-fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
-.intro-text {
-  text-align: center;
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.8s ease, transform 0.8s ease, filter 0.8s ease;
-  transform-origin: center;
-  z-index: 2;
-}
-.intro.visible .intro-text {
-  opacity: 1;
-}
-.intro-scenery {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  filter: blur(calc(var(--intro-progress, 0) * 1px));
-}
-.intro-mountain {
-  position: absolute;
-  bottom: -5%;
-  left: 50%;
-  width: 140%;
-  height: 40%;
-  background: var(--mountain-bg, linear-gradient(180deg, rgba(110, 143, 255, 0.35), rgba(11, 18, 33, 1)));
-  border-radius: 50% 50% 0 0;
-  transform: translateX(-50%) scale(calc(1 + var(--intro-progress, 0) * 4));
-  transition: transform 0.6s ease, background 1s ease;
-}
-.intro-sun {
-  position: absolute;
-  top: 14%;
-  left: 20%;
-  width: 120px;
-  height: 120px;
-  background: radial-gradient(circle, rgba(255, 235, 150, 0.95), transparent 65%),
-    radial-gradient(circle, rgba(255, 245, 210, 0.8), transparent 70%);
-  border-radius: 50%;
-  animation: glow 6s ease-in-out infinite alternate;
-  box-shadow: 0 0 50px rgba(255, 220, 160, 0.7), 0 0 90px rgba(255, 210, 140, 0.4);
-  opacity: calc(1 - var(--intro-progress, 0));
-  filter: blur(calc(var(--intro-progress, 0) * 6px));
-  transition: opacity 0.9s ease, filter 0.9s ease, transform 0.9s ease, box-shadow 0.9s ease, background 0.9s ease;
-}
-.intro-moon {
-  position: absolute;
-  top: 14%;
-  right: 20%;
-  width: 110px;
-  height: 110px;
-  background: radial-gradient(circle at 40% 40%, rgba(230, 236, 255, 0.95), transparent 70%);
-  border-radius: 50%;
-  box-shadow:
-    inset -14px -12px 22px rgba(20, 28, 48, 0.45),
-    10px 8px 18px rgba(0, 0, 0, 0.28);
-  transform: translateX(10px);
-  transition: opacity 0.9s ease, filter 0.9s ease, transform 0.9s ease, box-shadow 0.9s ease, background 0.9s ease;
-}
-.intro-moon::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 60% 50%, rgba(12, 16, 28, 0.95), transparent 62%);
-  border-radius: 50%;
-  transform: translateX(14px);
-  mix-blend-mode: multiply;
-}
-.intro-cloud {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-  filter: blur(2px);
-}
-.cloud-a {
-  width: 220px;
-  height: 70px;
-  top: 18%;
-  right: 12%;
-  animation: drift 18s linear infinite;
-}
-.cloud-b {
-  width: 180px;
-  height: 60px;
-  top: 28%;
-  left: 18%;
-  animation: drift 24s linear infinite reverse;
-}
-@keyframes drift {
-  from {
-    transform: translateX(-40px);
-  }
-  to {
-    transform: translateX(40px);
-  }
-}
-@keyframes glow {
-  from {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  to {
-    transform: scale(1.08);
-    opacity: 1;
-  }
-}
-.intro-logo {
-  font-size: clamp(42px, 6vw, 64px);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-.intro-sub {
-  color: var(--muted);
-  margin: 10px 0 18px;
-  font-size: 16px;
-}
-.intro-anim {
+
+.side-nav {
+  position: fixed;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 90;
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 8px;
+  pointer-events: auto;
 }
-.pulse {
+
+.side-nav-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.side-nav-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.35);
+  border: 1px solid rgba(127, 127, 127, 0.22);
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.side-nav-text {
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.18s ease, transform 0.18s ease, color 0.18s ease, background 0.18s ease;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--jp-home-muted);
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  white-space: nowrap;
+}
+
+.side-nav-item:hover .side-nav-text,
+.side-nav-item.active .side-nav-text {
+  opacity: 1;
+  transform: translateX(0);
+}
+.side-nav-item:hover .side-nav-text {
+  color: var(--jp-home-fg);
+  background: rgba(127, 127, 127, 0.12);
+  border-color: rgba(127, 127, 127, 0.18);
+}
+.side-nav-item.active .side-nav-text {
+  color: var(--jp-home-fg);
+  background: rgba(127, 127, 127, 0.14);
+  border-color: rgba(127, 127, 127, 0.22);
+}
+.side-nav-item.active .side-nav-dot {
+  background: var(--jp-accent);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 6px rgba(77, 163, 255, 0.14);
+  transform: scale(1.08);
+}
+.side-nav-item:focus-visible {
+  outline: 2px solid var(--jp-accent);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.page::-webkit-scrollbar {
   width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: linear-gradient(120deg, #6ea8ff, #7ae0ff);
-  animation: pulse 1.4s ease-in-out infinite;
 }
-.pulse:nth-child(2) {
-  animation-delay: 0.2s;
+.page::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-.pulse:nth-child(3) {
-  animation-delay: 0.4s;
+.page::-webkit-scrollbar-track {
+  background: transparent;
 }
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scale(1.5);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
+
+.jp-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.scroll-hint {
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 600;
-}
-.scroll-hint:hover {
-  text-decoration: underline;
-}
-.hero {
-  position: relative;
-  overflow: hidden;
-  padding: 80px 64px 60px;
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 40px;
-  transform: translate3d(calc(var(--px, 0px) * 0.2), calc(var(--py, 0px) * 0.2), 0);
-  transition: background 1s ease, color 1s ease;
-}
-.hero.visible .hero-content,
-.section.visible .section-header,
-.section.visible .grid,
-.section.visible .timeline,
-.section.visible .cta {
+.jp-reveal.is-visible {
   opacity: 1;
   transform: translateY(0);
 }
-.hero-content,
-.section-header,
-.grid,
-.timeline,
-.cta {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.7s ease, transform 0.7s ease;
-}
-.hero-bg {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(95, 149, 255, 0.18), rgba(255, 132, 172, 0.16));
-  filter: blur(30px);
-  opacity: 0.9;
-}
-.hero-content {
-  position: relative;
-  z-index: 1;
-}
-.hero-visual {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-content: start;
-  transform: translate3d(calc(var(--px, 0px) * 0.35), calc(var(--py, 0px) * 0.35), 0);
-}
-.glass {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(8px);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-.hero-visual .card .icon {
-  font-size: 22px;
-}
-.hero-visual .card .title {
-  font-weight: 700;
-  margin-top: 8px;
-}
-.hero-visual .card .desc {
-  color: var(--muted);
-  margin-top: 4px;
-  font-size: 14px;
-}
+
 .eyebrow {
-  color: var(--accent);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
   font-size: 12px;
+  color: var(--jp-home-muted);
+  margin: 0 0 12px;
 }
-h1 {
-  font-size: clamp(36px, 5vw, 54px);
-  margin: 10px 0;
-  line-height: 1.1;
+
+.hero {
+  height: 150vh;
+  position: relative;
+  --p: var(--hero-p, 0);
 }
-h1 span {
-  color: var(--accent-strong);
+
+.hero-sticky {
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 56px);
+  display: grid;
+  align-items: center;
+  padding: 28px 20px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
-.lede {
-  color: var(--muted);
-  font-size: 16px;
+
+.hero-bg {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+}
+.hero-bg-svg {
+  width: 100%;
+  height: 100%;
+  opacity: 0.92;
+  transform: scale(calc(1.06 + var(--p) * 0.06));
+  transition: transform 0.12s linear;
+}
+.road {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 2.5;
+  opacity: 0.6;
+  fill: none;
+}
+:global(body[data-theme='light']) .road {
+  stroke: rgba(29, 29, 31, 0.12);
+}
+.route {
+  stroke: url(#jpRouteGrad);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  stroke-dasharray: 100;
+  stroke-dashoffset: calc(100 - var(--p) * 100);
+  transition: stroke-dashoffset 0.12s linear;
+  filter: url(#jpSoftBlur);
+  opacity: 0.9;
+}
+.pin {
+  fill: var(--jp-home-fg);
+  opacity: calc(var(--p) * 1.2);
+}
+.traveler {
+  fill: var(--jp-accent);
+  opacity: 0.9;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.35));
+}
+
+.hero-grid {
+  position: relative;
+  z-index: 1;
+  width: min(1160px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 22px;
+  align-items: center;
+}
+
+.hero-copy {
+  transform: translateY(calc(var(--p) * -14px));
+  opacity: calc(1 - var(--p) * 0.72);
+  transition: transform 0.12s linear, opacity 0.12s linear;
+}
+
+.hero-title {
+  font-size: clamp(44px, 6vw, 72px);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.accent {
+  color: var(--jp-accent);
+}
+.hero-lede {
+  margin: 14px 0 0;
   max-width: 520px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--jp-home-muted);
 }
-.lede.narrow {
-  max-width: 640px;
-}
-.hero-actions,
-.section .hero-actions {
+
+.hero-actions {
   display: flex;
-  gap: 12px;
-  margin: 18px 0;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
 }
+
 .btn {
   border-radius: 999px;
-  padding: 12px 20px;
+  padding: 12px 16px;
   font-weight: 700;
   font-size: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
   text-decoration: none;
-  color: var(--fg);
+  border: 1px solid var(--jp-border);
+  color: var(--jp-home-fg);
   background: transparent;
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
 }
 .btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
 }
 .btn.primary {
-  background: var(--btn-primary);
-  color: var(--btn-text);
-  border: none;
+  background: var(--jp-accent);
+  border-color: transparent;
+  color: #fff;
 }
-.btn.ghost {
-  background: transparent;
-  border-color: color-mix(in srgb, var(--fg) 60%, transparent);
-  color: var(--fg);
+:global(body[data-theme='dark']) .btn.primary {
+  color: #081018;
+  background: linear-gradient(135deg, var(--jp-accent), var(--jp-accent-2));
 }
-.hero-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.badge {
-  background: var(--badge);
-  border: 1px solid var(--badge-border);
-  padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.section {
-  padding: 40px 64px 60px;
-  position: relative;
-  transition: background 1s ease, color 1s ease;
-}
-.section.alt {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
-}
-.section-header {
-  margin-bottom: 24px;
-}
-.section h2 {
-  margin: 6px 0 8px;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-}
-.feature.card {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  padding: 16px;
-  color: var(--fg);
-  box-shadow: var(--shadow);
-  transition: transform 0.25s ease, border-color 0.2s;
-}
-.feature.card.link {
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-  display: block;
+.btn.ghost:hover {
+  background: rgba(127, 127, 127, 0.12);
 }
 
-.feature.card:hover {
-  transform: translateY(-6px) scale(1.01);
-  border-color: rgba(122, 224, 255, 0.5);
-}
-.feature .icon {
-  font-size: 22px;
-  margin-bottom: 8px;
-}
-.feature h3 {
-  margin: 0 0 6px;
-}
-.feature p {
-  color: var(--muted);
-  font-size: 14px;
-  min-height: 40px;
-}
-.chip {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 10px;
-  background: var(--badge);
-  border: 1px solid var(--badge-border);
-  font-size: 12px;
-  margin-right: 6px;
-  color: var(--muted);
-}
-.timeline {
-  margin-top: 14px;
+.hero-metrics {
+  margin-top: 18px;
   display: grid;
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
-.step {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
+.metric {
+  border-radius: 18px;
+  background: rgba(127, 127, 127, 0.08);
+  border: 1px solid rgba(127, 127, 127, 0.14);
+  padding: 12px 12px;
+}
+:global(body[data-theme='light']) .metric {
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(29, 29, 31, 0.08);
+}
+.metric .k {
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+.metric .v {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--jp-home-muted);
+}
+
+.hero-media {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  transform: translateY(calc(var(--p) * -24px)) scale(calc(0.94 + var(--p) * 0.06));
+  transition: transform 0.12s linear;
+}
+
+.device {
+  width: min(380px, 92vw);
+  aspect-ratio: 10 / 18;
+  border-radius: 44px;
   padding: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: var(--jp-shadow);
+  position: relative;
 }
-.dot {
-  width: 32px;
-  height: 32px;
+:global(body[data-theme='light']) .device {
+  background: linear-gradient(180deg, rgba(29, 29, 31, 0.08), rgba(29, 29, 31, 0.02));
+  border-color: rgba(29, 29, 31, 0.08);
+}
+.device::before {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  border-radius: 36px;
+  pointer-events: none;
+  background: radial-gradient(600px 280px at 30% 20%, rgba(255, 255, 255, 0.12), transparent 60%);
+  opacity: 0.9;
+}
+.device-screen {
+  border-radius: 34px;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.device-top {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 3;
+}
+.search-pill {
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  backdrop-filter: blur(14px) saturate(180%);
+}
+:global(body[data-theme='light']) .search-pill {
+  background: rgba(255, 255, 255, 0.70);
+  border-color: rgba(29, 29, 31, 0.10);
+  color: rgba(29, 29, 31, 0.78);
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #6ea8ff, #7ae0ff);
-  color: #0b1221;
+  background: var(--jp-accent);
+  box-shadow: 0 0 0 6px rgba(77, 163, 255, 0.18);
+}
+
+.device-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.mini-road {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 2.2;
+  opacity: 0.5;
+  fill: none;
+}
+:global(body[data-theme='light']) .mini-road {
+  stroke: rgba(29, 29, 31, 0.12);
+}
+.mini-route {
+  stroke: url(#jpDeviceRouteGrad);
+  stroke-width: 6;
+  stroke-linecap: round;
+  fill: none;
+  stroke-dasharray: 100;
+  stroke-dashoffset: calc(100 - var(--p) * 100);
+  transition: stroke-dashoffset 0.12s linear;
+}
+.mini-pin {
+  fill: rgba(255, 255, 255, 0.9);
+  opacity: calc(var(--p) * 1.2);
+}
+:global(body[data-theme='light']) .mini-pin {
+  fill: rgba(29, 29, 31, 0.85);
+}
+.mini-traveler {
+  fill: var(--jp-accent);
+  opacity: 0.95;
+}
+
+.device-sheet {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  border-radius: 22px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(18px) saturate(180%);
+  z-index: 3;
+}
+:global(body[data-theme='light']) .device-sheet {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(29, 29, 31, 0.10);
+}
+.sheet-title {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-size: 12px;
+  opacity: 0.92;
+}
+.sheet-row {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.sheet-ic {
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 900;
+  font-size: 12px;
+}
+:global(body[data-theme='light']) .sheet-ic {
+  background: rgba(29, 29, 31, 0.06);
+}
+.sheet-name {
+  font-weight: 800;
+  font-size: 12px;
+}
+.sheet-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--jp-home-muted);
+}
+.sheet-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  font-size: 12px;
+  opacity: 0.9;
+  padding-left: 10px;
+}
+
+.demo {
+  width: min(380px, 92vw);
+  border-radius: 20px;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  padding: 12px 12px 10px;
+  box-sizing: border-box;
+  backdrop-filter: blur(18px) saturate(180%);
+}
+.demo-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.demo-range {
+  width: 100%;
+  margin-top: 10px;
+  accent-color: var(--jp-accent);
+}
+.demo-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--jp-home-muted);
+}
+
+.hero-scroll {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  opacity: calc(1 - var(--p) * 1.2);
+  transition: opacity 0.12s linear;
+}
+.scroll-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--jp-home-fg);
+  opacity: 0.55;
+  animation: jp-bounce 1.8s ease-in-out infinite;
+}
+.scroll-text {
+  font-size: 12px;
+  color: var(--jp-home-muted);
+}
+@keyframes jp-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.scene {
+  position: relative;
+  --p: var(--p, 0);
+}
+.scene-sticky {
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 56px);
+  padding: 64px 22px;
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  overflow: visible;
+}
+
+.scene-props {
+  height: 130vh;
+}
+.scene-tiles {
+  height: 140vh;
+}
+.scene-showcase {
+  height: 150vh;
+}
+
+.scene-props .props {
+  transform: translateY(calc((0.55 - var(--p)) * 70px));
+  transition: transform 0.12s linear;
+}
+.scene-props .prop:nth-child(1) {
+  transform: translateY(calc((0.6 - var(--p)) * 36px));
+}
+.scene-props .prop:nth-child(2) {
+  transform: translateY(calc((0.5 - var(--p)) * 44px));
+}
+.scene-props .prop:nth-child(3) {
+  transform: translateY(calc((0.4 - var(--p)) * 58px));
+}
+.scene-props .prop:nth-child(4) {
+  transform: translateY(calc((0.3 - var(--p)) * 72px));
+}
+
+.scene-tiles .section-head {
+  transform: translateY(calc((0.55 - var(--p)) * 46px));
+  transition: transform 0.12s linear;
+}
+.scene-tiles .tiles-grid {
+  transform: translateY(calc((0.55 - var(--p)) * 120px)) scale(calc(0.96 + var(--p) * 0.04));
+  transition: transform 0.12s linear;
+}
+
+.scene-showcase .section-head {
+  transform: translateY(calc((0.55 - var(--p)) * 42px));
+  transition: transform 0.12s linear;
+}
+.scene-showcase .showcase-grid {
+  transform: translateY(calc((0.5 - var(--p)) * 120px));
+  transition: transform 0.12s linear;
+}
+
+.section {
+  padding: 64px 22px;
+}
+.section-inner {
+  width: min(1160px, 100%);
+  margin: 0 auto;
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.section-title {
+  font-size: clamp(28px, 3.5vw, 44px);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.section-sub {
+  margin: 10px 0 0;
+  max-width: 720px;
+  color: var(--jp-home-muted);
+  line-height: 1.6;
+}
+
+.props {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 26px;
+}
+.card {
+  border-radius: 28px;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  backdrop-filter: blur(18px) saturate(180%);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+}
+.prop {
+  padding: 22px;
+}
+.prop-ic {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: var(--jp-accent);
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  font-variant-numeric: tabular-nums;
+}
+.prop-title {
+  margin: 14px 0 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.prop-desc {
+  margin: 10px 0 0;
+  color: var(--jp-home-muted);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.tiles-grid {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.tile {
+  position: relative;
+  padding: 20px;
+  overflow: hidden;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 210px;
+  border-radius: 32px;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  backdrop-filter: blur(18px) saturate(180%);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+.tile::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(700px 300px at 20% 0%, rgba(77, 163, 255, 0.22), transparent 60%),
+    radial-gradient(520px 260px at 85% 25%, rgba(167, 139, 250, 0.18), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
+}
+.tile:hover {
+  transform: translateY(-3px);
+  border-color: rgba(127, 127, 127, 0.22);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.14);
+}
+.tile:hover::before {
+  opacity: 1;
+}
+.tile-wide {
+  grid-column: span 1;
+}
+.tile.link {
+  text-decoration: none;
+  color: inherit;
+}
+.tile-copy {
+  position: relative;
+  z-index: 1;
+}
+.tile-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+}
+.tile-title {
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.tile-desc {
+  margin-top: 10px;
+  color: var(--jp-home-muted);
+  line-height: 1.6;
+  font-size: 13px;
+}
+.tile-cta {
+  margin-top: 16px;
+  font-weight: 900;
+  color: var(--jp-accent);
+}
+.tile-media {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.mini-card {
+  border-radius: 18px;
+  padding: 10px 12px;
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  min-width: 92px;
+}
+:global(body[data-theme='light']) .mini-card {
+  background: rgba(255, 255, 255, 0.70);
+  border-color: rgba(29, 29, 31, 0.08);
+}
+.mini-k {
+  font-size: 11px;
+  color: var(--jp-home-muted);
   font-weight: 800;
 }
-.step h4 {
-  margin: 0 0 4px;
+.mini-v {
+  margin-top: 6px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
 }
-.step p {
-  margin: 0;
-  color: var(--muted);
+.bubble {
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  font-weight: 800;
+  font-size: 12px;
 }
-.cta.card {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 18px;
-  padding: 24px;
+.bars {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 16px;
-  align-items: center;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  gap: 10px;
+  width: 100%;
+  max-width: 260px;
 }
-.cta-visual {
+.bar {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.bar-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--jp-home-muted);
+}
+.bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.16);
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--w, 0.5) * 100%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--jp-accent), var(--jp-accent-2));
+}
+
+.showcase-grid {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.flip-card {
+  border-radius: 32px;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
+  perspective: 1200px;
+  min-height: 280px;
+}
+.flip-inner {
+  height: 100%;
+  border-radius: inherit;
+  position: relative;
+  transform-style: preserve-3d;
+  --fp: clamp(0, calc((var(--p) - var(--start, 0)) * var(--k, 2.8571)), 1);
+  transform: rotateY(calc(var(--fp) * 180deg));
+  transition: transform 0.12s linear;
+}
+.flip-face {
+  position: absolute;
+  inset: 0;
+  padding: 26px;
+  box-sizing: border-box;
+  border-radius: inherit;
+  backface-visibility: hidden;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: hidden;
+}
+.flip-face::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: radial-gradient(700px 320px at 20% 0%, rgba(77, 163, 255, 0.22), transparent 60%),
+    radial-gradient(520px 260px at 90% 20%, rgba(167, 139, 250, 0.18), transparent 60%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+.flip-face > * {
+  position: relative;
+  z-index: 1;
+}
+.flip-face.back {
+  transform: rotateY(180deg);
+}
+.flip-eyebrow {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 900;
+  font-size: 12px;
+  color: var(--jp-home-muted);
+}
+.flip-title {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.flip-desc {
+  color: var(--jp-home-muted);
+  line-height: 1.65;
+  font-size: 13px;
+  max-width: 44ch;
+}
+.flip-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  justify-content: flex-end;
+  margin-top: 8px;
 }
-.cta-bubble {
-  background: var(--badge);
-  border: 1px solid var(--badge-border);
+.pill {
   padding: 10px 12px;
-  border-radius: 14px;
-  color: var(--fg);
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  font-weight: 900;
+  font-size: 12px;
+}
+.showcase-note {
+  margin-top: 18px;
+  color: var(--jp-home-muted);
+  font-size: 12px;
 }
 
-.spotlight-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+.link-more {
+  text-decoration: none;
+  color: var(--jp-accent);
+  font-weight: 900;
+}
+
+.spotlight-rail {
+  margin-top: 18px;
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
+}
+.spotlight-rail::-webkit-scrollbar {
+  height: 10px;
 }
 .spotlight-card {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 18px;
-  padding: 14px;
-  box-shadow: var(--shadow);
-  transition: transform 0.25s ease, border-color 0.2s;
-}
-.spotlight-card.link {
+  width: min(310px, 78vw);
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  border-radius: 26px;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  overflow: hidden;
   text-decoration: none;
   color: inherit;
-  display: block;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
 .spotlight-card:hover {
-  transform: translateY(-6px);
-  border-color: color-mix(in srgb, var(--accent-strong) 40%, var(--panel-border));
+  transform: translateY(-2px);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.14);
 }
 .spotlight-cover {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--badge);
+  height: 168px;
+  background: rgba(127, 127, 127, 0.12);
+  display: grid;
+  place-items: center;
 }
 .spotlight-img {
   width: 100%;
   height: 100%;
-}
-.spotlight-cover.empty {
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--badge) 90%, #fff),
-    color-mix(in srgb, var(--panel) 85%, #fff)
-  );
-}
-.spotlight-empty {
-  font-size: 12px;
-  font-weight: 700;
+  object-fit: cover;
 }
 .spotlight-body {
-  padding-top: 12px;
+  padding: 14px 14px 16px;
 }
 .spotlight-title {
-  font-weight: 800;
-  color: var(--fg);
-  font-size: 15px;
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  font-size: 14px;
+  line-height: 1.35;
 }
 .spotlight-meta {
+  margin-top: 8px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  color: var(--muted);
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--jp-home-muted);
   font-size: 12px;
-}
-.spotlight-meta .name {
-  font-weight: 700;
-  color: color-mix(in srgb, var(--fg) 80%, var(--muted));
 }
 .spotlight-stats {
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
   margin-top: 10px;
-  color: var(--muted);
   font-size: 12px;
+  color: var(--jp-home-muted);
 }
-.spotlight-stats .stat {
+.stat {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--badge);
-  border: 1px solid var(--badge-border);
 }
-.spotlight-stats .stat-ic {
-  color: var(--accent);
+.stat-ic {
+  font-size: 14px;
 }
-.spotlight-more {
-  margin-top: 24px;
-}
-.spotlight-error.card {
-  padding: 16px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.spotlight-error .title {
+.spotlight-empty {
+  color: var(--jp-home-muted);
   font-weight: 800;
 }
-.spotlight-error .desc {
-  color: var(--muted);
-}
-.spotlight-card.skeleton {
-  height: 280px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--badge) 92%, #fff) 25%,
-    color-mix(in srgb, var(--badge) 82%, #fff) 50%,
-    color-mix(in srgb, var(--badge) 92%, #fff) 75%
-  );
+.skeleton {
+  background: linear-gradient(90deg, rgba(127, 127, 127, 0.12), rgba(127, 127, 127, 0.22), rgba(127, 127, 127, 0.12));
   background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
+  animation: jp-shimmer 1.2s ease-in-out infinite;
 }
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
+@keyframes jp-shimmer {
+  0% {
+    background-position: 0% 0%;
   }
-  to {
-    background-position: -200% 0;
+  100% {
+    background-position: -200% 0%;
   }
 }
 
-@media (max-width: 900px) {
-  .hero {
+.spotlight-empty.card {
+  padding: 22px;
+  margin-top: 18px;
+}
+.spotlight-empty-title {
+  font-weight: 900;
+}
+.spotlight-empty-sub {
+  margin-top: 8px;
+  color: var(--jp-home-muted);
+}
+
+.flow-grid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.flow-card {
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+.flow-num {
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: var(--jp-accent);
+  font-variant-numeric: tabular-nums;
+}
+.flow-title {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.flow-desc {
+  color: var(--jp-home-muted);
+  line-height: 1.6;
+  font-size: 13px;
+  max-width: 70ch;
+}
+
+.faq-list {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+.faq-item {
+  border-radius: 22px;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  padding: 2px 18px;
+}
+.faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 0;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item summary::after {
+  content: '>';
+  font-size: 18px;
+  color: var(--jp-home-muted);
+  transform: rotate(0deg);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.faq-item[open] summary::after {
+  transform: rotate(90deg);
+  color: var(--jp-accent);
+}
+.faq-body {
+  padding: 0 0 16px;
+  color: var(--jp-home-muted);
+  line-height: 1.6;
+  font-size: 13px;
+  max-width: 90ch;
+}
+
+.cta-card {
+  padding: 28px;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+  align-items: center;
+}
+.cta-media {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.cta-chip {
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.footer {
+  padding: 46px 22px 64px;
+  border-top: 1px solid var(--jp-border);
+  background: rgba(0, 0, 0, 0.12);
+}
+:global(body[data-theme='light']) .footer {
+  background: rgba(255, 255, 255, 0.55);
+}
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.footer-logo {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.footer-sub {
+  margin-top: 6px;
+  color: var(--jp-home-muted);
+  font-size: 12px;
+}
+.footer-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.footer-link {
+  text-decoration: none;
+  color: var(--jp-home-muted);
+  font-weight: 900;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.footer-link:hover {
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--jp-home-fg);
+}
+
+@media (max-width: 980px) {
+  .side-nav {
+    display: none;
+  }
+  .hero-grid {
     grid-template-columns: 1fr;
-    padding: 60px 24px;
   }
-  .hero-visual {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  .hero-copy {
+    opacity: 1;
   }
-  .section {
-    padding: 32px 20px;
-  }
-  .cta.card {
+  .hero-metrics {
     grid-template-columns: 1fr;
+  }
+  .scene {
+    height: auto !important;
+  }
+  .scene-sticky {
+    position: relative;
+    height: auto;
+    padding: 56px 18px;
+  }
+  .scene-props .props,
+  .scene-tiles .section-head,
+  .scene-tiles .tiles-grid,
+  .scene-showcase .section-head,
+  .scene-showcase .showcase-grid,
+  .flip-inner {
+    transform: none !important;
+  }
+  .props {
+    grid-template-columns: 1fr;
+  }
+  .tiles-grid {
+    grid-template-columns: 1fr;
+  }
+  .showcase-grid {
+    grid-template-columns: 1fr;
+  }
+  .flow-grid {
+    grid-template-columns: 1fr;
+  }
+  .cta-card {
+    grid-template-columns: 1fr;
+  }
+  .cta-media {
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-reveal {
+    transition: none;
+  }
+  .hero-bg-svg,
+  .hero-copy,
+  .hero-media,
+  .route,
+  .mini-route,
+  .scene-props .props,
+  .scene-tiles .section-head,
+  .scene-tiles .tiles-grid,
+  .scene-showcase .section-head,
+  .scene-showcase .showcase-grid,
+  .flip-inner,
+  .scroll-dot {
+    transition: none !important;
+    animation: none !important;
+  }
+  .scene-props .props,
+  .scene-tiles .section-head,
+  .scene-tiles .tiles-grid,
+  .scene-showcase .section-head,
+  .scene-showcase .showcase-grid,
+  .flip-inner {
+    transform: none !important;
   }
 }
 </style>
-
-
-
-
-
