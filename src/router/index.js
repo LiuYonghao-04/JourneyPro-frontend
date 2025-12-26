@@ -1,17 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import HomeView from '../views/HomeView.vue'
+import MapView from '../views/MapView.vue'
+import PostBoardView from '../views/PostBoardView.vue'
+import PostPublishView from '../views/PostPublishView.vue'
+import PersonView from '../views/PersonView.vue'
+import PostDetailView from '../views/PostDetailView.vue'
+import LoginView from '../views/LoginView.vue'
+import NotificationView from '../views/NotificationView.vue'
+import PrivacyView from '../views/PrivacyView.vue'
+import FastUxView from '../views/FastUxView.vue'
 import { useAuthStore } from '../store/authStore'
-
-const HomeView = () => import('../views/HomeView.vue')
-const MapView = () => import('../views/MapView.vue')
-const PostBoardView = () => import('../views/PostBoardView.vue')
-const PostPublishView = () => import('../views/PostPublishView.vue')
-const PersonView = () => import('../views/PersonView.vue')
-const PostDetailView = () => import('../views/PostDetailView.vue')
-const LoginView = () => import('../views/LoginView.vue')
-const NotificationView = () => import('../views/NotificationView.vue')
-const PrivacyView = () => import('../views/PrivacyView.vue')
-const FastUxView = () => import('../views/FastUxView.vue')
-const NotFoundView = () => import('../views/NotFoundView.vue')
 
 const routes = [
     {
@@ -74,11 +72,6 @@ const routes = [
         path: '/fast-ux',
         name: 'fast-ux',
         component: FastUxView,
-    },
-    {
-        path: '/:pathMatch(.*)*',
-        name: 'not-found',
-        component: NotFoundView,
     },
 ]
 

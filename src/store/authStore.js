@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { API_AUTH } from '../config/api'
+
+const API_BASE = 'http://localhost:3001/api/auth'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -17,7 +18,7 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true
       this.error = null
       try {
-        const res = await fetch(`${API_AUTH}/login`, {
+        const res = await fetch(`${API_BASE}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -41,7 +42,7 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true
       this.error = null
       try {
-        const res = await fetch(`${API_AUTH}/register`, {
+        const res = await fetch(`${API_BASE}/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

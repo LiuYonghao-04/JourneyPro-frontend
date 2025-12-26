@@ -190,11 +190,10 @@ import ImageCropperDialog from '../components/ImageCropperDialog.vue'
 import CroppedImage from '../components/CroppedImage.vue'
 import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
 import { proxiedImageSrc } from '../utils/imageProxy'
-import { API_AUTH, API_FOLLOW, API_POSTS } from '../config/api'
 
-const API_BASE = API_POSTS
-const FOLLOW_API = API_FOLLOW
-const AUTH_API = API_AUTH
+const API_BASE = 'http://localhost:3001/api/posts'
+const FOLLOW_API = 'http://localhost:3001/api/follow'
+const AUTH_API = 'http://localhost:3001/api/auth'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()

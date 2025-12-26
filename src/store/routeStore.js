@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
+import L from 'leaflet'
 import { useAuthStore } from './authStore'
-import { API_RECO_PROFILE, API_RECO_SETTINGS, API_ROUTE_RECOMMEND } from '../config/api'
 
 const STORAGE_KEY = 'jp_via_points'
 const RECO_WEIGHT_KEY = 'jp_reco_interest_weight'
@@ -96,6 +96,14 @@ export const useRouteStore = defineStore('route', {
       this.endLng = lng
     },
 
+    buildWaypoints() {
+      return [
+        L.latLng(this.startLat, this.startLng),
+        ...this.viaPoints.map((poi) => L.latLng(poi.lat, poi.lng)),
+        L.latLng(this.endLat, this.endLng),
+      ]
+    },
+
     applyWaypointsToControl() {
       // no-op: routing is handled in MapContainer fetchRoute
     },
@@ -163,7 +171,7 @@ export const useRouteStore = defineStore('route', {
       if (!Number.isFinite(uid) || !uid) return
 
       try {
-        const url = `${API_RECO_SETTINGS}?user_id=${uid}`
+        const url = `http://localhost:3001/api/recommendation/settings?user_id=${uid}`
         const res = await fetch(url)
         const data = await res.json()
         if (!res.ok || !data?.success) return
@@ -188,7 +196,7 @@ export const useRouteStore = defineStore('route', {
       if (!auth.user?.id || Number(auth.user.id) !== uid) return
 
       try {
-        await fetch(API_RECO_SETTINGS, {
+        await fetch('http://localhost:3001/api/recommendation/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -234,7 +242,7 @@ export const useRouteStore = defineStore('route', {
 
       this.interestProfileLoading = true
       try {
-        const url = `${API_RECO_PROFILE}?user_id=${uid}`
+        const url = `http://localhost:3001/api/recommendation/profile?user_id=${uid}`
         const res = await fetch(url)
         const data = await res.json()
         if (!res.ok || !data?.success) {
@@ -263,7 +271,7 @@ export const useRouteStore = defineStore('route', {
         if (via) params.set('via', via)
         if (auth.user?.id) params.set('user_id', auth.user.id)
         params.set('interest_weight', String(this.recoInterestWeight ?? 0.5))
-        const url = `${API_ROUTE_RECOMMEND}?${params.toString()}`
+        const url = `http://localhost:3001/api/route/recommend?${params.toString()}`
 
         const res = await fetch(url)
         const data = await res.json()
@@ -272,7 +280,7 @@ export const useRouteStore = defineStore('route', {
           this.recommendedPOIs = data.recommended_pois || data.recommendations
           this.recommendationProfile = data.profile || null
           this.reorderRecommendedPois()
-          if (import.meta.env.DEV) console.log('Recommended via points loaded', this.recommendedPOIs.length)
+          console.log('Recommended via points loaded', this.recommendedPOIs.length)
         } else {
           console.warn('No recommendation data returned', data)
           this.recommendedPOIs = []
