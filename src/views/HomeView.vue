@@ -584,10 +584,9 @@ import axios from 'axios'
 import { CircleCheck, Star, View } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from '../components/CroppedImage.vue'
+import { API_POSTS } from '../config/api'
 
 const auth = useAuthStore()
-
-const API_POSTS = 'http://localhost:3001/api/posts'
 
 const pageEl = ref(null)
 const heroEl = ref(null)

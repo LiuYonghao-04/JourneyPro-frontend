@@ -5,6 +5,7 @@ import { useRoute } from "vue-router"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { useRouteStore } from "../store/routeStore"
+import { OSRM_BASE } from "../config/api"
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png"
 import markerIcon from "leaflet/dist/images/marker-icon.png"
@@ -204,10 +205,10 @@ const fetchRoute = async () => {
   }
   routeAbortController = new AbortController()
   routeStore.isRouting = true
-  routeStore.routeError = null
+    routeStore.routeError = null
   try {
     const res = await axios.get(
-      `/osrm/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`,
+      `${OSRM_BASE}/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`,
       { signal: routeAbortController.signal }
     )
     const routeData = res.data?.routes?.[0]

@@ -105,7 +105,9 @@
         <div v-if="loading && posts.length > 0" class="skeleton-more">
           <div v-for="n in 3" :key="n" class="skeleton-card small" />
         </div>
-        <div v-if="noMore" class="no-more">End of feed &middot; keep scrolling to loop</div>
+        <div v-if="noMore" class="no-more">
+          {{ loopFeed ? 'End of feed · keep scrolling to loop' : "You're all caught up." }}
+        </div>
       </section>
 
       <transition name="back-top">
@@ -119,14 +121,17 @@
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
 import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled, ArrowUpBold } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from './CroppedImage.vue'
+import { API_POSTS } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
+const API_BASE = API_POSTS
 const auth = useAuthStore()
+const router = useRouter()
+const loopFeed = import.meta.env.VITE_LOOP_FEED === 'true'
 
 const tabs = ref(['Recommended'])
 const activeTab = ref('Recommended')
@@ -242,7 +247,7 @@ const toggleFav = async (card) => {
 }
 
 const openDetail = (card) => {
-  window.location.href = `/posts/postsid=${card.id}`
+  router.push(`/posts/postsid=${card.id}`)
 }
 
 const contentEl = ref(null)
@@ -318,6 +323,7 @@ const filteredPosts = computed(() => {
 })
 
 const appendDuplicateBatch = () => {
+  if (!loopFeed) return
   if (basePosts.value.length === 0) return
   dupRounds.value += 1
   const round = dupRounds.value
@@ -334,7 +340,7 @@ const setupInfiniteScroll = () => {
       entries.forEach((entry) => {
         if (entry.isIntersecting && !noMore.value) {
           fetchPosts()
-        } else if (entry.isIntersecting && noMore.value) {
+        } else if (entry.isIntersecting && noMore.value && loopFeed) {
           appendDuplicateBatch()
         }
       })

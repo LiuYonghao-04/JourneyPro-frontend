@@ -64,6 +64,7 @@ import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { API_AUTH } from '../config/api'
 
 const props = defineProps({
   mode: {
@@ -106,7 +107,7 @@ const switchMode = (m) => {
 
 const loadCaptcha = async () => {
   try {
-    const res = await axios.get('http://localhost:3001/api/auth/captcha')
+    const res = await axios.get(`${API_AUTH}/captcha`)
     if (res.data?.success) {
       captchaKey.value = res.data.key
       captchaImg.value = res.data.image

@@ -217,10 +217,11 @@ import ImageCropperDialog from '../components/ImageCropperDialog.vue'
 import CroppedImage from '../components/CroppedImage.vue'
 import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
 import { proxiedImageSrc } from '../utils/imageProxy'
+import { API_POI_SEARCH, API_POSTS, API_POST_TAGS } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
-const TAG_API = 'http://localhost:3001/api/posts/tags/list'
-const POI_API = 'http://localhost:3001/api/poi/search'
+const API_BASE = API_POSTS
+const TAG_API = API_POST_TAGS
+const POI_API = API_POI_SEARCH
 const STORAGE_KEY = 'jp_publish_draft'
 const auth = useAuthStore()
 const router = useRouter()
