@@ -229,10 +229,11 @@ import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import CroppedImage from '../components/CroppedImage.vue'
+import { API_FOLLOW, API_POI, API_POSTS } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
-const FOLLOW_API = 'http://localhost:3001/api/follow'
-const POI_API = 'http://localhost:3001/api/poi'
+const API_BASE = API_POSTS
+const FOLLOW_API = API_FOLLOW
+const POI_API = API_POI
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -469,7 +470,8 @@ const addToRoute = () => {
   if (exists) {
     alertType.value = 'warning'
     alertMessage.value = 'Already added to route'
-    console.log('addToRoute skipped duplicate', { currentId, latNum, lngNum, viaPoints: routeStore.viaPoints })
+    if (import.meta.env.DEV)
+      console.log('addToRoute skipped duplicate', { currentId, latNum, lngNum, viaPoints: routeStore.viaPoints })
     return
   }
   routeStore.addViaPoint({
@@ -480,7 +482,7 @@ const addToRoute = () => {
   })
   alertType.value = 'success'
   alertMessage.value = 'Added to route'
-  console.log('addToRoute success', { id, latNum, lngNum, viaPoints: routeStore.viaPoints })
+  if (import.meta.env.DEV) console.log('addToRoute success', { id, latNum, lngNum, viaPoints: routeStore.viaPoints })
 }
 
 const fetchFollowStatus = async () => {

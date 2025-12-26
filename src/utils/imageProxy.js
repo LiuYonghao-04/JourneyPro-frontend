@@ -1,5 +1,7 @@
-const UPLOAD_HOST = 'http://localhost:3001'
-const PROXY_ENDPOINT = `${UPLOAD_HOST}/api/upload/proxy`
+import { API_BASE, API_ORIGIN, API_UPLOAD_PROXY } from '../config/api'
+
+const UPLOAD_HOST = API_ORIGIN || ''
+const PROXY_ENDPOINT = API_UPLOAD_PROXY || `${API_BASE}/upload/proxy`
 
 export const proxiedImageSrc = (rawUrl) => {
   const raw = String(rawUrl || '').trim()
@@ -13,4 +15,3 @@ export const proxiedImageSrc = (rawUrl) => {
   const qs = new URLSearchParams({ url: raw }).toString()
   return `${PROXY_ENDPOINT}?${qs}`
 }
-
