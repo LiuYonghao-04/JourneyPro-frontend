@@ -12,13 +12,16 @@ const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeTo
 const viaPoints = computed(() => routeStore.viaPoints || [])
 const locating = ref(false)
 const panelCollapsed = ref(false)
+const poiQuery = ref('')
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiaGVucnkwNCIsImEiOiJjbWo1Z3RtaHIxa2tiM2xzZjc3ZXAzNzFzIn0.fhmWGo_w7RVrrmDmGQJXog'
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+const POI_API = 'http://localhost:3001/api/poi/search'
 const VIA_STORAGE_KEY = 'jp_via_points'
 
 let fetchTimer = null
 let lastResults = []
 let lockFetch = false
+let poiFetchTimer = null
 
 const currentTheme = ref(document.body.getAttribute('data-theme') || 'dark')
 let themeObserver = null
@@ -30,6 +33,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
+  if (fetchTimer) clearTimeout(fetchTimer)
+  if (poiFetchTimer) clearTimeout(poiFetchTimer)
 })
 
 const logoSrc = computed(() => (currentTheme.value === 'dark' ? logoDark : logoLight))
@@ -80,6 +85,35 @@ const handleSelectEnd = (item) => {
   endAddress.value = item.value
   const [lng, lat] = item.center || []
   routeStore.setEnd(parseFloat(lat), parseFloat(lng))
+}
+
+const fetchPoiSuggestions = (queryString, cb) => {
+  if (!queryString) {
+    return cb([])
+  }
+  if (poiFetchTimer) clearTimeout(poiFetchTimer)
+  poiFetchTimer = setTimeout(async () => {
+    try {
+      const res = await axios.get(POI_API, { params: { keyword: queryString, limit: 6 } })
+      const rows = res.data?.data || []
+      const results = rows.map((row) => ({
+        value: row.name,
+        ...row,
+      }))
+      cb(results)
+    } catch (e) {
+      cb([])
+    }
+  }, 250)
+}
+
+const handleSelectPoi = (item) => {
+  if (!item) return
+  poiQuery.value = item.value || item.name || ''
+  if (typeof item.lat === 'number' && typeof item.lng === 'number') {
+    routeStore.selectPoi(item)
+    routeStore.requestFocusPoint(item.lat, item.lng, 16)
+  }
 }
 
 const updateFromAddress = async () => {
@@ -151,6 +185,9 @@ const clearStart = () => {
 const clearEnd = () => {
   endAddress.value = ''
 }
+const clearPoiQuery = () => {
+  poiQuery.value = ''
+}
 </script>
 
 <template>
@@ -194,6 +231,21 @@ const clearEnd = () => {
           popper-class="jp-autocomplete"
           clearable
           @clear="clearEnd"
+        />
+      </el-form-item>
+
+      <el-form-item label="Search place">
+        <el-autocomplete
+          v-model="poiQuery"
+          :fetch-suggestions="fetchPoiSuggestions"
+          placeholder="Search POIs"
+          size="small"
+          @select="handleSelectPoi"
+          :trigger-on-focus="false"
+          :teleported="false"
+          popper-class="jp-autocomplete"
+          clearable
+          @clear="clearPoiQuery"
         />
       </el-form-item>
 

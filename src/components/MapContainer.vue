@@ -29,6 +29,8 @@ let highlightMarker = null
 let highlightSegmentLayer = null
 let pinnedMarker = null
 let pinnedSegmentLayer = null
+let selectedPoiMarker = null
+let previewPoiMarker = null
 const route = useRoute()
 
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
@@ -93,6 +95,8 @@ const refreshOverlayLayers = () => {
   refreshLayerPositions(endMarker)
   refreshLayerPositions(viaMarkerLayer)
   refreshLayerPositions(poiLayer)
+  refreshLayerPositions(selectedPoiMarker)
+  refreshLayerPositions(previewPoiMarker)
   refreshLayerPositions(highlightMarker)
   refreshLayerPositions(highlightSegmentLayer)
   refreshLayerPositions(pinnedMarker)
@@ -150,6 +154,94 @@ const updateViaMarkers = () => {
     })
     viaMarkerLayer.addLayer(marker)
   })
+}
+
+const getPoiKey = (poi) => {
+  if (!poi) return null
+  const id = poi.id ?? poi.poi_id
+  if (id !== undefined && id !== null && id !== '') return `id:${id}`
+  if (typeof poi.lat === "number" && typeof poi.lng === "number") {
+    return `ll:${poi.lat.toFixed(6)},${poi.lng.toFixed(6)}`
+  }
+  return null
+}
+
+const createPoiIcon = (rank, selected, color) =>
+  L.divIcon({
+    className: `jp-poi-marker${selected ? " selected" : ""}`,
+    html: `<div class="jp-poi-pin" style="--poi-color:${color || "#2563eb"};">${
+      rank ? `<span>${rank}</span>` : ""
+    }</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  })
+
+const updateSelectedPoiMarker = (selectedKey, selectedPoi, inList) => {
+  if (!map.value) return
+  if (!selectedPoi || inList) {
+    if (selectedPoiMarker) {
+      map.value.removeLayer(selectedPoiMarker)
+      selectedPoiMarker = null
+    }
+    return
+  }
+  if (typeof selectedPoi.lat !== "number" || typeof selectedPoi.lng !== "number") return
+  const color = routeStore.getPoiCategoryColor(selectedPoi.category)
+  const marker = L.marker([selectedPoi.lat, selectedPoi.lng], {
+    icon: createPoiIcon(null, true, color),
+    title: selectedPoi.name || "Selected place",
+    keyboard: false,
+  })
+  marker.setZIndexOffset(1200)
+  marker.on("click", () => {
+    routeStore.selectPoi(selectedPoi)
+    map.value.setView([selectedPoi.lat, selectedPoi.lng], Math.max(map.value.getZoom(), 15), {
+      animate: true,
+    })
+  })
+  if (selectedPoiMarker) {
+    map.value.removeLayer(selectedPoiMarker)
+  }
+  selectedPoiMarker = marker.addTo(map.value)
+}
+
+const updatePreviewPoiMarker = (previewPoi) => {
+  if (!map.value) return
+  if (!previewPoi || typeof previewPoi.lat !== "number" || typeof previewPoi.lng !== "number") {
+    if (previewPoiMarker) {
+      map.value.removeLayer(previewPoiMarker)
+      previewPoiMarker = null
+    }
+    return
+  }
+
+  const previewKey = getPoiKey(previewPoi)
+  const selectedKey = getPoiKey(routeStore.selectedPoi)
+  if (previewKey && selectedKey && previewKey === selectedKey) {
+    if (previewPoiMarker) {
+      map.value.removeLayer(previewPoiMarker)
+      previewPoiMarker = null
+    }
+    return
+  }
+
+  const color = routeStore.getPoiCategoryColor(previewPoi.category)
+  if (!previewPoiMarker) {
+    previewPoiMarker = L.circleMarker([previewPoi.lat, previewPoi.lng], {
+      radius: 16,
+      color,
+      weight: 2,
+      fillColor: color,
+      fillOpacity: 0.12,
+      interactive: false,
+    }).addTo(map.value)
+  } else {
+    previewPoiMarker.setLatLng([previewPoi.lat, previewPoi.lng])
+    previewPoiMarker.setStyle({ color, fillColor: color })
+  }
+  if (typeof previewPoiMarker.bringToFront === "function") {
+    previewPoiMarker.bringToFront()
+  }
 }
 
 const applyBaseLayer = () => {
@@ -739,8 +831,8 @@ onMounted(() => {
   poiLayer = L.layerGroup()
   let updateTimeout = null
   watch(
-    () => routeStore.recommendedPOIs,
-    (pois) => {
+    () => [routeStore.filteredRecommendedPOIs, routeStore.selectedPoi, routeStore.poiCategoryColors],
+    ([pois]) => {
       if (!map.value) return
       clearTimeout(updateTimeout)
 
@@ -748,37 +840,62 @@ onMounted(() => {
         if (!map.value) return
         poiLayer.clearLayers()
 
-        if (!pois || pois.length === 0) return
+        const selectedKey = getPoiKey(routeStore.selectedPoi)
+        let selectedInList = false
 
-        const poiIcon = L.icon({
-          iconUrl: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png",
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          popupAnchor: [0, -32],
-          shadowUrl: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png",
-        })
+        if (pois && pois.length > 0) {
+          pois.forEach((poi, idx) => {
+            if (typeof poi.lat !== "number" || typeof poi.lng !== "number") return
+            const key = getPoiKey(poi)
+            const isSelected = !!selectedKey && key === selectedKey
+            if (isSelected) selectedInList = true
+            const color = routeStore.getPoiCategoryColor(poi.category)
 
-        pois.forEach((poi) => {
-          if (typeof poi.lat !== "number" || typeof poi.lng !== "number") return
+            const marker = L.marker([poi.lat, poi.lng], {
+              icon: createPoiIcon(idx + 1, isSelected, color),
+              title: poi.name,
+              keyboard: false,
+            })
+            if (isSelected) marker.setZIndexOffset(1000)
 
-          const marker = L.marker([poi.lat, poi.lng], {
-            icon: poiIcon,
-            title: poi.name,
-          }).bindPopup(`<b>${poi.name}</b><br>${poi.category || ""}`)
+            marker.on("click", () => {
+              if (!map.value) return
+              routeStore.selectPoi(poi)
+              map.value.setView([poi.lat, poi.lng], Math.max(map.value.getZoom(), 15), { animate: true })
+            })
 
-          marker.on("click", () => {
-            if (!map.value) return
-            map.value.setView([poi.lat, poi.lng], 15, { animate: true })
-            marker.openPopup()
+            marker.on("mouseover", () => {
+              routeStore.setPreviewPoi(poi)
+              if (marker.getTooltip()) return
+              marker.bindTooltip(poi.name || "Place", {
+                direction: "top",
+                offset: [0, -14],
+                opacity: 0.95,
+                className: "jp-map-tooltip",
+              }).openTooltip()
+            })
+            marker.on("mouseout", () => {
+              routeStore.clearPreviewPoi()
+            })
+
+            poiLayer.addLayer(marker)
           })
-
-          poiLayer.addLayer(marker)
-        })
+        }
 
         if (map.value && !map.value.hasLayer(poiLayer)) {
           poiLayer.addTo(map.value)
         }
+        updateSelectedPoiMarker(selectedKey, routeStore.selectedPoi, selectedInList)
+        updatePreviewPoiMarker(routeStore.previewPoi)
       }, 300)
+    },
+    { deep: true }
+  )
+
+  watch(
+    () => routeStore.previewPoi,
+    (preview) => {
+      updatePreviewPoiMarker(preview)
     },
     { deep: true }
   )
@@ -850,8 +967,12 @@ onMounted(() => {
       const lng = route.query.poi_lng ? Number(route.query.poi_lng) : null
       if (map.value && typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng)) {
         map.value.setView([lat, lng], 15)
-        const marker = L.marker([lat, lng]).addTo(map.value)
-        marker.bindPopup(route.query.poi_name || "Selected POI").openPopup()
+        routeStore.selectPoi({
+          id: route.query.poi_id ? Number(route.query.poi_id) || route.query.poi_id : undefined,
+          name: route.query.poi_name || "Selected POI",
+          lat,
+          lng,
+        })
       }
       if (route.query.poi_lat && route.query.poi_lng && route.query.poi_id) {
         routeStore.addViaPoint({
@@ -893,6 +1014,35 @@ onBeforeUnmount(() => {
 :global(.jp-waypoint-icon) {
   background: transparent;
   border: none;
+}
+:global(.jp-poi-marker) {
+  background: transparent;
+  border: none;
+}
+:global(.jp-poi-pin) {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--poi-color, #2563eb);
+  border: 2px solid #ffffff;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+:global(body[data-theme='dark'] .jp-poi-pin) {
+  border-color: #0f1624;
+}
+:global(body[data-theme='light'] .jp-poi-pin) {
+  border-color: #ffffff;
+}
+:global(.jp-poi-marker.selected .jp-poi-pin) {
+  background: #f97316;
+  transform: scale(1.08);
+  box-shadow: 0 14px 26px rgba(249, 115, 22, 0.4);
 }
 :global(.jp-waypoint-badge) {
   width: 24px;

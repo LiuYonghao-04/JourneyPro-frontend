@@ -21,18 +21,55 @@
           <el-slider v-model="tuningValue" :min="0" :max="100" :show-tooltip="false" @change="applyTuning" />
         </div>
 
-        <div v-if="pois.length === 0" class="empty">
+        <div v-if="categoryStats.length" class="category-filter">
+          <div class="filter-head">
+            <span class="filter-title">Categories</span>
+            <button v-if="hasCategoryFilter" class="filter-clear" @click="clearCategories">
+              Clear
+            </button>
+          </div>
+          <div class="filter-chips">
+            <button
+              v-for="cat in categoryStats"
+              :key="cat.name"
+              class="filter-chip"
+              :class="{ active: isCategoryActive(cat.name) }"
+              :style="{ '--chip-color': cat.color }"
+              @click="toggleCategory(cat.name)"
+            >
+              <span class="chip-dot" :style="{ background: cat.color }"></span>
+              <span class="chip-label">{{ cat.name }}</span>
+              <span class="chip-count">{{ cat.count }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="allPois.length === 0" class="empty">
           No recommendations yet. Plan a route first.
+        </div>
+        <div v-else-if="pois.length === 0" class="empty">
+          No POIs match your filters.
         </div>
 
         <ul v-else class="poi-list">
-          <li v-for="poi in pois" :key="poi.id || poi.name" class="poi-item">
+          <li
+            v-for="(poi, idx) in pois"
+            :key="poi.id || poi.name"
+            class="poi-item"
+            :class="{ selected: isSelected(poi) }"
+            :style="{ '--poi-color': routeStore.getPoiCategoryColor(poi.category) }"
+            @mouseenter="previewPoi(poi)"
+            @mouseleave="clearPreview"
+          >
+            <div class="poi-rank">{{ idx + 1 }}</div>
             <div class="poi-info" @click="focusPoi(poi)">
               <div class="poi-name">{{ poi.name }}</div>
               <div class="poi-meta">
                 <span>{{ poi.category }}</span>
                 <span class="dot">|</span>
                 <span>Popularity {{ poi.popularity }}</span>
+                <span v-if="poi.distance" class="dot">|</span>
+                <span v-if="poi.distance">{{ formatDistance(poi.distance) }}</span>
               </div>
               <div v-if="poi.reason" class="poi-reason">{{ poi.reason }}</div>
               <div v-if="poi.match_tags?.length" class="poi-tags">
@@ -74,7 +111,8 @@ onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
 })
 
-const pois = computed(() => routeStore.recommendedPOIs || [])
+const allPois = computed(() => routeStore.recommendedPOIs || [])
+const pois = computed(() => routeStore.filteredRecommendedPOIs || [])
 const loading = computed(() => routeStore.isLoading)
 const profile = computed(() => routeStore.recommendationProfile || null)
 const profileHint = computed(() => {
@@ -84,6 +122,28 @@ const profileHint = computed(() => {
   const combined = [...tags, ...categories].filter(Boolean)
   const unique = [...new Set(combined)].slice(0, 4)
   return unique.join(', ')
+})
+const selectedPoiId = computed(() => {
+  const id = routeStore.selectedPoi?.id
+  return id !== undefined && id !== null ? String(id) : null
+})
+const activeCategories = computed(() => routeStore.poiCategoryFilter || [])
+const hasCategoryFilter = computed(() => activeCategories.value.length > 0)
+const categoryStats = computed(() => {
+  const counts = new Map()
+  ;(allPois.value || []).forEach((poi) => {
+    const raw = String(poi?.category || '').trim()
+    if (!raw) return
+    const current = counts.get(raw) || 0
+    counts.set(raw, current + 1)
+  })
+  return [...counts.entries()]
+    .map(([name, count]) => ({
+      name,
+      count,
+      color: routeStore.getPoiCategoryColor(name),
+    }))
+    .sort((a, b) => b.count - a.count)
 })
 const tuningValue = computed({
   get() {
@@ -106,6 +166,16 @@ const isViaPoint = (poi) => {
   )
 }
 
+const isSelected = (poi) => {
+  if (!poi) return false
+  const pid = poi.id !== undefined && poi.id !== null ? String(poi.id) : null
+  if (pid && selectedPoiId.value) return pid === selectedPoiId.value
+  if (typeof poi.lat === 'number' && typeof poi.lng === 'number' && routeStore.selectedPoi) {
+    return poi.lat === routeStore.selectedPoi.lat && poi.lng === routeStore.selectedPoi.lng
+  }
+  return false
+}
+
 const togglePoi = async (poi) => {
   if (isViaPoint(poi)) {
     routeStore.removeViaPoint(poi)
@@ -116,11 +186,42 @@ const togglePoi = async (poi) => {
 
 const focusPoi = (poi) => {
   if (!poi || typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+  routeStore.selectPoi(poi)
   routeStore.requestFocusPoint(poi.lat, poi.lng, 16)
+}
+
+const toggleCategory = (category) => {
+  routeStore.togglePoiCategoryFilter(category)
+}
+
+const clearCategories = () => {
+  routeStore.clearPoiCategoryFilter()
+}
+
+const isCategoryActive = (category) => {
+  return (routeStore.poiCategoryFilter || []).includes(String(category || '').trim())
+}
+
+const previewPoi = (poi) => {
+  if (!poi || typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+  routeStore.setPreviewPoi(poi)
+}
+
+const clearPreview = () => {
+  routeStore.clearPreviewPoi()
 }
 
 const toggle = () => {
   collapsed.value = !collapsed.value
+  if (collapsed.value) clearPreview()
+}
+
+const formatDistance = (meters) => {
+  const num = Number(meters)
+  if (!Number.isFinite(num)) return ''
+  const km = num / 1000
+  if (km < 1) return `${(km * 1000).toFixed(0)} m`
+  return `${km.toFixed(2)} km`
 }
 </script>
 
@@ -176,11 +277,30 @@ const toggle = () => {
 }
 .poi-item {
   display: flex;
+  gap: 8px;
   justify-content: space-between;
   align-items: center;
   margin: 6px 0;
   padding: 6px 0;
   border-bottom: 1px solid var(--map-overlay-border);
+  border-left: 3px solid color-mix(in srgb, var(--poi-color, transparent) 70%, transparent);
+}
+.poi-item.selected {
+  background: color-mix(in srgb, var(--badge) 70%, transparent);
+  border-radius: 10px;
+  padding: 8px 8px;
+}
+.poi-rank {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--poi-color, var(--badge)) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--poi-color, var(--map-overlay-border)) 40%, var(--map-overlay-border));
+  color: var(--map-overlay-fg);
 }
 .poi-info {
   flex: 1;
@@ -284,6 +404,78 @@ const toggle = () => {
 .tuning-side {
   color: var(--muted);
   opacity: 0.8;
+}
+
+.category-filter {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 70%, transparent);
+  border: 1px solid var(--map-overlay-border);
+}
+.filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.filter-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--map-overlay-fg);
+}
+.filter-clear {
+  border: 1px solid var(--map-overlay-border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--map-overlay-border);
+  background: transparent;
+  color: var(--map-overlay-fg);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.filter-chip.active {
+  background: color-mix(in srgb, var(--chip-color) 18%, transparent);
+  border-color: color-mix(in srgb, var(--chip-color) 70%, var(--map-overlay-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-color) 60%, transparent),
+    0 10px 18px rgba(0, 0, 0, 0.18);
+}
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+.filter-chip.active .chip-dot {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip-color) 40%, transparent);
+}
+.filter-chip.active .chip-label {
+  font-weight: 600;
+}
+.chip-label {
+  white-space: nowrap;
+}
+.chip-count {
+  font-size: 10px;
+  color: var(--muted);
 }
 
 .poi-panel ::-webkit-scrollbar {

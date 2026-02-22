@@ -3,6 +3,13 @@ import { storeToRefs } from "pinia"
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue"
 import { useRouteStore } from "../store/routeStore"
 
+defineProps({
+  compact: {
+    type: Boolean,
+    default: false,
+  },
+})
+
 const routeStore = useRouteStore()
 const {
   totalDistance,
@@ -135,7 +142,7 @@ watch(
 </script>
 
 <template>
-  <div class="directions-panel" :class="[{ collapsed }, theme]">
+  <div class="directions-panel" :class="[{ collapsed, compact }, theme]">
     <div class="header" @click="toggle">
       <div class="title">Directions</div>
       <button class="collapse-btn collapse-inline" @click.stop="toggle">
@@ -223,6 +230,9 @@ watch(
   color: var(--map-overlay-fg);
   z-index: 1100;
   transition: background-color 1s ease, border-color 1s ease, color 1s ease;
+}
+.directions-panel.compact {
+  max-height: calc(68vh - 40px);
 }
 .directions-panel.collapsed {
   max-height: 70px;

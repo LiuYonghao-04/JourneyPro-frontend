@@ -119,7 +119,7 @@
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import axios from 'axios'
 import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled, ArrowUpBold } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
@@ -127,6 +127,7 @@ import CroppedImage from './CroppedImage.vue'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const auth = useAuthStore()
+const route = useRoute()
 
 const tabs = ref(['Recommended'])
 const activeTab = ref('Recommended')
@@ -143,6 +144,11 @@ const offset = ref(0)
 const dupRounds = ref(0)
 const likedIds = ref(new Set())
 const favIds = ref(new Set())
+const poiFilterId = computed(() => {
+  const raw = route.query.poi_id
+  const num = Number(raw)
+  return Number.isFinite(num) && num > 0 ? num : null
+})
 
 const markWithReactions = (list) =>
   list.map((item) => ({
@@ -194,7 +200,12 @@ const fetchPosts = async (reset = false) => {
       await loadReactions()
     }
     const res = await axios.get(API_BASE, {
-      params: { limit, offset: offset.value, sort: sort.value },
+      params: {
+        limit,
+        offset: offset.value,
+        sort: sort.value,
+        poi_id: poiFilterId.value || undefined,
+      },
     })
     const list = markWithReactions(res.data?.data || [])
     if (list.length < limit) noMore.value = true
@@ -307,13 +318,14 @@ const handleSearch = () => {
 const filteredPosts = computed(() => {
   const kw = search.value.trim().toLowerCase()
   return posts.value.filter((p) => {
+    const inPoi = poiFilterId.value ? Number(p.poi_id) === poiFilterId.value : true
     const inTab = activeTab.value === 'Recommended' ? true : (p.tags || []).includes(activeTab.value)
     const inKw =
       !kw ||
       p.title?.toLowerCase().includes(kw) ||
       p.content?.toLowerCase().includes(kw) ||
       (p.tags || []).some((t) => t.toLowerCase().includes(kw))
-    return inTab && inKw
+    return inPoi && inTab && inKw
   })
 })
 
@@ -345,6 +357,19 @@ const setupInfiniteScroll = () => {
 }
 
 watch(sort, () => fetchPosts(true))
+watch(
+  () => route.query.poi_name,
+  (name) => {
+    if (typeof name === 'string' && name.trim()) search.value = name.trim()
+  },
+  { immediate: true }
+)
+watch(
+  () => poiFilterId.value,
+  () => {
+    fetchPosts(true)
+  }
+)
 
 onMounted(() => {
   fetchTags()
