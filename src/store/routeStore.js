@@ -9,8 +9,10 @@ const SAVED_POI_KEY = 'jp_saved_pois'
 const RECENT_POI_KEY = 'jp_recent_pois'
 const MAX_RECENT_POIS = 12
 const CATEGORY_COLORS = ['#2563eb', '#10b981', '#f97316', '#a855f7', '#f59e0b', '#06b6d4', '#22c55e', '#ef4444']
+const PANEL_MODES = ['collapsed', 'half', 'full']
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
+const normalizePanelMode = (mode) => (PANEL_MODES.includes(mode) ? mode : 'half')
 
 let recoSettingsSaveTimer = null
 let poiDetailRequestSeq = 0
@@ -161,6 +163,8 @@ export const useRouteStore = defineStore('route', {
     routeError: null,
     viaPoints: loadViaPoints(),
     followRoute: true,
+    routePanelMode: 'half',
+    poiPanelMode: 'half',
     hoveredStepIndex: null,
     hoveredStepSource: null,
     pinnedStepIndex: null,
@@ -183,6 +187,28 @@ export const useRouteStore = defineStore('route', {
     setStart(lat, lng) {
       this.startLat = lat
       this.startLng = lng
+    },
+
+    setRoutePanelMode(mode) {
+      const next = normalizePanelMode(mode)
+      if (this.poiPanelMode === 'full' && next !== 'collapsed') {
+        this.poiPanelMode = 'collapsed'
+      }
+      if (next === 'full') {
+        this.poiPanelMode = 'collapsed'
+      }
+      this.routePanelMode = next
+    },
+
+    setPoiPanelMode(mode) {
+      const next = normalizePanelMode(mode)
+      if (this.routePanelMode === 'full' && next !== 'collapsed') {
+        this.routePanelMode = 'collapsed'
+      }
+      if (next === 'full') {
+        this.routePanelMode = 'collapsed'
+      }
+      this.poiPanelMode = next
     },
 
     setEnd(lat, lng) {

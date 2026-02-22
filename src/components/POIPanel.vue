@@ -1,11 +1,13 @@
 <template>
-  <div class="poi-panel" :class="[{ collapsed }, theme]">
-    <div class="panel-head" @click="toggle">
+  <div class="poi-panel" :class="[theme, panelMode]" :style="panelStyle">
+    <div class="panel-head">
       <h3 class="title">Recommended POIs</h3>
-      <button class="collapse-btn">{{ collapsed ? 'Expand' : 'Collapse' }}</button>
+      <button class="collapse-btn" @click="togglePanelMode">
+        {{ modeActionLabel }}
+      </button>
     </div>
 
-    <div v-if="!collapsed">
+    <div v-if="!isCollapsed" class="panel-body">
       <div v-if="loading" class="empty">Loading recommendations...</div>
       <div v-else>
         <div v-if="profileHint" class="profile-hint">
@@ -35,10 +37,13 @@
               class="filter-chip"
               :class="{ active: isCategoryActive(cat.name) }"
               :style="{ '--chip-color': cat.color }"
+              type="button"
+              :aria-pressed="isCategoryActive(cat.name)"
               @click="toggleCategory(cat.name)"
             >
               <span class="chip-dot" :style="{ background: cat.color }"></span>
               <span class="chip-label">{{ cat.name }}</span>
+              <span v-if="isCategoryActive(cat.name)" class="chip-badge">Filtered</span>
               <span class="chip-count">{{ cat.count }}</span>
             </button>
           </div>
@@ -91,13 +96,17 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouteStore } from '../store/routeStore'
 
 const routeStore = useRouteStore()
-const collapsed = ref(false)
 const theme = ref(document.body.getAttribute('data-theme') || 'dark')
 let themeObserver = null
+const panelMode = computed(() => routeStore.poiPanelMode || 'half')
+const isCollapsed = computed(() => panelMode.value === 'collapsed')
+const viewportHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
+const EDGE_OFFSET = 10
+const COLLAPSED_HEIGHT = 56
 
 onMounted(() => {
   routeStore.fetchRecommendedPois()
@@ -105,11 +114,21 @@ onMounted(() => {
     theme.value = document.body.getAttribute('data-theme') || 'dark'
   })
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
+  updateViewportHeight()
+  window.addEventListener('resize', updateViewportHeight)
 })
 
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
+  window.removeEventListener('resize', updateViewportHeight)
 })
+
+watch(
+  () => panelMode.value,
+  (mode) => {
+    if (mode === 'collapsed') clearPreview()
+  }
+)
 
 const allPois = computed(() => routeStore.recommendedPOIs || [])
 const pois = computed(() => routeStore.filteredRecommendedPOIs || [])
@@ -211,9 +230,44 @@ const clearPreview = () => {
   routeStore.clearPreviewPoi()
 }
 
-const toggle = () => {
-  collapsed.value = !collapsed.value
-  if (collapsed.value) clearPreview()
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
+
+const getPanelHeights = () => {
+  const height = viewportHeight.value || 800
+  const reserved = COLLAPSED_HEIGHT + EDGE_OFFSET * 13
+  const full = Math.max(260, height - reserved )
+  const halfMax = Math.min(400, full - 40)
+  const halfMin = Math.min(220, halfMax)
+  const half = clamp(Math.round(height * 0.45), halfMin, halfMax)
+  return {
+    collapsed: COLLAPSED_HEIGHT,
+    half,
+    full,
+  }
+}
+
+const panelStyle = computed(() => {
+  const heights = getPanelHeights()
+  const next = heights[panelMode.value] || heights.half
+  return { height: `${next}px` }
+})
+
+const modeActionLabel = computed(() => {
+  if (panelMode.value === 'collapsed') return 'Expand'
+  if (panelMode.value === 'half') return 'Full'
+  return 'Collapse'
+})
+
+const togglePanelMode = () => {
+  const next =
+    panelMode.value === 'collapsed' ? 'half' : panelMode.value === 'half' ? 'full' : 'collapsed'
+  routeStore.setPoiPanelMode(next)
+  if (next === 'collapsed') clearPreview()
+}
+
+const updateViewportHeight = () => {
+  if (typeof window === 'undefined') return
+  viewportHeight.value = window.innerHeight || 800
 }
 
 const formatDistance = (meters) => {
@@ -237,17 +291,16 @@ const formatDistance = (meters) => {
   padding: 12px 8px 12px 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   border: 1px solid var(--map-overlay-border);
-  max-height: 40vh;
   overflow: hidden;
   backdrop-filter: none;
   color: var(--map-overlay-fg);
-  transition: background-color 1s ease, border-color 1s ease, color 1s ease;
+  transition: background-color 1s ease, border-color 1s ease, color 1s ease, height 0.25s ease;
+  display: flex;
+  flex-direction: column;
 }
 .poi-panel.collapsed {
-  height: 52px;
-  max-height: 52px;
+  height: 56px;
   padding: 10px 14px;
-  cursor: pointer;
 }
 .panel-head {
   display: flex;
@@ -268,12 +321,20 @@ const formatDistance = (meters) => {
   padding: 4px 10px;
   cursor: pointer;
 }
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
 .poi-list {
   overflow-y: auto;
-  max-height: calc(50vh - 70px);
+  flex: 1;
+  min-height: 0;
   margin-top: 10px;
   padding:0 8px 0 20px;
-
 }
 .poi-item {
   display: flex;
@@ -434,6 +495,11 @@ const formatDistance = (meters) => {
   font-size: 11px;
   cursor: pointer;
 }
+.filter-clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--map-overlay-fg) 20%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--map-overlay-bg) 90%, transparent);
+}
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
@@ -451,6 +517,11 @@ const formatDistance = (meters) => {
   font-size: 11px;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.filter-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip-color) 45%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--map-overlay-bg) 90%, transparent);
 }
 .filter-chip.active {
   background: color-mix(in srgb, var(--chip-color) 18%, transparent);
@@ -470,12 +541,30 @@ const formatDistance = (meters) => {
 .filter-chip.active .chip-label {
   font-weight: 600;
 }
+.chip-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: color-mix(in srgb, var(--chip-color) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, transparent);
+}
 .chip-label {
   white-space: nowrap;
 }
 .chip-count {
   font-size: 10px;
   color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.filter-chip.active .chip-count {
+  color: var(--map-overlay-fg);
+  border-color: color-mix(in srgb, var(--chip-color) 45%, transparent);
+  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  font-weight: 600;
 }
 
 .poi-panel ::-webkit-scrollbar {

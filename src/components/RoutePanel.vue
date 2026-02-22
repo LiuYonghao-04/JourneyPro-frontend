@@ -11,12 +11,16 @@ const routeStore = useRouteStore()
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
 const viaPoints = computed(() => routeStore.viaPoints || [])
 const locating = ref(false)
-const panelCollapsed = ref(false)
 const poiQuery = ref('')
+const panelMode = computed(() => routeStore.routePanelMode || 'half')
+const isCollapsed = computed(() => panelMode.value === 'collapsed')
+const viewportHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 const POI_API = 'http://localhost:3001/api/poi/search'
 const VIA_STORAGE_KEY = 'jp_via_points'
+const EDGE_OFFSET = 10
+const COLLAPSED_HEIGHT = 56
 
 let fetchTimer = null
 let lastResults = []
@@ -30,14 +34,56 @@ onMounted(() => {
     currentTheme.value = document.body.getAttribute('data-theme') || 'dark'
   })
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
+  updateViewportHeight()
+  window.addEventListener('resize', updateViewportHeight)
 })
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
   if (fetchTimer) clearTimeout(fetchTimer)
   if (poiFetchTimer) clearTimeout(poiFetchTimer)
+  window.removeEventListener('resize', updateViewportHeight)
 })
 
 const logoSrc = computed(() => (currentTheme.value === 'dark' ? logoDark : logoLight))
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
+
+const getPanelHeights = () => {
+  const height = viewportHeight.value || 800
+  const reserved = COLLAPSED_HEIGHT + EDGE_OFFSET * 13
+  const full = Math.max(260, height - reserved)
+  const halfMax = Math.min(420, full - 40)
+  const halfMin = Math.min(240, halfMax)
+  const half = clamp(Math.round(height * 0.45), halfMin, halfMax)
+  return {
+    collapsed: COLLAPSED_HEIGHT,
+    half,
+    full,
+  }
+}
+
+const panelStyle = computed(() => {
+  const heights = getPanelHeights()
+  const next = heights[panelMode.value] || heights.half
+  return { height: `${next}px` }
+})
+
+const modeActionLabel = computed(() => {
+  if (panelMode.value === 'collapsed') return 'Expand'
+  if (panelMode.value === 'half') return 'Full'
+  return 'Collapse'
+})
+
+const togglePanelMode = () => {
+  const next =
+    panelMode.value === 'collapsed' ? 'half' : panelMode.value === 'half' ? 'full' : 'collapsed'
+  routeStore.setRoutePanelMode(next)
+}
+
+const updateViewportHeight = () => {
+  if (typeof window === 'undefined') return
+  viewportHeight.value = window.innerHeight || 800
+}
 
 // Mapbox forward geocoding autocomplete (limited to London bbox)
 const LONDON_BBOX = [-0.489, 51.28, 0.236, 51.686] // [minLng, minLat, maxLng, maxLat]
@@ -191,18 +237,18 @@ const clearPoiQuery = () => {
 </script>
 
 <template>
-  <div class="control-panel" :class="currentTheme">
+  <div class="control-panel" :class="[currentTheme, panelMode]" :style="panelStyle">
     <div class="header">
       <div class="title-wrap">
         <img :src="logoSrc" class="logo" alt="JourneyPro Logo" />
         <h2 class="title">JourneyPro</h2>
       </div>
-      <button class="collapse-btn" @click="panelCollapsed = !panelCollapsed">
-        {{ panelCollapsed ? 'Expand' : 'Collapse' }}
+      <button class="collapse-btn" @click="togglePanelMode">
+        {{ modeActionLabel }}
       </button>
     </div>
 
-    <div v-if="!panelCollapsed">
+    <div v-if="!isCollapsed" class="panel-body">
     <el-form label-position="top" label-width="60px" size="small">
       <el-form-item label="Starting point">
         <el-autocomplete
@@ -303,7 +349,17 @@ const clearPoiQuery = () => {
   z-index: 1000;
   width: 300px;
   border: 1px solid var(--map-overlay-border);
-  transition: background-color 1s ease, border-color 1s ease, color 1s ease;
+  transition: background-color 1s ease, border-color 1s ease, color 1s ease, height 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.control-panel.collapsed {
+  padding: 10px 12px;
+  height: 56px;
+}
+.control-panel.collapsed .header {
+  margin-bottom: 0;
 }
 
 .header {
@@ -353,6 +409,13 @@ const clearPoiQuery = () => {
   margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.panel-body {
+  overflow-y: auto;
+  padding-right: 2px;
+  flex: 1;
+  min-height: 0;
 }
 
 .jp-autocomplete {
