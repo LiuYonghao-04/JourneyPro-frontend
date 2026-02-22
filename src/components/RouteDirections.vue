@@ -148,7 +148,7 @@ watch(
       <button class="collapse-btn collapse-inline" @click.stop="toggle">
         {{ collapsed ? 'Expand' : 'Collapse' }}
       </button>
-      <div class="meta">{{ startAddress }} -> {{ endAddress }}</div>
+<!--      <div class="meta">{{ startAddress }} -> {{ endAddress }}</div>-->
       <div class="summary">
         <template v-if="routeError">
           <span class="error">{{ routeError }}</span>
@@ -220,7 +220,7 @@ watch(
   top: 10px;
   right: 10px;
   width: 320px;
-  max-height: 80vh;
+  max-height: 90vh;
   overflow: hidden;
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);
@@ -231,11 +231,9 @@ watch(
   z-index: 1100;
   transition: background-color 1s ease, border-color 1s ease, color 1s ease;
 }
-.directions-panel.compact {
-  max-height: calc(68vh - 40px);
-}
+
 .directions-panel.collapsed {
-  max-height: 70px;
+  max-height: 80px;
   cursor: pointer;
 }
 .header {

@@ -9,7 +9,7 @@
 
     <div v-if="!isCollapsed" class="panel-body">
       <div v-if="loading" class="empty">Loading recommendations...</div>
-      <div v-else>
+      <div v-else class="panel-content">
         <div v-if="profileHint" class="profile-hint">
           <span class="hint-label">For you</span>
           <span class="hint-tags">{{ profileHint }}</span>
@@ -329,6 +329,13 @@ const formatDistance = (meters) => {
   flex: 1;
   min-height: 0;
 }
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
 .poi-list {
   overflow-y: auto;
   flex: 1;
@@ -380,14 +387,14 @@ const formatDistance = (meters) => {
   color: var(--map-overlay-fg);
 }
 .poi-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .poi-reason {
-  font-size: 12px;
+  font-size: 10px;
   color: var(--map-overlay-fg);
   opacity: 0.85;
   margin-top: 4px;
