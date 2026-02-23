@@ -66,10 +66,10 @@
             class="card"
             @click="openDetail(card)"
           >
-            <div class="cover" v-if="card.cover_image || (card.images && card.images[0])">
+            <div class="cover" v-if="cardCoverImage(card)">
               <div v-if="!loadedMap[card._dupKey || card.id]" class="img-skeleton" />
               <CroppedImage
-                :src="card.cover_image || card.images?.[0]"
+                :src="cardCoverImage(card)"
                 :alt="card.title"
                 loading="lazy"
                 class="cover-img"
@@ -82,6 +82,18 @@
               <div class="card-meta">
                 <span>{{ card.user?.nickname || 'Guest' }}</span>
                 <span v-if="card.tags?.length"> &middot; {{ card.tags.slice(0, 2).join(' / ') }}</span>
+              </div>
+              <button v-if="card.poi?.id" class="poi-link" @click.stop="openPoiFromFeed(card)">
+                <el-icon><Location /></el-icon>
+                <span>{{ card.poi?.name || 'Linked place' }}</span>
+              </button>
+              <div v-if="card.poi?.photos?.length" class="poi-photo-strip">
+                <img
+                  v-for="(img, idx) in card.poi.photos.slice(0, 3)"
+                  :key="`${card.id}-poi-${idx}`"
+                  :src="img"
+                  :alt="card.poi?.name || 'POI photo'"
+                />
               </div>
               <div class="card-footer">
                 <button class="icon-btn" @click.stop="toggleLike(card)">
@@ -119,15 +131,24 @@
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
-import { Search, CircleCheck, CircleCheckFilled, Star, StarFilled, ArrowUpBold } from '@element-plus/icons-vue'
+import {
+  Search,
+  CircleCheck,
+  CircleCheckFilled,
+  Star,
+  StarFilled,
+  ArrowUpBold,
+  Location,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from './CroppedImage.vue'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 
 const tabs = ref(['Recommended'])
 const activeTab = ref('Recommended')
@@ -253,7 +274,23 @@ const toggleFav = async (card) => {
 }
 
 const openDetail = (card) => {
-  window.location.href = `/posts/postsid=${card.id}`
+  router.push(`/posts/postsid=${card.id}`)
+}
+
+const cardCoverImage = (card) => card?.cover_image || card?.images?.[0] || card?.poi?.image_url || ''
+
+const openPoiFromFeed = (card) => {
+  const poi = card?.poi
+  if (!poi?.id) return
+  router.push({
+    path: '/map',
+    query: {
+      poi_id: String(poi.id),
+      poi_name: poi.name || '',
+      poi_lat: poi.lat ?? '',
+      poi_lng: poi.lng ?? '',
+    },
+  })
 }
 
 const contentEl = ref(null)
@@ -630,6 +667,34 @@ const markLoaded = (card) => {
   font-size: 12px;
   color: var(--muted);
   margin-bottom: 8px;
+}
+.poi-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 85%, transparent);
+  border-radius: 10px;
+  padding: 5px 9px;
+  background: color-mix(in srgb, var(--badge) 85%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.poi-link:hover {
+  background: color-mix(in srgb, var(--badge) 95%, transparent);
+}
+.poi-photo-strip {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+.poi-photo-strip img {
+  width: 46px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
 }
 .card-footer {
   display: flex;

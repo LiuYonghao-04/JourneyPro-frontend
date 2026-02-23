@@ -10,18 +10,6 @@
     <div v-if="!isCollapsed" class="panel-body">
       <div v-if="loading" class="empty">Loading recommendations...</div>
       <div v-else class="panel-content">
-        <div class="mode-switch">
-          <button
-            v-for="mode in modeTabs"
-            :key="mode.value"
-            class="mode-btn"
-            :class="{ active: modeValue === mode.value }"
-            @click="changeMode(mode.value)"
-          >
-            {{ mode.label }}
-          </button>
-        </div>
-
         <div v-if="showDebugMeta" class="algo-meta">
           <span>{{ recommendationVersion || 'v2' }}</span>
           <span class="dot">|</span>
@@ -155,6 +143,7 @@ const EDGE_OFFSET = 10
 const COLLAPSED_HEIGHT = 56
 
 onMounted(() => {
+  routeStore.setRecoMode('driving')
   routeStore.fetchRecommendedPois()
   themeObserver = new MutationObserver(() => {
     theme.value = document.body.getAttribute('data-theme') || 'dark'
@@ -188,12 +177,6 @@ const diagnosticCount = computed(() => {
   const value = diagnostics.value?.recall_counts?.total_candidates
   return Number.isFinite(Number(value)) ? Number(value) : null
 })
-const modeTabs = [
-  { label: 'Drive', value: 'driving' },
-  { label: 'Walk', value: 'walking' },
-  { label: 'Cycle', value: 'cycling' },
-]
-const modeValue = computed(() => routeStore.recoMode || 'driving')
 const profileHint = computed(() => {
   if (!profile.value?.personalized) return ''
   const tags = Array.isArray(profile.value.tags) ? profile.value.tags : []
@@ -253,10 +236,6 @@ const applyTuning = () => {
 }
 const applyExploreTuning = () => {
   routeStore.reorderRecommendedPois()
-}
-const changeMode = (mode) => {
-  if (modeValue.value === mode) return
-  routeStore.setRecoMode(mode)
 }
 const isViaPoint = (poi) => {
   return (routeStore.viaPoints || []).some((p) =>
@@ -551,26 +530,6 @@ const factorPercent = (poi, key) => {
   color: var(--muted);
   text-align: center;
   padding: 12px 0;
-}
-.mode-switch {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-.mode-btn {
-  border: 1px solid var(--map-overlay-border);
-  background: color-mix(in srgb, var(--badge) 75%, transparent);
-  color: var(--map-overlay-fg);
-  border-radius: 10px;
-  padding: 4px 0;
-  font-size: 11px;
-  cursor: pointer;
-}
-.mode-btn.active {
-  border-color: color-mix(in srgb, var(--btn-primary) 70%, var(--map-overlay-border));
-  background: color-mix(in srgb, var(--btn-primary) 22%, transparent);
-  font-weight: 600;
 }
 .algo-meta {
   display: flex;

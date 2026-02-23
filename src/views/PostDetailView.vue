@@ -23,7 +23,9 @@
         <div class="media">
           <el-carousel v-if="post.images?.length" height="100%">
             <el-carousel-item v-for="(img, idx) in post.images" :key="idx">
-              <CroppedImage :src="img" :alt="`image-${idx}`" class="media-img" />
+              <button class="media-photo-btn" @click.stop="openPhotoViewer(post.images, idx)">
+                <CroppedImage :src="img" :alt="`image-${idx}`" class="media-img" />
+              </button>
             </el-carousel-item>
           </el-carousel>
           <div v-else class="media-placeholder">No image</div>
@@ -72,6 +74,17 @@
               <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">
                 Add to route
               </el-button>
+              <el-button size="small" :disabled="!poiDetail?.id" @click="openPoiPostFeed">Related posts</el-button>
+            </div>
+            <div v-if="poiGallery.length" class="poi-gallery">
+              <button
+                v-for="(img, idx) in poiGallery"
+                :key="`${poiDetail?.id || 'poi'}-${idx}`"
+                class="poi-gallery-item"
+                @click="openPhotoViewer(poiGallery, idx)"
+              >
+                <img :src="img" :alt="poiDetail?.name || 'POI photo'" />
+              </button>
             </div>
             <el-alert
               v-if="alertMessage"
@@ -218,11 +231,33 @@
         </div>
       </section>
     </main>
+
+    <div v-if="photoViewerOpen && activePhotoUrl" class="photo-viewer" @click.self="closePhotoViewer">
+      <button class="viewer-close" aria-label="Close photo viewer" @click="closePhotoViewer">x</button>
+      <button
+        v-if="photoViewerImages.length > 1"
+        class="viewer-nav prev"
+        aria-label="Previous photo"
+        @click.stop="showPrevPhoto"
+      >
+        <
+      </button>
+      <img class="viewer-image" :src="activePhotoUrl" :alt="`photo-${photoViewerIndex + 1}`" />
+      <button
+        v-if="photoViewerImages.length > 1"
+        class="viewer-nav next"
+        aria-label="Next photo"
+        @click.stop="showNextPhoto"
+      >
+        >
+      </button>
+      <div class="viewer-count">{{ photoViewerIndex + 1 }} / {{ photoViewerImages.length }}</div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from '@element-plus/icons-vue'
@@ -250,8 +285,21 @@ const poiDetail = ref(null)
 const poiLoading = ref(false)
 const alertMessage = ref('')
 const alertType = ref('success')
+const photoViewerOpen = ref(false)
+const photoViewerImages = ref([])
+const photoViewerIndex = ref(0)
 
 const postId = computed(() => route.params.id)
+const activePhotoUrl = computed(() => photoViewerImages.value[photoViewerIndex.value] || '')
+
+const normalizeImageList = (list) =>
+  Array.from(new Set((list || []).map((img) => String(img || '').trim()).filter(Boolean)))
+
+const poiGallery = computed(() => {
+  const fromPoi = Array.isArray(poiDetail.value?.photos) ? poiDetail.value.photos : []
+  const merged = normalizeImageList([poiDetail.value?.image_url, ...fromPoi])
+  return merged.slice(0, 6)
+})
 
 const goBack = () => {
   router.back()
@@ -432,6 +480,45 @@ const fetchPoiDetail = async () => {
   }
 }
 
+const openPhotoViewer = (images, index = 0) => {
+  const normalized = normalizeImageList(images)
+  if (!normalized.length) return
+  photoViewerImages.value = normalized
+  const safe = Math.max(0, Math.min(Number(index) || 0, normalized.length - 1))
+  photoViewerIndex.value = safe
+  photoViewerOpen.value = true
+}
+
+const closePhotoViewer = () => {
+  photoViewerOpen.value = false
+}
+
+const showPrevPhoto = () => {
+  if (!photoViewerImages.value.length) return
+  photoViewerIndex.value =
+    (photoViewerIndex.value - 1 + photoViewerImages.value.length) % photoViewerImages.value.length
+}
+
+const showNextPhoto = () => {
+  if (!photoViewerImages.value.length) return
+  photoViewerIndex.value = (photoViewerIndex.value + 1) % photoViewerImages.value.length
+}
+
+const onPhotoViewerKeydown = (event) => {
+  if (!photoViewerOpen.value) return
+  if (event.key === 'Escape') {
+    closePhotoViewer()
+    return
+  }
+  if (event.key === 'ArrowLeft') {
+    showPrevPhoto()
+    return
+  }
+  if (event.key === 'ArrowRight') {
+    showNextPhoto()
+  }
+}
+
 const viewOnMap = () => {
   if (!poiDetail.value) return
   const { lat, lng, name, id } = poiDetail.value
@@ -483,6 +570,14 @@ const addToRoute = () => {
   console.log('addToRoute success', { id, latNum, lngNum, viaPoints: routeStore.viaPoints })
 }
 
+const openPoiPostFeed = () => {
+  if (!poiDetail.value?.id) return
+  router.push({
+    path: '/posts',
+    query: { poi_id: String(poiDetail.value.id), poi_name: poiDetail.value.name || '' },
+  })
+}
+
 const fetchFollowStatus = async () => {
   if (!auth.user || !post.value?.user?.id || auth.user.id === post.value.user.id) {
     following.value = false
@@ -514,6 +609,10 @@ const toggleFollow = async () => {
 onMounted(() => {
   fetchPost()
   fetchComments()
+  window.addEventListener('keydown', onPhotoViewerKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onPhotoViewerKeydown)
 })
 </script>
 
@@ -603,6 +702,14 @@ onMounted(() => {
 .media :deep(.el-carousel__item) {
   height: 100%;
 }
+.media-photo-btn {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: zoom-in;
+}
 .media-img {
   width: 100%;
   height: 100%;
@@ -681,6 +788,27 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   margin-top: 6px;
+}
+.poi-gallery {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.poi-gallery-item {
+  width: 88px;
+  height: 62px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+  border-radius: 10px;
+  background: transparent;
+  padding: 0;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.poi-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .inline-alert {
   margin-top: 8px;
@@ -857,6 +985,71 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(6px);
+  padding: 22px;
+}
+.viewer-image {
+  max-width: min(92vw, 1400px);
+  max-height: 84vh;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  object-fit: contain;
+  background: #0f172a;
+}
+.viewer-close,
+.viewer-nav {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.viewer-close {
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 20px;
+}
+.viewer-nav {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 68px;
+  border-radius: 12px;
+  font-size: 34px;
+  line-height: 1;
+}
+.viewer-nav.prev {
+  left: 16px;
+}
+.viewer-nav.next {
+  right: 16px;
+}
+.viewer-count {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(15, 23, 42, 0.7);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 @media (max-width: 1100px) {

@@ -14,7 +14,7 @@ const RECENT_POI_KEY = 'jp_recent_pois'
 const MAX_RECENT_POIS = 12
 const CATEGORY_COLORS = ['#2563eb', '#10b981', '#f97316', '#a855f7', '#f59e0b', '#06b6d4', '#22c55e', '#ef4444']
 const PANEL_MODES = ['collapsed', 'half', 'full']
-const RECO_MODES = ['driving', 'walking', 'cycling']
+const RECO_MODES = ['driving']
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 const normalizePanelMode = (mode) => (PANEL_MODES.includes(mode) ? mode : 'half')
@@ -89,13 +89,7 @@ function saveRecoExploreWeight(weight) {
 }
 
 function loadRecoMode() {
-  if (typeof window === 'undefined') return 'driving'
-  try {
-    const raw = String(localStorage.getItem(RECO_MODE_KEY) || '').trim().toLowerCase()
-    return RECO_MODES.includes(raw) ? raw : 'driving'
-  } catch (e) {
-    return 'driving'
-  }
+  return 'driving'
 }
 
 function saveRecoMode(mode) {
@@ -482,11 +476,18 @@ export const useRouteStore = defineStore('route', {
       const computeBase = (p) =>
         (Number(p?.distance_score ?? p?.scores?.distance) || 0) * dw +
         (Number(p?.interest_score ?? p?.scores?.interest) || 0) * iw
-      const computeBandit = (p) => Number(p?.scores?.bandit_bonus) || 0
+      const computeExploreSignal = (p) => {
+        const novelty = Number(p?.scores?.novelty) || 0
+        const quality = Number(p?.scores?.quality) || 0
+        const context = Number(p?.scores?.context) || 0
+        const bonus = Number(p?.scores?.bandit_bonus) || 0
+        const bonusNorm = clamp((bonus + 1) / 2, 0, 1)
+        return clamp(novelty * 0.5 + quality * 0.2 + context * 0.15 + bonusNorm * 0.15, 0, 1)
+      }
 
       this.recommendedPOIs = [...this.recommendedPOIs].sort((a, b) => {
-        const sa = computeBase(a) + computeBandit(a) * ew
-        const sb = computeBase(b) + computeBandit(b) * ew
+        const sa = computeBase(a) * (1 - ew) + computeExploreSignal(a) * ew
+        const sb = computeBase(b) * (1 - ew) + computeExploreSignal(b) * ew
         if (sb !== sa) return sb - sa
         const fa = Number(a?.scores?.final) || 0
         const fb = Number(b?.scores?.final) || 0
@@ -663,6 +664,7 @@ export const useRouteStore = defineStore('route', {
         params.set('candidate_limit', '180')
         params.set('debug', this.recoDebugEnabled ? '1' : '0')
         params.set('session_id', this.recoSessionId)
+        params.set('force_v2', '1')
         const url = `http://localhost:3001/api/route/recommend?${params.toString()}`
 
         const res = await fetch(url)

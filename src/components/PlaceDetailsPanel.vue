@@ -50,7 +50,13 @@
       <div v-if="activeTab === 'Overview'" class="overview">
         <div class="overview-left">
           <div class="media">
-            <img v-if="imageUrl" :src="imageUrl" :alt="poi.name || 'Place image'" />
+            <img
+              v-if="imageUrl"
+              :src="imageUrl"
+              :alt="poi.name || 'Place image'"
+              class="media-image"
+              @click="openPhotoViewerByUrl(imageUrl)"
+            />
             <div v-else class="media-fallback">
               <div class="media-initials">{{ initials }}</div>
               <span>No photo</span>
@@ -94,6 +100,37 @@
               <span class="label">Coords</span>
               <span class="value">{{ coordsText }}</span>
             </div>
+            <div class="meta-item" v-if="openingHoursText">
+              <span class="label">Opening</span>
+              <span class="value">{{ openingHoursText }}</span>
+            </div>
+            <div class="meta-item" v-if="phoneText">
+              <span class="label">Phone</span>
+              <span class="value">{{ phoneText }}</span>
+            </div>
+            <div class="meta-item" v-if="websiteText">
+              <span class="label">Website</span>
+              <a class="value link" :href="websiteText" target="_blank" rel="noopener noreferrer">
+                {{ websiteLabel }}
+              </a>
+            </div>
+            <div class="meta-item" v-if="stayMinutesText">
+              <span class="label">Suggested stay</span>
+              <span class="value">{{ stayMinutesText }}</span>
+            </div>
+            <div class="meta-item" v-if="bestVisitTimeText">
+              <span class="label">Best visit</span>
+              <span class="value">{{ bestVisitTimeText }}</span>
+            </div>
+            <div class="meta-item" v-if="ratingSummaryText">
+              <span class="label">Rating signals</span>
+              <span class="value">{{ ratingSummaryText }}</span>
+            </div>
+          </div>
+
+          <div v-if="detailDescription" class="reason">
+            <div class="section-title">About this place</div>
+            <div class="reason-text">{{ detailDescription }}</div>
           </div>
 
           <div v-if="hasScores" class="scores">
@@ -135,8 +172,18 @@
 
       <div v-else-if="activeTab === 'Photos'" class="gallery">
         <div v-if="galleryImages.length" class="gallery-row">
-          <div v-for="img in galleryImages" :key="img" class="gallery-item">
+          <div
+            v-for="(img, idx) in galleryImages"
+            :key="`${img}-${idx}`"
+            class="gallery-item"
+            role="button"
+            tabindex="0"
+            @click="openPhotoViewer(idx)"
+            @keydown.enter.prevent="openPhotoViewer(idx)"
+            @keydown.space.prevent="openPhotoViewer(idx)"
+          >
             <img :src="img" :alt="poi.name || 'Gallery photo'" />
+            <span class="gallery-zoom">View</span>
           </div>
         </div>
         <div v-else class="empty">No photos yet.</div>
@@ -192,6 +239,28 @@
       <div v-if="poiDetailLoading" class="status">Loading details...</div>
       <div v-else-if="poiDetailError" class="status error">{{ poiDetailError }}</div>
     </div>
+
+    <div v-if="photoViewerOpen && activePhotoUrl" class="photo-viewer" @click.self="closePhotoViewer">
+      <button class="viewer-close" aria-label="Close photo viewer" @click="closePhotoViewer">x</button>
+      <button
+        v-if="galleryImages.length > 1"
+        class="viewer-nav prev"
+        aria-label="Previous photo"
+        @click.stop="showPrevPhoto"
+      >
+        <
+      </button>
+      <img class="viewer-image" :src="activePhotoUrl" :alt="poi?.name || 'Photo preview'" />
+      <button
+        v-if="galleryImages.length > 1"
+        class="viewer-nav next"
+        aria-label="Next photo"
+        @click.stop="showNextPhoto"
+      >
+        >
+      </button>
+      <div class="viewer-count">{{ photoViewerIndex + 1 }} / {{ galleryImages.length }}</div>
+    </div>
   </div>
 </template>
 
@@ -228,6 +297,7 @@ onMounted(() => {
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
   updateViewportHeight()
   window.addEventListener('resize', updateViewportHeight)
+  window.addEventListener('keydown', onPhotoViewerKeydown)
 })
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
@@ -235,6 +305,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewportHeight)
   window.removeEventListener('pointermove', onGrabberPointerMove)
   window.removeEventListener('pointerup', onGrabberPointerUp)
+  window.removeEventListener('keydown', onPhotoViewerKeydown)
   if (addressAbort) {
     try {
       addressAbort.abort()
@@ -451,6 +522,64 @@ const coordsText = computed(() => {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 })
 
+const detailDescription = computed(() => {
+  const text = String(poi.value?.description || '').trim()
+  return text || ''
+})
+
+const openingHoursText = computed(() => {
+  const text = String(poi.value?.opening_hours || '').trim()
+  return text || ''
+})
+
+const phoneText = computed(() => {
+  const text = String(poi.value?.phone || '').trim()
+  return text || ''
+})
+
+const websiteText = computed(() => {
+  const text = String(poi.value?.website || '').trim()
+  if (!text) return ''
+  if (text.startsWith('http://') || text.startsWith('https://')) return text
+  return `https://${text}`
+})
+
+const websiteLabel = computed(() => {
+  const url = websiteText.value
+  if (!url) return ''
+  try {
+    const parsed = new URL(url)
+    return parsed.host || url
+  } catch {
+    return url
+  }
+})
+
+const stayMinutesText = computed(() => {
+  const minutes = Number(poi.value?.stay_minutes)
+  if (!Number.isFinite(minutes) || minutes <= 0) return ''
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (!mins) return `${hours}h`
+  return `${hours}h ${mins}m`
+})
+
+const bestVisitTimeText = computed(() => {
+  const text = String(poi.value?.best_visit_time || '').trim()
+  return text || ''
+})
+
+const ratingSummaryText = computed(() => {
+  const ratingCount = Number(poi.value?.rating_count)
+  const reviewCount = Number(poi.value?.review_count)
+  if (!Number.isFinite(ratingCount) && !Number.isFinite(reviewCount)) return ''
+  const parts = []
+  if (Number.isFinite(ratingCount) && ratingCount > 0) parts.push(`${Math.round(ratingCount)} ratings`)
+  if (Number.isFinite(reviewCount) && reviewCount > 0) parts.push(`${Math.round(reviewCount)} reviews`)
+  return parts.join(' / ')
+})
+
 const isViaPoint = computed(() => {
   if (!poi.value) return false
   return (routeStore.viaPoints || []).some((p) =>
@@ -517,6 +646,8 @@ const addressCache = new Map()
 let addressAbort = null
 
 const addressText = computed(() => {
+  const dbAddress = String(poi.value?.address || '').trim()
+  if (dbAddress) return dbAddress
   if (addressLoading.value) return 'Loading address...'
   if (address.value) return address.value
   return 'Address unavailable'
@@ -564,6 +695,9 @@ const fetchAddress = async (lat, lng) => {
 
 const galleryImages = computed(() => {
   const images = []
+  if (Array.isArray(poi.value?.photos)) {
+    poi.value.photos.forEach((img) => images.push(img))
+  }
   if (poi.value?.image_url) images.push(poi.value.image_url)
   ;(reviewPosts.value || []).forEach((post) => {
     if (post.cover_image) images.push(post.cover_image)
@@ -571,9 +705,55 @@ const galleryImages = computed(() => {
       post.images.forEach((img) => images.push(img))
     }
   })
-  const unique = [...new Set(images)].filter(Boolean)
-  return unique.slice(0, 8)
+  const merged = [...new Set(images.map((img) => String(img || '').trim()).filter(Boolean))]
+  return merged.slice(0, 12)
 })
+
+const photoViewerOpen = ref(false)
+const photoViewerIndex = ref(0)
+const activePhotoUrl = computed(() => galleryImages.value[photoViewerIndex.value] || '')
+
+const openPhotoViewer = (index = 0) => {
+  if (!galleryImages.value.length) return
+  const safe = Math.max(0, Math.min(Number(index) || 0, galleryImages.value.length - 1))
+  photoViewerIndex.value = safe
+  photoViewerOpen.value = true
+}
+
+const openPhotoViewerByUrl = (url) => {
+  const idx = galleryImages.value.indexOf(url)
+  openPhotoViewer(idx >= 0 ? idx : 0)
+}
+
+const closePhotoViewer = () => {
+  photoViewerOpen.value = false
+}
+
+const showPrevPhoto = () => {
+  if (!galleryImages.value.length) return
+  photoViewerIndex.value =
+    (photoViewerIndex.value - 1 + galleryImages.value.length) % galleryImages.value.length
+}
+
+const showNextPhoto = () => {
+  if (!galleryImages.value.length) return
+  photoViewerIndex.value = (photoViewerIndex.value + 1) % galleryImages.value.length
+}
+
+const onPhotoViewerKeydown = (event) => {
+  if (!photoViewerOpen.value) return
+  if (event.key === 'Escape') {
+    closePhotoViewer()
+    return
+  }
+  if (event.key === 'ArrowLeft') {
+    showPrevPhoto()
+    return
+  }
+  if (event.key === 'ArrowRight') {
+    showNextPhoto()
+  }
+}
 
 const nearbyPlaces = ref([])
 const nearbyLoading = ref(false)
@@ -941,6 +1121,21 @@ watch(
 )
 
 watch(
+  () => galleryImages.value,
+  (images) => {
+    if (!Array.isArray(images) || images.length === 0) {
+      closePhotoViewer()
+      photoViewerIndex.value = 0
+      return
+    }
+    if (photoViewerIndex.value > images.length - 1) {
+      photoViewerIndex.value = images.length - 1
+    }
+  },
+  { immediate: true }
+)
+
+watch(
   () => [
     poiLat.value,
     poiLng.value,
@@ -1152,6 +1347,10 @@ watch(
   object-fit: cover;
 }
 
+.media-image {
+  cursor: zoom-in;
+}
+
 .media-fallback {
   display: grid;
   place-items: center;
@@ -1251,6 +1450,11 @@ watch(
 .meta-item .value {
   color: var(--map-overlay-fg);
   word-break: break-word;
+}
+
+.meta-item .value.link {
+  color: color-mix(in srgb, var(--map-overlay-fg) 85%, #60a5fa);
+  text-decoration: underline;
 }
 
 .scores {
@@ -1356,18 +1560,46 @@ watch(
 }
 
 .gallery-item {
+  position: relative;
   min-width: 150px;
   height: 92px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--map-overlay-border);
   background: var(--badge);
+  cursor: zoom-in;
+}
+
+.gallery-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--btn-primary) 75%, #fff);
+  outline-offset: 2px;
 }
 
 .gallery-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.gallery-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--map-overlay-border) 80%, transparent);
+  background: color-mix(in srgb, var(--map-overlay-bg) 86%, transparent);
+  color: var(--map-overlay-fg);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.gallery-item:hover .gallery-zoom,
+.gallery-item:focus-visible .gallery-zoom {
+  opacity: 1;
 }
 
 .nearby-card {
@@ -1488,6 +1720,79 @@ watch(
 
 .status.error {
   color: #f87171;
+}
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.viewer-image {
+  max-width: min(92vw, 1360px);
+  max-height: 82vh;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  object-fit: contain;
+  background: #0f172a;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.viewer-close,
+.viewer-nav {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.viewer-close {
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 24px;
+}
+
+.viewer-nav {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 68px;
+  border-radius: 12px;
+  font-size: 38px;
+  line-height: 1;
+}
+
+.viewer-nav.prev {
+  left: 18px;
+}
+
+.viewer-nav.next {
+  right: 18px;
+}
+
+.viewer-count {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(15, 23, 42, 0.7);
 }
 
 .place-panel ::-webkit-scrollbar {
