@@ -171,7 +171,7 @@
       </div>
 
       <div v-else-if="activeTab === 'Photos'" class="gallery">
-        <div v-if="galleryImages.length" class="gallery-row">
+        <div v-if="galleryImages.length" class="gallery-grid">
           <div
             v-for="(img, idx) in galleryImages"
             :key="`${img}-${idx}`"
@@ -240,27 +240,29 @@
       <div v-else-if="poiDetailError" class="status error">{{ poiDetailError }}</div>
     </div>
 
-    <div v-if="photoViewerOpen && activePhotoUrl" class="photo-viewer" @click.self="closePhotoViewer">
-      <button class="viewer-close" aria-label="Close photo viewer" @click="closePhotoViewer">x</button>
-      <button
-        v-if="galleryImages.length > 1"
-        class="viewer-nav prev"
-        aria-label="Previous photo"
-        @click.stop="showPrevPhoto"
-      >
-        <
-      </button>
-      <img class="viewer-image" :src="activePhotoUrl" :alt="poi?.name || 'Photo preview'" />
-      <button
-        v-if="galleryImages.length > 1"
-        class="viewer-nav next"
-        aria-label="Next photo"
-        @click.stop="showNextPhoto"
-      >
+    <teleport to="body">
+      <div v-if="photoViewerOpen && activePhotoUrl" class="photo-viewer" @click.self="closePhotoViewer">
+        <button class="viewer-close" aria-label="Close photo viewer" @click="closePhotoViewer">x</button>
+        <button
+          v-if="galleryImages.length > 1"
+          class="viewer-nav prev"
+          aria-label="Previous photo"
+          @click.stop="showPrevPhoto"
         >
-      </button>
-      <div class="viewer-count">{{ photoViewerIndex + 1 }} / {{ galleryImages.length }}</div>
-    </div>
+          <
+        </button>
+        <img class="viewer-image" :src="activePhotoUrl" :alt="poi?.name || 'Photo preview'" />
+        <button
+          v-if="galleryImages.length > 1"
+          class="viewer-nav next"
+          aria-label="Next photo"
+          @click.stop="showNextPhoto"
+        >
+          >
+        </button>
+        <div class="viewer-count">{{ photoViewerIndex + 1 }} / {{ galleryImages.length }}</div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -715,6 +717,9 @@ const activePhotoUrl = computed(() => galleryImages.value[photoViewerIndex.value
 
 const openPhotoViewer = (index = 0) => {
   if (!galleryImages.value.length) return
+  if (panelMode.value !== 'expanded') {
+    setPanelMode('expanded')
+  }
   const safe = Math.max(0, Math.min(Number(index) || 0, galleryImages.value.length - 1))
   photoViewerIndex.value = safe
   photoViewerOpen.value = true
@@ -1551,7 +1556,6 @@ watch(
   border-radius: 999px;
 }
 
-.gallery-row,
 .nearby-row {
   display: flex;
   gap: 8px;
@@ -1559,15 +1563,26 @@ watch(
   padding-bottom: 4px;
 }
 
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
 .gallery-item {
   position: relative;
-  min-width: 150px;
-  height: 92px;
+  width: 100%;
+  height: 112px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--map-overlay-border);
   background: var(--badge);
   cursor: zoom-in;
+}
+
+.gallery-item:nth-child(5n + 2),
+.gallery-item:nth-child(5n + 4) {
+  height: 128px;
 }
 
 .gallery-item:focus-visible {
