@@ -349,7 +349,7 @@ const factorPercent = (poi, key) => {
   bottom: 5px;
   left: 5px;
   width: 300px;
-  z-index: 99999;
+  z-index: 999;
   background: var(--map-overlay-bg);
   border-radius: 16px;
   padding: 12px 8px 12px 16px;
