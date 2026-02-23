@@ -298,12 +298,32 @@ const fetchRoute = async () => {
   routeStore.isRouting = true
   routeStore.routeError = null
   try {
-    const res = await axios.get(
-      `/osrm/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`,
-      { signal: routeAbortController.signal }
-    )
-    const routeData = res.data?.routes?.[0]
+    const mode = routeStore.recoMode || "driving"
+    let routeData = null
+    let usedMode = mode
+    try {
+      const res = await axios.get(
+        `/osrm/route/v1/${mode}/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`,
+        { signal: routeAbortController.signal }
+      )
+      routeData = res.data?.routes?.[0]
+    } catch (modeErr) {
+      if (mode !== "driving") {
+        const fallbackRes = await axios.get(
+          `/osrm/route/v1/driving/${coordStr}?alternatives=false&overview=full&geometries=geojson&steps=true&annotations=true`,
+          { signal: routeAbortController.signal }
+        )
+        routeData = fallbackRes.data?.routes?.[0]
+        usedMode = "driving"
+      } else {
+        throw modeErr
+      }
+    }
     if (!routeData) return
+
+    if (usedMode !== mode) {
+      console.warn(`Route mode ${mode} unavailable, fallback to driving`)
+    }
 
     routeStore.totalDistance = (routeData.distance / 1000).toFixed(2)
     routeStore.totalDuration = (routeData.duration / 60).toFixed(1)
@@ -813,6 +833,14 @@ onMounted(() => {
     async () => {
       startMarker.setLatLng([routeStore.startLat, routeStore.startLng])
       endMarker.setLatLng([routeStore.endLat, routeStore.endLng])
+      scheduleFetchRoute()
+      await routeStore.fetchRecommendedPois()
+    }
+  )
+
+  watch(
+    () => routeStore.recoMode,
+    async () => {
       scheduleFetchRoute()
       await routeStore.fetchRecommendedPois()
     }

@@ -339,11 +339,11 @@ const clearPoiQuery = () => {
 <style scoped>
 .control-panel {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 5px;
+  left: 5px;
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
-  padding: 12px 14px;
+  padding: 8px 14px;
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   z-index: 1000;

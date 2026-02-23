@@ -118,6 +118,15 @@
             <div class="reason-text">{{ poi.reason }}</div>
           </div>
 
+          <div v-if="explanationItems.length" class="explain">
+            <div class="section-title">Score factors</div>
+            <div class="explain-chips">
+              <span v-for="item in explanationItems" :key="item.tag" class="explain-chip">
+                {{ explanationLabel(item.tag) }} {{ Math.round(item.contribution || 0) }}%
+              </span>
+            </div>
+          </div>
+
           <div v-if="tagList.length" class="tags">
             <span v-for="tag in tagList" :key="tag" class="tag">#{{ tag }}</span>
           </div>
@@ -412,6 +421,28 @@ const tagList = computed(() => {
   return [...new Set(combined)].slice(0, 6)
 })
 
+const explanationItems = computed(() => {
+  const list = Array.isArray(poi.value?.explanations) ? poi.value.explanations : []
+  return list
+    .map((item) => ({
+      tag: String(item?.tag || '').trim(),
+      contribution: Number(item?.contribution) || 0,
+    }))
+    .filter((item) => item.tag)
+    .slice(0, 4)
+})
+
+const explanationLabel = (tag) => {
+  const key = String(tag || '').trim().toLowerCase()
+  if (key === 'distance') return 'Distance'
+  if (key === 'interest') return 'Interest'
+  if (key === 'quality') return 'Quality'
+  if (key === 'novelty') return 'Novelty'
+  if (key === 'context') return 'Context'
+  if (key === 'exploration') return 'Explore'
+  return key || 'Factor'
+}
+
 const coordsText = computed(() => {
   if (!poi.value) return ''
   const lat = Number(poi.value.lat)
@@ -678,11 +709,13 @@ const ratingCountLabel = computed(() => {
 
 const openPost = (post) => {
   if (!post?.id) return
+  routeStore.logRecommendationEvent('open_posts', poi.value)
   router.push(`/posts/postsid=${post.id}`)
 }
 
 const openPosts = () => {
   if (!poi.value) return
+  routeStore.logRecommendationEvent('open_posts', poi.value)
   const query = {}
   if (poiIdValue.value) query.poi_id = String(poiIdValue.value)
   if (poi.value?.name) query.poi_name = poi.value.name
@@ -731,6 +764,7 @@ const sharePlace = async () => {
 
 const navigateTo = () => {
   if (!Number.isFinite(poiLat.value) || !Number.isFinite(poiLng.value)) return
+  routeStore.logRecommendationEvent('navigate', poi.value)
   const url = `https://www.google.com/maps/dir/?api=1&destination=${poiLat.value},${poiLng.value}`
   window.open(url, '_blank')
 }
@@ -771,15 +805,32 @@ const impactError = ref('')
 let impactAbort = null
 let impactTimer = null
 
+const responseDetourDistanceKm = computed(() => {
+  const meters = Number(poi.value?.detour?.extra_distance_m)
+  if (!Number.isFinite(meters)) return null
+  return meters / 1000
+})
+const responseDetourDurationMin = computed(() => {
+  const seconds = Number(poi.value?.detour?.extra_duration_s)
+  if (!Number.isFinite(seconds)) return null
+  return seconds / 60
+})
+
 const impactDistanceLabel = computed(() => formatDistance(impact.value.distanceKm))
 const impactDurationLabel = computed(() => formatDuration(impact.value.durationMin))
 const impactExtraDistanceLabel = computed(() => {
-  if (!Number.isFinite(impact.value.extraDistanceKm)) return 'Extra N/A'
-  return `+${formatDistance(impact.value.extraDistanceKm)}`
+  const value = Number.isFinite(impact.value.extraDistanceKm)
+    ? impact.value.extraDistanceKm
+    : responseDetourDistanceKm.value
+  if (!Number.isFinite(value)) return 'Extra N/A'
+  return `+${formatDistance(value)}`
 })
 const impactExtraDurationLabel = computed(() => {
-  if (!Number.isFinite(impact.value.extraDurationMin)) return 'Extra N/A'
-  return `+${formatDuration(impact.value.extraDurationMin)}`
+  const value = Number.isFinite(impact.value.extraDurationMin)
+    ? impact.value.extraDurationMin
+    : responseDetourDurationMin.value
+  if (!Number.isFinite(value)) return 'Extra N/A'
+  return `+${formatDuration(value)}`
 })
 const impactSummary = computed(() => {
   const dist = impactDistanceLabel.value
@@ -789,8 +840,8 @@ const impactSummary = computed(() => {
 })
 const detourHint = computed(() => {
   const parts = []
-  if (Number.isFinite(impact.value.extraDistanceKm)) parts.push(impactExtraDistanceLabel.value)
-  if (Number.isFinite(impact.value.extraDurationMin)) parts.push(impactExtraDurationLabel.value)
+  if (impactExtraDistanceLabel.value !== 'Extra N/A') parts.push(impactExtraDistanceLabel.value)
+  if (impactExtraDurationLabel.value !== 'Extra N/A') parts.push(impactExtraDurationLabel.value)
   if (!parts.length) return ''
   return `Detour ${parts.join(' / ')}`
 })
@@ -823,6 +874,7 @@ const fetchImpact = async () => {
       start: `${startLng},${startLat}`,
       poi: `${poiLng.value},${poiLat.value}`,
       end: `${endLng},${endLat}`,
+      mode: routeStore.recoMode || 'driving',
     })
     const res = await fetch(`${ROUTE_WITH_POI_API}?${params.toString()}`, { signal: impactAbort.signal })
     const data = await res.json()
@@ -893,12 +945,13 @@ watch(
     poiLat.value,
     poiLng.value,
     routeStore.startLat,
-    routeStore.startLng,
-    routeStore.endLat,
-    routeStore.endLng,
-    baseDistanceKm.value,
-    baseDurationMin.value,
-  ],
+      routeStore.startLng,
+      routeStore.endLat,
+      routeStore.endLng,
+      routeStore.recoMode,
+      baseDistanceKm.value,
+      baseDurationMin.value,
+    ],
   () => {
     scheduleImpactFetch()
   },
@@ -1255,6 +1308,28 @@ watch(
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.explain {
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--map-overlay-border);
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
+}
+
+.explain-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.explain-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--map-overlay-border);
+  background: color-mix(in srgb, var(--badge) 70%, transparent);
+  color: var(--muted);
 }
 
 .tags {

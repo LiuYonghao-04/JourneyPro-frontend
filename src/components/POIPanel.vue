@@ -10,6 +10,26 @@
     <div v-if="!isCollapsed" class="panel-body">
       <div v-if="loading" class="empty">Loading recommendations...</div>
       <div v-else class="panel-content">
+        <div class="mode-switch">
+          <button
+            v-for="mode in modeTabs"
+            :key="mode.value"
+            class="mode-btn"
+            :class="{ active: modeValue === mode.value }"
+            @click="changeMode(mode.value)"
+          >
+            {{ mode.label }}
+          </button>
+        </div>
+
+        <div v-if="showDebugMeta" class="algo-meta">
+          <span>{{ recommendationVersion || 'v2' }}</span>
+          <span class="dot">|</span>
+          <span>{{ recommendationBucket || 'treatment' }}</span>
+          <span v-if="diagnosticCount !== null" class="dot">|</span>
+          <span v-if="diagnosticCount !== null">cand {{ diagnosticCount }}</span>
+        </div>
+
         <div v-if="profileHint" class="profile-hint">
           <span class="hint-label">For you</span>
           <span class="hint-tags">{{ profileHint }}</span>
@@ -21,6 +41,18 @@
             <span class="tuning-side">Interest {{ interestPercent }}%</span>
           </div>
           <el-slider v-model="tuningValue" :min="0" :max="100" :show-tooltip="false" @change="applyTuning" />
+
+          <div class="tuning-row second">
+            <span class="tuning-side">Safe {{ safePercent }}%</span>
+            <span class="tuning-side">Explore {{ explorePercent }}%</span>
+          </div>
+          <el-slider
+            v-model="exploreValue"
+            :min="0"
+            :max="100"
+            :show-tooltip="false"
+            @change="applyExploreTuning"
+          />
         </div>
 
         <div v-if="categoryStats.length" class="category-filter">
@@ -80,6 +112,20 @@
               <div v-if="poi.match_tags?.length" class="poi-tags">
                 <span v-for="tag in poi.match_tags.slice(0, 3)" :key="tag" class="poi-tag">#{{ tag }}</span>
               </div>
+              <div v-if="poi.scores" class="poi-contrib">
+                <div class="mini-bar">
+                  <span class="fill distance" :style="{ width: factorPercent(poi, 'distance') + '%' }"></span>
+                </div>
+                <div class="mini-bar">
+                  <span class="fill interest" :style="{ width: factorPercent(poi, 'interest') + '%' }"></span>
+                </div>
+                <div class="mini-bar">
+                  <span class="fill quality" :style="{ width: factorPercent(poi, 'quality') + '%' }"></span>
+                </div>
+                <div class="mini-bar">
+                  <span class="fill novelty" :style="{ width: factorPercent(poi, 'novelty') + '%' }"></span>
+                </div>
+              </div>
             </div>
             <button
               class="add-btn"
@@ -134,6 +180,20 @@ const allPois = computed(() => routeStore.recommendedPOIs || [])
 const pois = computed(() => routeStore.filteredRecommendedPOIs || [])
 const loading = computed(() => routeStore.isLoading)
 const profile = computed(() => routeStore.recommendationProfile || null)
+const recommendationVersion = computed(() => routeStore.recommendationVersion)
+const recommendationBucket = computed(() => routeStore.recommendationBucket)
+const diagnostics = computed(() => routeStore.recommendationDiagnostics || null)
+const showDebugMeta = computed(() => routeStore.recoDebugEnabled)
+const diagnosticCount = computed(() => {
+  const value = diagnostics.value?.recall_counts?.total_candidates
+  return Number.isFinite(Number(value)) ? Number(value) : null
+})
+const modeTabs = [
+  { label: 'Drive', value: 'driving' },
+  { label: 'Walk', value: 'walking' },
+  { label: 'Cycle', value: 'cycling' },
+]
+const modeValue = computed(() => routeStore.recoMode || 'driving')
 const profileHint = computed(() => {
   if (!profile.value?.personalized) return ''
   const tags = Array.isArray(profile.value.tags) ? profile.value.tags : []
@@ -176,8 +236,27 @@ const tuningValue = computed({
 })
 const interestPercent = computed(() => tuningValue.value)
 const distancePercent = computed(() => 100 - tuningValue.value)
+const exploreValue = computed({
+  get() {
+    return Math.round((routeStore.recoExploreWeight ?? 0.15) * 100)
+  },
+  set(val) {
+    const num = Number(val)
+    const normalized = Number.isFinite(num) ? num / 100 : 0.15
+    routeStore.setRecoExploreWeight(normalized)
+  },
+})
+const explorePercent = computed(() => exploreValue.value)
+const safePercent = computed(() => 100 - exploreValue.value)
 const applyTuning = () => {
   routeStore.reorderRecommendedPois()
+}
+const applyExploreTuning = () => {
+  routeStore.reorderRecommendedPois()
+}
+const changeMode = (mode) => {
+  if (modeValue.value === mode) return
+  routeStore.setRecoMode(mode)
 }
 const isViaPoint = (poi) => {
   return (routeStore.viaPoints || []).some((p) =>
@@ -277,13 +356,19 @@ const formatDistance = (meters) => {
   if (km < 1) return `${(km * 1000).toFixed(0)} m`
   return `${km.toFixed(2)} km`
 }
+
+const factorPercent = (poi, key) => {
+  const value = Number(poi?.scores?.[key])
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, Math.round(value * 100)))
+}
 </script>
 
 <style scoped>
 .poi-panel {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
+  bottom: 5px;
+  left: 5px;
   width: 300px;
   z-index: 99999;
   background: var(--map-overlay-bg);
@@ -405,6 +490,35 @@ const formatDistance = (meters) => {
   flex-wrap: wrap;
   margin-top: 4px;
 }
+.poi-contrib {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.mini-bar {
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--map-overlay-border);
+  background: color-mix(in srgb, var(--badge) 70%, transparent);
+}
+.mini-bar .fill {
+  display: block;
+  height: 100%;
+}
+.mini-bar .fill.distance {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+}
+.mini-bar .fill.interest {
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+}
+.mini-bar .fill.quality {
+  background: linear-gradient(90deg, #60a5fa, #2563eb);
+}
+.mini-bar .fill.novelty {
+  background: linear-gradient(90deg, #f472b6, #a78bfa);
+}
 .poi-tag {
   font-size: 11px;
   color: var(--muted);
@@ -438,6 +552,34 @@ const formatDistance = (meters) => {
   text-align: center;
   padding: 12px 0;
 }
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.mode-btn {
+  border: 1px solid var(--map-overlay-border);
+  background: color-mix(in srgb, var(--badge) 75%, transparent);
+  color: var(--map-overlay-fg);
+  border-radius: 10px;
+  padding: 4px 0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.mode-btn.active {
+  border-color: color-mix(in srgb, var(--btn-primary) 70%, var(--map-overlay-border));
+  background: color-mix(in srgb, var(--btn-primary) 22%, transparent);
+  font-weight: 600;
+}
+.algo-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
 .profile-hint {
   display: flex;
   align-items: center;
@@ -468,6 +610,9 @@ const formatDistance = (meters) => {
   font-size: 12px;
   color: var(--muted);
   margin-bottom: 2px;
+}
+.tuning-row.second {
+  margin-top: 6px;
 }
 .tuning-side {
   color: var(--muted);

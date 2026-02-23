@@ -21,7 +21,7 @@
 
       <section class="panel">
         <div class="media">
-          <el-carousel v-if="post.images?.length" height="520px">
+          <el-carousel v-if="post.images?.length" height="100%">
             <el-carousel-item v-for="(img, idx) in post.images" :key="idx">
               <CroppedImage :src="img" :alt="`image-${idx}`" class="media-img" />
             </el-carousel-item>
@@ -586,6 +586,7 @@ onMounted(() => {
 }
 .media {
   width: 100%;
+  aspect-ratio: 4 / 3;
   border-radius: 16px;
   overflow: hidden;
   background: var(--badge);
@@ -594,9 +595,13 @@ onMounted(() => {
 .media :deep(.el-carousel),
 .media :deep(.el-carousel__container) {
   border-radius: 16px;
+  height: 100%;
 }
 .media :deep(.el-carousel__container) {
   overflow: hidden;
+}
+.media :deep(.el-carousel__item) {
+  height: 100%;
 }
 .media-img {
   width: 100%;
@@ -604,7 +609,7 @@ onMounted(() => {
   object-fit: cover;
 }
 .media-placeholder {
-  height: 520px;
+  height: 100%;
   background: var(--badge);
   border-radius: 12px;
   display: grid;
@@ -859,7 +864,7 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
   .media-placeholder {
-    height: 420px;
+    height: 100%;
   }
 }
 </style>

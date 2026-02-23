@@ -581,12 +581,13 @@ const markLoaded = (card) => {
 .cover {
   position: relative;
   width: 100%;
-  min-height: 240px;
+  aspect-ratio: 4 / 3;
   background: var(--badge);
+  overflow: hidden;
 }
 .cover-img {
   width: 100%;
-  min-height: 240px;
+  height: 100%;
 }
 .img-skeleton {
   position: absolute;

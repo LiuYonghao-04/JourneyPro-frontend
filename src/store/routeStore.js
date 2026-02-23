@@ -4,12 +4,17 @@ import { useAuthStore } from './authStore'
 
 const STORAGE_KEY = 'jp_via_points'
 const RECO_WEIGHT_KEY = 'jp_reco_interest_weight'
+const RECO_EXPLORE_WEIGHT_KEY = 'jp_reco_explore_weight'
+const RECO_MODE_KEY = 'jp_reco_mode'
+const RECO_DEBUG_KEY = 'jp_reco_debug'
+const RECO_SESSION_KEY = 'jp_reco_session_id'
 const POI_API_BASE = 'http://localhost:3001/api/poi'
 const SAVED_POI_KEY = 'jp_saved_pois'
 const RECENT_POI_KEY = 'jp_recent_pois'
 const MAX_RECENT_POIS = 12
 const CATEGORY_COLORS = ['#2563eb', '#10b981', '#f97316', '#a855f7', '#f59e0b', '#06b6d4', '#22c55e', '#ef4444']
 const PANEL_MODES = ['collapsed', 'half', 'full']
+const RECO_MODES = ['driving', 'walking', 'cycling']
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 const normalizePanelMode = (mode) => (PANEL_MODES.includes(mode) ? mode : 'half')
@@ -58,6 +63,85 @@ function saveRecoInterestWeight(weight) {
     localStorage.setItem(RECO_WEIGHT_KEY, String(weight))
   } catch (e) {
     // ignore
+  }
+}
+
+function loadRecoExploreWeight() {
+  if (typeof window === 'undefined') return 0.15
+  try {
+    const raw = localStorage.getItem(RECO_EXPLORE_WEIGHT_KEY)
+    const num = Number(raw)
+    if (!Number.isFinite(num)) return 0.15
+    const normalized = num > 1 ? num / 100 : num
+    return clamp(normalized, 0, 1)
+  } catch (e) {
+    return 0.15
+  }
+}
+
+function saveRecoExploreWeight(weight) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(RECO_EXPLORE_WEIGHT_KEY, String(weight))
+  } catch (e) {
+    // ignore
+  }
+}
+
+function loadRecoMode() {
+  if (typeof window === 'undefined') return 'driving'
+  try {
+    const raw = String(localStorage.getItem(RECO_MODE_KEY) || '').trim().toLowerCase()
+    return RECO_MODES.includes(raw) ? raw : 'driving'
+  } catch (e) {
+    return 'driving'
+  }
+}
+
+function saveRecoMode(mode) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(RECO_MODE_KEY, mode)
+  } catch (e) {
+    // ignore
+  }
+}
+
+function loadRecoDebugFlag() {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(RECO_DEBUG_KEY) === '1'
+  } catch (e) {
+    return false
+  }
+}
+
+function saveRecoDebugFlag(enabled) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(RECO_DEBUG_KEY, enabled ? '1' : '0')
+  } catch (e) {
+    // ignore
+  }
+}
+
+function createSessionId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  return `sess_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`
+}
+
+function loadRecoSessionId() {
+  if (typeof window === 'undefined') return createSessionId()
+  try {
+    const existing = localStorage.getItem(RECO_SESSION_KEY)
+    if (existing) return existing
+    const created = createSessionId()
+    localStorage.setItem(RECO_SESSION_KEY, created)
+    return created
+  } catch (e) {
+    return createSessionId()
   }
 }
 
@@ -130,6 +214,21 @@ function buildPoiSummary(poi) {
   }
 }
 
+function normalizeRecoMode(mode) {
+  const value = String(mode || '').trim().toLowerCase()
+  return RECO_MODES.includes(value) ? value : 'driving'
+}
+
+function buildRouteHash({ startLat, startLng, endLat, endLng, viaPoints, mode }) {
+  const via = (viaPoints || [])
+    .filter((poi) => typeof poi?.lat === 'number' && typeof poi?.lng === 'number')
+    .map((poi) => `${poi.lat.toFixed(5)},${poi.lng.toFixed(5)}`)
+    .join('|')
+  return `${mode || 'driving'}::${Number(startLat).toFixed(5)},${Number(startLng).toFixed(5)}::${Number(
+    endLat
+  ).toFixed(5)},${Number(endLng).toFixed(5)}::${via}`
+}
+
 export const useRouteStore = defineStore('route', {
   state: () => ({
     startAddress: 'London_center',
@@ -156,6 +255,14 @@ export const useRouteStore = defineStore('route', {
     recentPois: loadRecentPois(),
     recommendationProfile: null,
     recoInterestWeight: loadRecoInterestWeight(),
+    recoExploreWeight: loadRecoExploreWeight(),
+    recoMode: loadRecoMode(),
+    recoDebugEnabled: loadRecoDebugFlag(),
+    recoSessionId: loadRecoSessionId(),
+    recommendationRequestId: null,
+    recommendationBucket: null,
+    recommendationVersion: null,
+    recommendationDiagnostics: null,
     userInterestProfile: null,
     interestProfileLoading: false,
     isLoading: false,
@@ -241,6 +348,7 @@ export const useRouteStore = defineStore('route', {
         if (!exists) {
           this.viaPoints.push(poi)
           saveViaPoints(this.viaPoints)
+          this.logRecommendationEvent('add_via', poi)
         }
 
         this.applyWaypointsToControl()
@@ -260,6 +368,7 @@ export const useRouteStore = defineStore('route', {
       )
       if (before !== this.viaPoints.length) {
         saveViaPoints(this.viaPoints)
+        this.logRecommendationEvent('remove_via', poi)
       }
     },
 
@@ -286,6 +395,35 @@ export const useRouteStore = defineStore('route', {
       }, 500)
     },
 
+    setRecoExploreWeight(weight) {
+      const num = Number(weight)
+      if (!Number.isFinite(num)) return
+      this.recoExploreWeight = clamp(num, 0, 1)
+      saveRecoExploreWeight(this.recoExploreWeight)
+
+      this.reorderRecommendedPois()
+
+      const auth = useAuthStore()
+      if (!auth.user?.id) return
+      if (recoSettingsSaveTimer) clearTimeout(recoSettingsSaveTimer)
+      recoSettingsSaveTimer = setTimeout(() => {
+        recoSettingsSaveTimer = null
+        this.saveRecoSettingsToServer(auth.user.id)
+      }, 500)
+    },
+
+    setRecoMode(mode) {
+      const next = normalizeRecoMode(mode)
+      if (next === this.recoMode) return
+      this.recoMode = next
+      saveRecoMode(next)
+    },
+
+    setRecoDebugEnabled(enabled) {
+      this.recoDebugEnabled = !!enabled
+      saveRecoDebugFlag(this.recoDebugEnabled)
+    },
+
     async fetchRecoSettingsFromServer(userId) {
       const uid = Number(userId)
       if (!Number.isFinite(uid) || !uid) return
@@ -299,9 +437,15 @@ export const useRouteStore = defineStore('route', {
         const raw = Number(data.interest_weight)
         if (!Number.isFinite(raw)) return
         const normalized = raw > 1 ? raw / 100 : raw
+        const rawExplore = Number(data.explore_weight)
+        const normalizedExplore = Number.isFinite(rawExplore)
+          ? clamp(rawExplore > 1 ? rawExplore / 100 : rawExplore, 0, 1)
+          : this.recoExploreWeight
         // Apply server value without scheduling a save back.
         this.recoInterestWeight = clamp(normalized, 0, 1)
+        this.recoExploreWeight = normalizedExplore
         saveRecoInterestWeight(this.recoInterestWeight)
+        saveRecoExploreWeight(this.recoExploreWeight)
         this.reorderRecommendedPois()
       } catch (e) {
         // ignore
@@ -322,6 +466,7 @@ export const useRouteStore = defineStore('route', {
           body: JSON.stringify({
             user_id: uid,
             interest_weight: this.recoInterestWeight ?? 0.5,
+            explore_weight: this.recoExploreWeight ?? 0.15,
           }),
         })
       } catch (e) {
@@ -333,13 +478,19 @@ export const useRouteStore = defineStore('route', {
       if (!Array.isArray(this.recommendedPOIs) || this.recommendedPOIs.length === 0) return
       const iw = clamp(Number(this.recoInterestWeight ?? 0.5), 0, 1)
       const dw = 1 - iw
-      const compute = (p) =>
-        (Number(p?.distance_score) || 0) * dw + (Number(p?.interest_score) || 0) * iw
+      const ew = clamp(Number(this.recoExploreWeight ?? 0.15), 0, 1)
+      const computeBase = (p) =>
+        (Number(p?.distance_score ?? p?.scores?.distance) || 0) * dw +
+        (Number(p?.interest_score ?? p?.scores?.interest) || 0) * iw
+      const computeBandit = (p) => Number(p?.scores?.bandit_bonus) || 0
 
       this.recommendedPOIs = [...this.recommendedPOIs].sort((a, b) => {
-        const sa = compute(a)
-        const sb = compute(b)
+        const sa = computeBase(a) + computeBandit(a) * ew
+        const sb = computeBase(b) + computeBandit(b) * ew
         if (sb !== sa) return sb - sa
+        const fa = Number(a?.scores?.final) || 0
+        const fb = Number(b?.scores?.final) || 0
+        if (fb !== fa) return fb - fa
         const ba = Number(a?.base_score) || 0
         const bb = Number(b?.base_score) || 0
         if (bb !== ba) return bb - ba
@@ -401,6 +552,74 @@ export const useRouteStore = defineStore('route', {
       return this.poiCategoryColors?.[cat] || CATEGORY_COLORS[0]
     },
 
+    buildRecoEventPayload(eventType, poi = null, extras = {}) {
+      const auth = useAuthStore()
+      const poiId = poi?.id ?? poi?.poi_id ?? extras.poi_id ?? null
+      const base = {
+        user_id: auth.user?.id ? Number(auth.user.id) : null,
+        session_id: this.recoSessionId,
+        request_id: this.recommendationRequestId || '',
+        algorithm_version: this.recommendationVersion || null,
+        bucket: this.recommendationBucket || null,
+        route_hash: buildRouteHash({
+          startLat: this.startLat,
+          startLng: this.startLng,
+          endLat: this.endLat,
+          endLng: this.endLng,
+          viaPoints: this.viaPoints,
+          mode: this.recoMode,
+        }),
+        poi_id: poiId,
+        event_type: eventType,
+        mode: this.recoMode || 'driving',
+        rank_position: Number.isFinite(Number(extras.rank_position))
+          ? Number(extras.rank_position)
+          : null,
+        ts: extras.ts || new Date().toISOString(),
+      }
+      return { ...base, ...extras }
+    },
+
+    async logRecommendationEvent(eventType, poi = null, extras = {}) {
+      const payload = this.buildRecoEventPayload(eventType, poi, extras)
+      if (!payload.poi_id) return
+      try {
+        await fetch('http://localhost:3001/api/recommendation/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } catch (e) {
+        // ignore
+      }
+    },
+
+    async logRecommendationImpressions(list) {
+      const pois = Array.isArray(list) ? list : []
+      if (!pois.length || !this.recommendationRequestId) return
+      const events = pois
+        .map((poi, index) =>
+          this.buildRecoEventPayload('impression', poi, {
+            rank_position: index + 1,
+          })
+        )
+        .filter((event) => !!event.poi_id)
+      if (!events.length) return
+      try {
+        await fetch('http://localhost:3001/api/recommendation/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: events[0].user_id,
+            session_id: this.recoSessionId,
+            events,
+          }),
+        })
+      } catch (e) {
+        // ignore
+      }
+    },
+
     async fetchUserInterestProfile(userId) {
       const uid = Number(userId)
       if (!Number.isFinite(uid) || !uid) {
@@ -439,6 +658,11 @@ export const useRouteStore = defineStore('route', {
         if (via) params.set('via', via)
         if (auth.user?.id) params.set('user_id', auth.user.id)
         params.set('interest_weight', String(this.recoInterestWeight ?? 0.5))
+        params.set('explore_weight', String(this.recoExploreWeight ?? 0.15))
+        params.set('mode', String(this.recoMode || 'driving'))
+        params.set('candidate_limit', '180')
+        params.set('debug', this.recoDebugEnabled ? '1' : '0')
+        params.set('session_id', this.recoSessionId)
         const url = `http://localhost:3001/api/route/recommend?${params.toString()}`
 
         const res = await fetch(url)
@@ -447,6 +671,10 @@ export const useRouteStore = defineStore('route', {
         if (data.recommended_pois || data.recommendations) {
           this.recommendedPOIs = data.recommended_pois || data.recommendations
           this.recommendationProfile = data.profile || null
+          this.recommendationRequestId = data.request_id || null
+          this.recommendationBucket = data.bucket || null
+          this.recommendationVersion = data.algorithm_version || null
+          this.recommendationDiagnostics = data.diagnostics || null
           this.reorderRecommendedPois()
           this.refreshPoiCategoryColors()
           if (this.selectedPoi?.id !== undefined && this.selectedPoi?.id !== null) {
@@ -456,16 +684,25 @@ export const useRouteStore = defineStore('route', {
               this.selectedPoi = { ...this.selectedPoi, ...next }
             }
           }
+          this.logRecommendationImpressions(this.recommendedPOIs)
           console.log('Recommended via points loaded', this.recommendedPOIs.length)
         } else {
           console.warn('No recommendation data returned', data)
           this.recommendedPOIs = []
           this.recommendationProfile = null
+          this.recommendationRequestId = null
+          this.recommendationBucket = null
+          this.recommendationVersion = null
+          this.recommendationDiagnostics = null
         }
       } catch (err) {
         console.error('fetchRecommendedPois error:', err)
         this.recommendedPOIs = []
         this.recommendationProfile = null
+        this.recommendationRequestId = null
+        this.recommendationBucket = null
+        this.recommendationVersion = null
+        this.recommendationDiagnostics = null
       } finally {
         this.isLoading = false
       }
@@ -481,6 +718,10 @@ export const useRouteStore = defineStore('route', {
       this.selectedPoi = poi
       this.clearPreviewPoi()
       this.recordRecentPoi(poi)
+      const idx = (this.recommendedPOIs || []).findIndex((item) => String(item?.id) === String(poi?.id))
+      this.logRecommendationEvent('detail_view', poi, {
+        rank_position: idx >= 0 ? idx + 1 : null,
+      })
       const id = poi.id ?? poi.poi_id
       if (id !== undefined && id !== null && id !== '') {
         const key = String(id)
@@ -536,8 +777,10 @@ export const useRouteStore = defineStore('route', {
       const existing = list.findIndex((p) => p.key === item.key)
       if (existing >= 0) {
         list.splice(existing, 1)
+        this.logRecommendationEvent('dismiss', poi)
       } else {
         list.unshift(item)
+        this.logRecommendationEvent('save', poi)
       }
       this.savedPois = list
       saveSavedPois(list)
