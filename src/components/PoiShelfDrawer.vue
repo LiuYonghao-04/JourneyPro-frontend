@@ -128,8 +128,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .poi-shelf {
   position: absolute;
-  top: 15px;
-  right: 370px;
+  top: 16px;
+  right: 406px;
   z-index: 1150;
   display: flex;
   flex-direction: column;

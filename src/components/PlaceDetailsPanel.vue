@@ -148,6 +148,20 @@
             <div class="score-bar">
               <div class="score-fill distance" :style="{ width: distancePercent + '%' }"></div>
             </div>
+            <div class="score-row">
+              <span>Quality signal</span>
+              <span>{{ qualityLabel }}</span>
+            </div>
+            <div class="score-bar">
+              <div class="score-fill quality" :style="{ width: qualityPercent + '%' }"></div>
+            </div>
+            <div class="score-row">
+              <span>Novelty boost</span>
+              <span>{{ noveltyLabel }}</span>
+            </div>
+            <div class="score-bar">
+              <div class="score-fill novelty" :style="{ width: noveltyPercent + '%' }"></div>
+            </div>
           </div>
 
           <div v-if="poi.reason" class="reason">
@@ -477,15 +491,35 @@ const endKm = computed(() => toKm(poi.value?.distance_to_end))
 
 const interestPercentRaw = computed(() => scorePercent(poi.value?.interest_score ?? poi.value?.personal_score))
 const distancePercentRaw = computed(() => scorePercent(poi.value?.distance_score))
+const qualityPercentRaw = computed(() =>
+  scorePercent(poi.value?.scores?.quality ?? poi.value?.quality_score)
+)
+const noveltyPercentRaw = computed(() =>
+  scorePercent(poi.value?.scores?.novelty ?? poi.value?.novelty_score)
+)
 const interestPercent = computed(() => (interestPercentRaw.value === null ? 0 : interestPercentRaw.value))
 const distancePercent = computed(() => (distancePercentRaw.value === null ? 0 : distancePercentRaw.value))
+const qualityPercent = computed(() => (qualityPercentRaw.value === null ? 0 : qualityPercentRaw.value))
+const noveltyPercent = computed(() => (noveltyPercentRaw.value === null ? 0 : noveltyPercentRaw.value))
 const interestLabel = computed(() =>
   interestPercentRaw.value === null ? 'N/A' : `${interestPercentRaw.value}%`
 )
 const distanceLabel = computed(() =>
   distancePercentRaw.value === null ? 'N/A' : `${distancePercentRaw.value}%`
 )
-const hasScores = computed(() => interestPercentRaw.value !== null || distancePercentRaw.value !== null)
+const qualityLabel = computed(() =>
+  qualityPercentRaw.value === null ? 'N/A' : `${qualityPercentRaw.value}%`
+)
+const noveltyLabel = computed(() =>
+  noveltyPercentRaw.value === null ? 'N/A' : `${noveltyPercentRaw.value}%`
+)
+const hasScores = computed(
+  () =>
+    interestPercentRaw.value !== null ||
+    distancePercentRaw.value !== null ||
+    qualityPercentRaw.value !== null ||
+    noveltyPercentRaw.value !== null
+)
 
 const tagList = computed(() => {
   const matchTags = Array.isArray(poi.value?.match_tags) ? poi.value.match_tags : []
@@ -1173,14 +1207,14 @@ watch(
 .place-panel {
   position: absolute;
   left: 50%;
-  bottom: 10px;
-  width: clamp(520px, 72vw, 760px);
+  bottom: 12px;
+  width: clamp(560px, 74vw, 860px);
   max-height: 70vh;
   min-height: 72px;
   transform: translateX(-50%);
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   color: var(--map-overlay-fg);
   z-index: 1200;
@@ -1213,13 +1247,13 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 6px 14px 4px;
+  gap: 12px;
+  padding: 8px 18px 6px;
 }
 
 .title {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .subtitle {
@@ -1241,7 +1275,7 @@ watch(
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
   border-radius: 10px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
 }
 
@@ -1249,8 +1283,8 @@ watch(
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 14px 6px;
+  gap: 8px;
+  padding: 0 18px 8px;
 }
 
 .action-pill {
@@ -1258,7 +1292,7 @@ watch(
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
   font-size: 11px;
 }
@@ -1293,8 +1327,8 @@ watch(
 
 .tab-row {
   display: flex;
-  gap: 8px;
-  padding: 4px 14px 6px;
+  gap: 10px;
+  padding: 6px 18px 8px;
   border-top: 1px solid var(--map-overlay-border);
   border-bottom: 1px solid var(--map-overlay-border);
 }
@@ -1304,7 +1338,7 @@ watch(
   background: color-mix(in srgb, var(--badge) 80%, transparent);
   color: var(--map-overlay-fg);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
   font-size: 11px;
 }
@@ -1316,28 +1350,28 @@ watch(
 }
 
 .panel-body {
-  padding: 6px 14px 12px;
+  padding: 10px 18px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   overflow-y: auto;
   flex: 1;
 }
 
 .overview {
   display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 12px;
+  grid-template-columns: 230px 1fr;
+  gap: 16px;
 }
 
 .overview-left {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .media {
-  height: 110px;
+  height: 128px;
   border-radius: 12px;
   overflow: hidden;
   background: var(--badge);
@@ -1379,11 +1413,11 @@ watch(
 .stat-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
 }
 
 .stat {
-  padding: 6px;
+  padding: 8px;
   border-radius: 10px;
   border: 1px solid var(--map-overlay-border);
   background: color-mix(in srgb, var(--badge) 80%, transparent);
@@ -1401,7 +1435,7 @@ watch(
 }
 
 .impact {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--map-overlay-border);
   background: color-mix(in srgb, var(--badge) 80%, transparent);
@@ -1431,7 +1465,7 @@ watch(
 .overview-right {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .meta {
@@ -1465,18 +1499,18 @@ watch(
 .scores {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .score-row {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .score-bar {
-  height: 6px;
+  height: 7px;
   background: color-mix(in srgb, var(--badge) 70%, transparent);
   border-radius: 999px;
   overflow: hidden;
@@ -1495,16 +1529,22 @@ watch(
 .score-fill.distance {
   background: linear-gradient(90deg, #f59e0b, #f97316);
 }
+.score-fill.quality {
+  background: linear-gradient(90deg, #60a5fa, #2563eb);
+}
+.score-fill.novelty {
+  background: linear-gradient(90deg, #f472b6, #a78bfa);
+}
 
 .reason {
-  padding: 8px;
+  padding: 10px;
   border-radius: 12px;
   border: 1px solid var(--map-overlay-border);
   background: color-mix(in srgb, var(--badge) 80%, transparent);
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--map-overlay-fg);
   margin-bottom: 4px;
@@ -1520,7 +1560,7 @@ watch(
 }
 
 .explain {
-  padding: 8px;
+  padding: 10px;
   border-radius: 12px;
   border: 1px solid var(--map-overlay-border);
   background: color-mix(in srgb, var(--badge) 80%, transparent);
@@ -1544,7 +1584,7 @@ watch(
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .tag {
@@ -1565,8 +1605,8 @@ watch(
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
+  gap: 10px;
 }
 
 .gallery-item {
@@ -1829,10 +1869,10 @@ watch(
 
 @media (max-width: 1200px) {
   .place-panel {
-    width: clamp(420px, 78vw, 680px);
+    width: clamp(460px, 80vw, 740px);
   }
   .overview {
-    grid-template-columns: 180px 1fr;
+    grid-template-columns: 200px 1fr;
   }
 }
 

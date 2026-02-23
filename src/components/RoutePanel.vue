@@ -52,7 +52,7 @@ const getPanelHeights = () => {
   const height = viewportHeight.value || 800
   const reserved = COLLAPSED_HEIGHT + EDGE_OFFSET * 13
   const full = Math.max(260, height - reserved)
-  const halfMax = Math.min(420, full - 40)
+  const halfMax = Math.min(330, full - 40)
   const halfMin = Math.min(240, halfMax)
   const half = clamp(Math.round(height * 0.45), halfMin, halfMax)
   return {
@@ -329,7 +329,8 @@ const clearPoiQuery = () => {
     </div>
 
     <div class="coords">
-      <span>Start: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span><br />
+      <span>Start: {{ startLat.toFixed(4) }}, {{ startLng.toFixed(4) }}</span>
+      <span> / </span>
       <span>End: {{ endLat.toFixed(4) }}, {{ endLng.toFixed(4) }}</span>
     </div>
     </div>
@@ -339,15 +340,15 @@ const clearPoiQuery = () => {
 <style scoped>
 .control-panel {
   position: absolute;
-  top: 5px;
-  left: 5px;
+  top: 10px;
+  left: 10px;
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
-  padding: 8px 14px;
-  border-radius: 12px;
+  padding: 12px 16px;
+  border-radius: 16px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  z-index: 1000;
-  width: 300px;
+  z-index: 1001;
+  width: 332px;
   border: 1px solid var(--map-overlay-border);
   transition: background-color 1s ease, border-color 1s ease, color 1s ease, height 0.25s ease;
   display: flex;
@@ -367,13 +368,12 @@ const clearPoiQuery = () => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
 }
 
 .title-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .collapse-btn {
@@ -381,7 +381,7 @@ const clearPoiQuery = () => {
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
   border-radius: 10px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
 }
 .control-panel.light .collapse-btn {
@@ -398,7 +398,7 @@ const clearPoiQuery = () => {
 }
 
 .title {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 600;
   color: var(--map-overlay-fg);
   margin: 0;
@@ -406,14 +406,15 @@ const clearPoiQuery = () => {
 }
 
 .coords {
-  margin-top: 6px;
+  margin-top: 10px;
   font-size: 12px;
   color: var(--muted);
+  line-height: 1.45;
 }
 
 .panel-body {
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
   flex: 1;
   min-height: 0;
 }
@@ -423,10 +424,10 @@ const clearPoiQuery = () => {
 }
 
 .via-tags {
-  margin: 8px 0 6px;
-  padding: 8px;
+  margin: 10px 0 8px;
+  padding: 10px;
   border: 1px solid var(--map-overlay-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
 }
 
@@ -434,7 +435,7 @@ const clearPoiQuery = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   color: var(--map-overlay-fg);
 }
 
@@ -445,10 +446,10 @@ const clearPoiQuery = () => {
 .tag-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   max-height: 90px;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: 10px;
 }
 
 .tag-draggable {

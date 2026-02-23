@@ -219,14 +219,14 @@ watch(
   position: absolute;
   top: 10px;
   right: 10px;
-  width: 320px;
+  width: 350px;
   max-height: 90vh;
   overflow: hidden;
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-  border-radius: 16px;
-  padding: 12px 14px 24px 14px;
+  border-radius: 18px;
+  padding: 14px 16px 20px 16px;
   color: var(--map-overlay-fg);
   z-index: 1100;
   transition: background-color 1s ease, border-color 1s ease, color 1s ease;
@@ -239,13 +239,13 @@ watch(
 .header {
   display: grid;
   grid-template-columns: 1fr auto;
-  row-gap: 4px;
-  column-gap: 8px;
+  row-gap: 6px;
+  column-gap: 10px;
   align-items: center;
 }
 .title {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 17px;
 }
 .collapse-inline {
   padding: 3px 10px;
@@ -274,7 +274,7 @@ watch(
 }
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   justify-self: end;
 }
@@ -283,7 +283,7 @@ watch(
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
   border-radius: 10px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
 }
 .follow-btn.on {
@@ -296,18 +296,18 @@ watch(
   background: var(--map-overlay-bg);
   color: var(--map-overlay-fg);
   border-radius: 10px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
 }
 .steps {
-  margin-top: 10px;
+  margin-top: 12px;
 
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
   max-height: calc(80vh - 100px);
-  padding-right: 8px;
+  padding-right: 10px;
 }
 .leg-header {
   padding: 6px 10px 0;
@@ -327,8 +327,8 @@ watch(
 .step {
   display: grid;
   grid-template-columns: 28px 1fr;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
   border-radius: 10px;
   background: var(--map-overlay-bg);
   border: 1px solid var(--map-overlay-border);

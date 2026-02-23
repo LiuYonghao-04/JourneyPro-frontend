@@ -28,7 +28,7 @@
             <span class="tuning-side">Distance {{ distancePercent }}%</span>
             <span class="tuning-side">Interest {{ interestPercent }}%</span>
           </div>
-          <el-slider v-model="tuningValue" :min="0" :max="100" :show-tooltip="false" @change="applyTuning" />
+          <el-slider v-model="tuningValue" :min="0" :max="100" :show-tooltip="false" @change="applyTuning" style="height:15px"/>
 
           <div class="tuning-row second">
             <span class="tuning-side">Safe {{ safePercent }}%</span>
@@ -40,7 +40,27 @@
             :max="100"
             :show-tooltip="false"
             @change="applyExploreTuning"
+            style="height:15px"
           />
+        </div>
+
+        <div v-if="allPois.length" class="legend-inline">
+          <span class="legend-item">
+            <i class="legend-dot distance"></i>
+            Distance
+          </span>
+          <span class="legend-item">
+            <i class="legend-dot interest"></i>
+            Interest
+          </span>
+          <span class="legend-item">
+            <i class="legend-dot quality"></i>
+            Quality
+          </span>
+          <span class="legend-item">
+            <i class="legend-dot novelty"></i>
+            Novelty
+          </span>
         </div>
 
         <div v-if="categoryStats.length" class="category-filter">
@@ -101,16 +121,16 @@
                 <span v-for="tag in poi.match_tags.slice(0, 3)" :key="tag" class="poi-tag">#{{ tag }}</span>
               </div>
               <div v-if="poi.scores" class="poi-contrib">
-                <div class="mini-bar">
+                <div class="mini-bar" :title="`Distance fit ${factorPercent(poi, 'distance')}%`">
                   <span class="fill distance" :style="{ width: factorPercent(poi, 'distance') + '%' }"></span>
                 </div>
-                <div class="mini-bar">
+                <div class="mini-bar" :title="`Interest match ${factorPercent(poi, 'interest')}%`">
                   <span class="fill interest" :style="{ width: factorPercent(poi, 'interest') + '%' }"></span>
                 </div>
-                <div class="mini-bar">
+                <div class="mini-bar" :title="`Quality signal ${factorPercent(poi, 'quality')}%`">
                   <span class="fill quality" :style="{ width: factorPercent(poi, 'quality') + '%' }"></span>
                 </div>
-                <div class="mini-bar">
+                <div class="mini-bar" :title="`Novelty boost ${factorPercent(poi, 'novelty')}%`">
                   <span class="fill novelty" :style="{ width: factorPercent(poi, 'novelty') + '%' }"></span>
                 </div>
               </div>
@@ -294,9 +314,9 @@ const getPanelHeights = () => {
   const height = viewportHeight.value || 800
   const reserved = COLLAPSED_HEIGHT + EDGE_OFFSET * 13
   const full = Math.max(260, height - reserved )
-  const halfMax = Math.min(400, full - 40)
-  const halfMin = Math.min(220, halfMax)
-  const half = clamp(Math.round(height * 0.45), halfMin, halfMax)
+  const halfMax = Math.min(470, full - 30)
+  const halfMin = Math.min(280, halfMax)
+  const half = clamp(Math.round(height * 0.52), halfMin, halfMax)
   return {
     collapsed: COLLAPSED_HEIGHT,
     half,
@@ -346,13 +366,13 @@ const factorPercent = (poi, key) => {
 <style scoped>
 .poi-panel {
   position: absolute;
-  bottom: 5px;
-  left: 5px;
-  width: 300px;
-  z-index: 999;
+  bottom: 10px;
+  left: 10px;
+  width: 340px;
+  z-index: 1100;
   background: var(--map-overlay-bg);
-  border-radius: 16px;
-  padding: 12px 8px 12px 16px;
+  border-radius: 18px;
+  padding: 14px 10px 14px 18px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   border: 1px solid var(--map-overlay-border);
   overflow: hidden;
@@ -370,9 +390,10 @@ const factorPercent = (poi, key) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
 .title {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 600;
   color: var(--map-overlay-fg);
   margin: 0;
@@ -404,23 +425,27 @@ const factorPercent = (poi, key) => {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  margin-top: 10px;
-  padding:0 8px 0 20px;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 8px 0 0;
 }
 .poi-item {
   display: flex;
   gap: 8px;
   justify-content: space-between;
   align-items: center;
-  margin: 6px 0;
-  padding: 6px 0;
+  margin: 0;
+  padding: 8px 4px;
   border-bottom: 1px solid var(--map-overlay-border);
   border-left: 3px solid color-mix(in srgb, var(--poi-color, transparent) 70%, transparent);
+}
+.poi-item + .poi-item {
+  margin-top: 6px;
 }
 .poi-item.selected {
   background: color-mix(in srgb, var(--badge) 70%, transparent);
   border-radius: 10px;
-  padding: 8px 8px;
+  padding: 9px 10px;
 }
 .poi-rank {
   width: 26px;
@@ -456,9 +481,10 @@ const factorPercent = (poi, key) => {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-top: 2px;
 }
 .poi-reason {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--map-overlay-fg);
   opacity: 0.85;
   margin-top: 4px;
@@ -470,13 +496,13 @@ const factorPercent = (poi, key) => {
   margin-top: 4px;
 }
 .poi-contrib {
-  margin-top: 6px;
+  margin-top: 8px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
 }
 .mini-bar {
-  height: 4px;
+  height: 5px;
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid var(--map-overlay-border);
@@ -544,7 +570,7 @@ const factorPercent = (poi, key) => {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  margin-top: 8px;
+  margin-top: 2px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--badge) 80%, transparent);
   border: 1px solid var(--map-overlay-border);
@@ -556,7 +582,7 @@ const factorPercent = (poi, key) => {
   color: var(--map-overlay-fg);
 }
 .tuning {
-  margin-top: 10px;
+  margin-top: 2px;
   padding: 8px 10px 2px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--badge) 70%, transparent);
@@ -571,7 +597,7 @@ const factorPercent = (poi, key) => {
   margin-bottom: 2px;
 }
 .tuning-row.second {
-  margin-top: 6px;
+
 }
 .tuning-side {
   color: var(--muted);
@@ -579,11 +605,41 @@ const factorPercent = (poi, key) => {
 }
 
 .category-filter {
-  margin-top: 10px;
+  margin-top: 2px;
   padding: 8px 10px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--badge) 70%, transparent);
   border: 1px solid var(--map-overlay-border);
+}
+.legend-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 2px 2px 0;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.legend-dot.distance {
+  background: #f59e0b;
+}
+.legend-dot.interest {
+  background: #22c55e;
+}
+.legend-dot.quality {
+  background: #3b82f6;
+}
+.legend-dot.novelty {
+  background: #a855f7;
 }
 .filter-head {
   display: flex;
@@ -615,6 +671,9 @@ const factorPercent = (poi, key) => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  max-height: 76px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 .filter-chip {
   display: inline-flex;
