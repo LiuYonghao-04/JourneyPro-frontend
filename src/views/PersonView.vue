@@ -1,167 +1,185 @@
 <template>
-  <div class="page">
-    <aside class="sidebar">
-      <div class="logo">Community</div>
-      <div class="nav">
-        <RouterLink to="/posts" class="nav-item">Discover</RouterLink>
-        <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
-        <RouterLink to="/notifications" class="nav-item">Notifications</RouterLink>
-        <RouterLink to="/person" class="nav-item active">Me</RouterLink>
-      </div>
+  <div class="profile-page">
+    <aside class="left-rail">
+      <div class="brand">Profile</div>
+      <RouterLink to="/posts" class="rail-link">Discover</RouterLink>
+      <RouterLink to="/posts/publish" class="rail-link">Publish</RouterLink>
+      <RouterLink to="/notifications" class="rail-link">Notifications</RouterLink>
+      <RouterLink to="/person" class="rail-link active">Me</RouterLink>
     </aside>
 
     <main class="content">
-      <header class="profile">
+      <section class="hero">
         <div class="avatar-wrap" @click="isSelf && openAvatarDialog()">
-          <CroppedImage :src="displayAvatar" alt="avatar" class="avatar-img" :aspect-ratio="1" />
+          <CroppedImage :src="displayAvatar" alt="avatar" class="avatar" :aspect-ratio="1" />
           <div v-if="isSelf" class="avatar-mask">Change</div>
         </div>
-        <div class="info">
-          <h2 style="color: var(--muted);" >{{ displayUserName }}</h2>
-          <div class="meta">
-            {{ userIdLabel }}
-            <span class="link" :class="{ inert: !isSelf }" @click="isSelf ? openFollowers() : null">
-              Followers: {{ followerCount }}
-            </span>
+        <div class="hero-main">
+          <h1>{{ displayUserName }}</h1>
+          <div class="hero-sub">
+            <span>User ID: {{ userId || 'guest' }}</span>
+            <button class="link-btn" :disabled="!isSelf" @click="isSelf && openFollowers()">
+              Followers {{ followerCount }}
+            </button>
           </div>
-          <div class="stats">
-            <span> posts:{{ posts.length }}</span>
-            <span v-if="isSelf">favorites:{{ favs.length }} </span>
-            <span v-if="isSelf">likes:{{ likes.length }} </span>
-          </div>
-        </div>
-      </header>
-
-      <section v-if="isSelf" class="reco-insights">
-        <div class="reco-card">
-          <div class="reco-title">Recommendation balance</div>
-          <div class="reco-sub">Distance {{ distancePercent }}% · Interest {{ interestPercent }}%</div>
-          <el-slider v-model="interestSlider" :min="0" :max="100" :show-tooltip="true" />
-          <div class="reco-scale">
-            <span>Distance-first</span>
-            <span>Interest-first</span>
-          </div>
-        </div>
-
-        <div class="reco-card">
-          <div class="reco-title">Your interests</div>
-          <div v-if="interestProfile?.signals" class="reco-sub">
-            Likes {{ interestProfile.signals.likes }} · Favorites {{ interestProfile.signals.favorites }} · Views
-            {{ interestProfile.signals.views }}
-          </div>
-
-          <div v-if="interestLoading" class="reco-empty">Loading...</div>
-          <div v-else-if="!interestProfile?.personalized" class="reco-empty">
-            Interact with posts to build your profile.
-          </div>
-          <div v-else class="interest-sections">
-            <div class="interest-section">
-              <div class="section-title">Tags</div>
-              <div v-for="item in interestTags" :key="item.name" class="bar-item">
-                <div class="bar-row">
-                  <span class="bar-label">#{{ item.name }}</span>
-                  <span class="bar-value">{{ item.percent }}%</span>
-                </div>
-                <el-progress :percentage="item.percent" :stroke-width="10" :show-text="false" />
-              </div>
-              <div v-if="otherTagPercent > 0" class="bar-item">
-                <div class="bar-row">
-                  <span class="bar-label">Other</span>
-                  <span class="bar-value">{{ otherTagPercent }}%</span>
-                </div>
-                <el-progress :percentage="otherTagPercent" :stroke-width="10" :show-text="false" />
-              </div>
+          <div class="kpi-row">
+            <div class="kpi-card">
+              <span>Posts</span>
+              <strong>{{ posts.length }}</strong>
             </div>
-
-            <div class="interest-section">
-              <div class="section-title">POI categories</div>
-              <div v-for="item in interestCategories" :key="item.name" class="bar-item">
-                <div class="bar-row">
-                  <span class="bar-label">{{ item.name }}</span>
-                  <span class="bar-value">{{ item.percent }}%</span>
-                </div>
-                <el-progress :percentage="item.percent" :stroke-width="10" :show-text="false" />
-              </div>
-              <div v-if="otherCategoryPercent > 0" class="bar-item">
-                <div class="bar-row">
-                  <span class="bar-label">Other</span>
-                  <span class="bar-value">{{ otherCategoryPercent }}%</span>
-                </div>
-                <el-progress :percentage="otherCategoryPercent" :stroke-width="10" :show-text="false" />
-              </div>
+            <div class="kpi-card">
+              <span>Favorites</span>
+              <strong>{{ isSelf ? favs.length : 0 }}</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Likes</span>
+              <strong>{{ isSelf ? likes.length : 0 }}</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Visible</span>
+              <strong>{{ filteredList.length }}</strong>
             </div>
           </div>
         </div>
       </section>
 
-      <div class="tabs">
-        <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">Posts</button>
-        <button v-if="isSelf" class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">Favorites</button>
-        <button v-if="isSelf" class="tab" :class="{ active: tab === 'likes' }" @click="tab = 'likes'">Likes</button>
-      </div>
-
-      <section class="grid">
-        <div v-if="currentList.length === 0" class="empty">
-          <div class="empty-icon">&#127793;</div>
-          <p>No content yet.</p>
-        </div>
-        <div v-else class="cards">
-          <div
-            v-for="card in currentList"
-            :key="card._dupKey || card.id"
-            class="card"
-            @click="goDetail(card.id)"
-          >
-            <div class="cover" v-if="card.cover_image || card.images?.[0]">
-              <div v-if="!loadedMap[coverKey(card)]" class="img-skeleton" />
-              <CroppedImage
-                :src="card.cover_image || card.images?.[0]"
-                loading="lazy"
-                class="cover-img"
-                @load="() => markLoaded(card)"
-              />
+      <section v-if="isSelf" class="insights">
+        <article class="panel">
+          <h3>Recommendation Controls</h3>
+          <div class="slider-wrap">
+            <div class="slider-labels">
+              <span>Distance {{ distancePercent }}%</span>
+              <span>Interest {{ interestPercent }}%</span>
             </div>
-            <div class="card-title">{{ card.title }}</div>
-            <div class="card-meta">
-              <el-icon :class="['stat-icon', { liked: card._liked }]">
-                <component :is="card._liked ? CircleCheckFilled : CircleCheck" />
-              </el-icon>
-              <span>{{ card.like_count || 0 }}</span>
-              <span class="dot">&middot;</span>
-              <el-icon :class="['stat-icon', 'fav', { active: card._fav }]">
-                <component :is="card._fav ? StarFilled : Star" />
-              </el-icon>
-              <span>{{ card.favorite_count || 0 }}</span>
-            </div>
+            <el-slider v-model="interestSlider" :min="0" :max="100" />
           </div>
+          <div class="slider-wrap">
+            <div class="slider-labels">
+              <span>Safe {{ safePercent }}%</span>
+              <span>Explore {{ explorePercent }}%</span>
+            </div>
+            <el-slider v-model="exploreSlider" :min="0" :max="100" />
+          </div>
+        </article>
+
+        <article class="panel">
+          <h3>Interest Profile</h3>
+          <div v-if="interestLoading" class="muted">Loading profile...</div>
+          <template v-else-if="!interestProfile?.personalized">
+            <div class="muted">Interact with posts to generate preference profile.</div>
+          </template>
+          <template v-else>
+            <div class="bar-grid">
+              <div class="bar-block" v-for="item in interestTags" :key="`tag-${item.name}`">
+                <div class="bar-head">
+                  <span>#{{ item.name }}</span>
+                  <span>{{ item.percent }}%</span>
+                </div>
+                <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
+              </div>
+              <div class="bar-block" v-if="otherTagPercent > 0">
+                <div class="bar-head">
+                  <span>Other tags</span>
+                  <span>{{ otherTagPercent }}%</span>
+                </div>
+                <el-progress :percentage="otherTagPercent" :stroke-width="8" :show-text="false" />
+              </div>
+            </div>
+            <div class="bar-grid">
+              <div class="bar-block" v-for="item in interestCategories" :key="`cat-${item.name}`">
+                <div class="bar-head">
+                  <span>{{ item.name }}</span>
+                  <span>{{ item.percent }}%</span>
+                </div>
+                <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
+              </div>
+              <div class="bar-block" v-if="otherCategoryPercent > 0">
+                <div class="bar-head">
+                  <span>Other categories</span>
+                  <span>{{ otherCategoryPercent }}%</span>
+                </div>
+                <el-progress :percentage="otherCategoryPercent" :stroke-width="8" :show-text="false" />
+              </div>
+            </div>
+          </template>
+        </article>
+      </section>
+
+      <section class="controls">
+        <div class="tabs">
+          <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">Posts</button>
+          <button v-if="isSelf" class="tab" :class="{ active: tab === 'favs' }" @click="tab = 'favs'">Favorites</button>
+          <button v-if="isSelf" class="tab" :class="{ active: tab === 'likes' }" @click="tab = 'likes'">Likes</button>
+        </div>
+
+        <div class="filters">
+          <el-input v-model="search" placeholder="Search title or content" clearable style="width: 260px" />
+          <el-select v-model="sort" style="width: 140px">
+            <el-option label="Newest" value="new" />
+            <el-option label="Hottest" value="hot" />
+          </el-select>
+          <button class="mode-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">Grid</button>
+          <button class="mode-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">List</button>
         </div>
       </section>
+
+      <section v-if="filteredList.length" class="feed">
+        <div v-if="viewMode === 'grid'" class="card-grid">
+          <article v-for="card in filteredList" :key="card._dupKey || card.id" class="card" @click="goDetail(card.id)">
+            <CroppedImage :src="card.cover_image || card.images?.[0] || 'https://placehold.co/640x420'" class="cover" />
+            <div class="body">
+              <h4>{{ card.title }}</h4>
+              <p>{{ card.content }}</p>
+              <div class="meta">
+                <span>{{ card.like_count || 0 }} likes</span>
+                <span>{{ card.favorite_count || 0 }} favs</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div v-else class="list-view">
+          <article v-for="card in filteredList" :key="card._dupKey || card.id" class="list-card" @click="goDetail(card.id)">
+            <CroppedImage :src="card.cover_image || card.images?.[0] || 'https://placehold.co/240x160'" class="list-cover" />
+            <div class="list-body">
+              <h4>{{ card.title }}</h4>
+              <p>{{ card.content }}</p>
+              <div class="meta">
+                <span>{{ card.like_count || 0 }} likes</span>
+                <span>{{ card.favorite_count || 0 }} favs</span>
+                <span>{{ card.view_count || 0 }} views</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section v-else class="empty">No content found.</section>
     </main>
   </div>
 
-  <el-dialog v-model="followerDialog" title="Followers" width="360px">
-    <div class="followers-list" v-if="followers.length">
-      <div v-for="f in followers" :key="f.id" class="follower-item">
+  <el-dialog v-model="followerDialog" title="Followers" width="380px">
+    <div v-if="followers.length" class="followers-list">
+      <div v-for="f in followers" :key="f.id" class="follower-row">
         <CroppedImage :src="f.avatar_url || 'https://placehold.co/80x80'" class="follower-avatar" :aspect-ratio="1" />
         <div>
-          <div class="follower-name">{{ f.nickname || 'Traveler' }}</div>
-          <div class="follower-meta">ID: {{ f.user_id }}</div>
+          <div>{{ f.nickname || 'Traveler' }}</div>
+          <div class="muted">ID: {{ f.user_id }}</div>
         </div>
       </div>
     </div>
-    <div v-else>None yet.</div>
+    <div v-else class="muted">No followers yet.</div>
   </el-dialog>
 
   <el-dialog v-model="avatarDialog" title="Update Avatar" width="420px">
-    <div class="avatar-edit">
-      <el-input v-model="avatarInput" placeholder="https://..."></el-input>
-      <div class="avatar-actions">
+    <div class="avatar-editor">
+      <el-input v-model="avatarInput" placeholder="https://..." />
+      <div class="avatar-editor-actions">
         <el-button size="small" @click="randomAvatar">Random</el-button>
-        <el-button type="primary" size="small" @click="startAvatarCrop">Save</el-button>
+        <el-button size="small" type="primary" @click="startAvatarCrop">Crop & Save</el-button>
       </div>
-      <div class="avatar-preview clickable" role="button" tabindex="0" @click="startAvatarCrop">
-        <CroppedImage :src="avatarInput || displayAvatar" alt="preview" class="avatar-preview-img" :aspect-ratio="1" />
-        <div class="avatar-preview-mask">Change</div>
+      <div class="avatar-preview" @click="startAvatarCrop">
+        <CroppedImage :src="avatarInput || displayAvatar" class="avatar-preview-img" :aspect-ratio="1" />
       </div>
     </div>
   </el-dialog>
@@ -181,9 +199,8 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
-import { CircleCheck, CircleCheckFilled, Star, StarFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import ImageCropperDialog from '../components/ImageCropperDialog.vue'
@@ -194,20 +211,26 @@ import { proxiedImageSrc } from '../utils/imageProxy'
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'
 const AUTH_API = 'http://localhost:3001/api/auth'
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const routeStore = useRouteStore()
+
 const userId = computed(() => route.query.userid || auth.user?.id)
 const isSelf = computed(() => String(userId.value || '') === String(auth.user?.id || ''))
+
 const posts = ref([])
 const favs = ref([])
 const likes = ref([])
-const tab = ref('posts')
-const loadedMap = ref({})
 const followers = ref([])
-const followerDialog = ref(false)
 const profile = ref(null)
+const tab = ref('posts')
+const sort = ref('new')
+const search = ref('')
+const viewMode = ref(localStorage.getItem('jp_person_view_mode') || 'grid')
+
+const followerDialog = ref(false)
 const avatarDialog = ref(false)
 const avatarInput = ref('')
 const avatarCropOpen = ref(false)
@@ -219,9 +242,9 @@ const fetchData = async () => {
   const uid = userId.value
   if (!uid) return
   const [p, f, l] = await Promise.all([
-    axios.get(API_BASE, { params: { user_id: uid, limit: 50 } }).then((r) => r.data?.data || []),
-    axios.get(API_BASE, { params: { favorited_by: uid, limit: 50 } }).then((r) => r.data?.data || []),
-    axios.get(API_BASE, { params: { liked_by: uid, limit: 50 } }).then((r) => r.data?.data || []),
+    axios.get(API_BASE, { params: { user_id: uid, limit: 150 } }).then((r) => r.data?.data || []),
+    axios.get(API_BASE, { params: { favorited_by: uid, limit: 150 } }).then((r) => r.data?.data || []),
+    axios.get(API_BASE, { params: { liked_by: uid, limit: 150 } }).then((r) => r.data?.data || []),
   ])
   const likedSet = new Set(l.map((i) => i.id))
   const favSet = new Set(f.map((i) => i.id))
@@ -230,22 +253,6 @@ const fetchData = async () => {
   likes.value = l.map((item) => ({ ...item, _liked: true }))
   await fetchFollowers()
 }
-
-const goDetail = (id) => {
-  router.push(`/posts/postsid=${id}`)
-}
-
-const userIdLabel = computed(() => `User ID: ${userId.value || 'guest'}`)
-const currentList = computed(() => {
-  if (!isSelf.value) return posts.value
-  return tab.value === 'posts' ? posts.value : tab.value === 'favs' ? favs.value : likes.value
-})
-const coverKey = (card) => card._dupKey || card.id
-const markLoaded = (card) => {
-  const key = coverKey(card)
-  loadedMap.value = { ...loadedMap.value, [key]: true }
-}
-const followerCount = computed(() => followers.value.length)
 
 const fetchFollowers = async () => {
   const uid = userId.value
@@ -256,7 +263,7 @@ const fetchFollowers = async () => {
   try {
     const res = await axios.get(`${FOLLOW_API}/followers`, { params: { target_id: uid } })
     followers.value = res.data?.data || []
-  } catch (e) {
+  } catch {
     followers.value = []
   }
 }
@@ -270,14 +277,66 @@ const fetchProfile = async () => {
   try {
     const res = await axios.get(`${AUTH_API}/user`, { params: { id: uid } })
     profile.value = res.data?.user || null
-  } catch (e) {
+  } catch {
     profile.value = null
   }
 }
 
-const openFollowers = () => {
-  followerDialog.value = true
-}
+const currentList = computed(() => {
+  if (!isSelf.value) return posts.value
+  if (tab.value === 'favs') return favs.value
+  if (tab.value === 'likes') return likes.value
+  return posts.value
+})
+
+const filteredList = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  const list = currentList.value.filter((item) => {
+    if (!q) return true
+    return `${item.title || ''} ${item.content || ''}`.toLowerCase().includes(q)
+  })
+  if (sort.value === 'hot') {
+    return [...list].sort((a, b) => (Number(b.like_count) || 0) - (Number(a.like_count) || 0))
+  }
+  return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+})
+
+const followerCount = computed(() => followers.value.length)
+const displayUserName = computed(() => profile.value?.nickname || auth.user?.nickname || 'Traveler')
+const displayAvatar = computed(() => profile.value?.avatar_url || auth.user?.avatar_url || 'https://placehold.co/120x120')
+
+const interestSlider = computed({
+  get() {
+    return Math.round((routeStore.recoInterestWeight ?? 0.5) * 100)
+  },
+  set(val) {
+    routeStore.setRecoInterestWeight(Number(val) / 100)
+  },
+})
+
+const exploreSlider = computed({
+  get() {
+    return Math.round((routeStore.recoExploreWeight ?? 0.15) * 100)
+  },
+  set(val) {
+    routeStore.setRecoExploreWeight(Number(val) / 100)
+  },
+})
+
+const interestPercent = computed(() => interestSlider.value)
+const distancePercent = computed(() => 100 - interestSlider.value)
+const explorePercent = computed(() => exploreSlider.value)
+const safePercent = computed(() => 100 - exploreSlider.value)
+
+const interestProfile = computed(() => routeStore.userInterestProfile || null)
+const interestLoading = computed(() => routeStore.interestProfileLoading)
+const interestTags = computed(() => interestProfile.value?.tags?.items || [])
+const otherTagPercent = computed(() => Number(interestProfile.value?.tags?.other_percent) || 0)
+const interestCategories = computed(() => interestProfile.value?.categories?.items || [])
+const otherCategoryPercent = computed(() => Number(interestProfile.value?.categories?.other_percent) || 0)
+
+const goDetail = (id) => router.push(`/posts/postsid=${id}`)
+const openFollowers = () => (followerDialog.value = true)
 
 const openAvatarDialog = () => {
   if (!isSelf.value) return
@@ -286,17 +345,12 @@ const openAvatarDialog = () => {
 }
 
 const randomAvatar = () => {
-  const seed = Math.floor(Math.random() * 200) + 1
-  avatarInput.value = `https://picsum.photos/seed/jp_post${seed}_cover/120/120`
+  avatarInput.value = `https://picsum.photos/seed/jp_avatar_${Math.floor(Math.random() * 10000)}/160/160`
 }
 
 const startAvatarCrop = () => {
-  if (!isSelf.value) return
   const raw = (avatarInput.value || '').trim()
-  if (!raw) {
-    alert('Please enter an image URL first.')
-    return
-  }
+  if (!raw) return
   const parsed = parseUrlWithCrop(raw)
   avatarCropBaseUrl.value = parsed.baseUrl || raw
   avatarCropInitial.value = parsed.crop
@@ -306,12 +360,9 @@ const startAvatarCrop = () => {
 
 const persistAvatarUrl = async (finalUrl) => {
   const url = String(finalUrl || '').trim()
-  if (!url) return false
+  if (!url || !auth.user?.id) return false
   try {
-    const res = await axios.post(`${AUTH_API}/avatar`, {
-      user_id: auth.user?.id,
-      avatar_url: url,
-    })
+    const res = await axios.post(`${AUTH_API}/avatar`, { user_id: auth.user.id, avatar_url: url })
     const updated = res.data?.user
     if (updated) {
       profile.value = updated
@@ -330,36 +381,11 @@ const onAvatarCropConfirm = async (crop) => {
     const finalUrl = buildUrlWithCrop(base, crop)
     avatarInput.value = finalUrl
     const ok = await persistAvatarUrl(finalUrl)
-    if (!ok) throw new Error('save failed')
-    avatarDialog.value = false
-  } catch {
-    alert('Avatar update failed. Please try again.')
+    if (ok) avatarDialog.value = false
   } finally {
     avatarCropOpen.value = false
   }
 }
-
-const displayUserName = computed(() => profile.value?.nickname || auth.user?.nickname || 'Traveler')
-const displayAvatar = computed(() => profile.value?.avatar_url || auth.user?.avatar_url || 'https://placehold.co/120x120')
-
-const interestSlider = computed({
-  get() {
-    return Math.round(((routeStore.recoInterestWeight ?? 0.5) * 100))
-  },
-  set(val) {
-    const num = Number(val)
-    const normalized = Number.isFinite(num) ? num / 100 : 0.5
-    routeStore.setRecoInterestWeight(normalized)
-  },
-})
-const interestPercent = computed(() => interestSlider.value)
-const distancePercent = computed(() => 100 - interestSlider.value)
-const interestProfile = computed(() => routeStore.userInterestProfile || null)
-const interestLoading = computed(() => routeStore.interestProfileLoading)
-const interestTags = computed(() => interestProfile.value?.tags?.items || [])
-const otherTagPercent = computed(() => Number(interestProfile.value?.tags?.other_percent) || 0)
-const interestCategories = computed(() => interestProfile.value?.categories?.items || [])
-const otherCategoryPercent = computed(() => Number(interestProfile.value?.categories?.other_percent) || 0)
 
 onMounted(() => {
   fetchData()
@@ -385,6 +411,13 @@ watch(
 )
 
 watch(
+  () => viewMode.value,
+  (mode) => {
+    localStorage.setItem('jp_person_view_mode', mode)
+  }
+)
+
+watch(
   () => avatarCropOpen.value,
   (open) => {
     if (open) return
@@ -396,332 +429,448 @@ watch(
 </script>
 
 <style scoped>
-.page {
+.profile-page {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 220px 1fr;
   min-height: calc(100vh - 56px);
-  background: var(--badge);
-}
-.sidebar {
-  background: var(--panel);
-  border-right: 1px solid #ececec;
-  padding: 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.logo {
   color: var(--fg);
-  font-weight: 800;
+  background:
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, #7ea6ff 10%, transparent), transparent 30%),
+    radial-gradient(circle at 90% 8%, color-mix(in srgb, #ffd7a0 10%, transparent), transparent 26%),
+    var(--bg-main);
+}
+
+.left-rail {
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 16px 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.brand {
   font-size: 20px;
-  padding: 8px 6px;
+  font-weight: 800;
+  margin-bottom: 8px;
 }
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.nav-item {
-  padding: 10px 12px;
-  border-radius: 12px;
+
+.rail-link {
   text-decoration: none;
   color: var(--fg);
+  padding: 9px 11px;
+  border-radius: 12px;
 }
-.nav-item.active,
-.nav-item:hover,
-.nav :global(.router-link-active.nav-item) {
-  background: var(--badge);
+
+.rail-link:hover,
+.rail-link.active,
+.left-rail :global(.router-link-active.rail-link) {
+  background: color-mix(in srgb, var(--badge) 88%, transparent);
 }
-.nav-item.muted {
-  color: var(--muted);
-}
+
 .content {
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: 16px 18px 24px;
 }
-.profile {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  background: var(--panel);
-  border-radius: 16px;
+
+.hero {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
   padding: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
-}
-.reco-insights {
-  margin-top: 14px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto 1fr;
   gap: 14px;
 }
-.reco-card {
-  background: var(--panel);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
-  border: 1px solid #eee;
-}
-.reco-title {
-  font-weight: 800;
-  color: var(--fg);
-  margin-bottom: 6px;
-}
-.reco-sub {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-.reco-scale {
-  display: flex;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 4px;
-}
-.reco-empty {
-  color: var(--muted);
-  font-size: 13px;
-  padding: 10px 0;
-}
-.interest-sections {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.interest-section .section-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--fg);
-  margin-bottom: 8px;
-}
-.bar-item {
-  margin-bottom: 10px;
-}
-.bar-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-.bar-label {
-  color: var(--fg);
-  opacity: 0.8;
-}
-.bar-value {
-  color: var(--muted);
-}
+
 .avatar-wrap {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--badge);
   position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  overflow: hidden;
   cursor: pointer;
 }
-.avatar-img {
-  width: 100%;
-  height: 100%;
+
+.avatar {
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
 }
+
 .avatar-mask {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
   display: grid;
   place-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
   opacity: 0;
   transition: opacity 0.2s;
+  font-size: 12px;
   font-weight: 700;
-  font-size: 14px;
 }
+
 .avatar-wrap:hover .avatar-mask {
   opacity: 1;
 }
-.info h2 {
-  margin: 0 0 6px;
+
+.hero-main h1 {
+  margin: 0;
+  font-size: 32px;
+  letter-spacing: -0.02em;
 }
-.meta,
-.stats {
-  color: var(--muted);
+
+.hero-sub {
+  margin-top: 8px;
   display: flex;
-  gap: 15px;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
   font-size: 13px;
 }
-.meta .link {
+
+.link-btn {
+  border: none;
+  background: transparent;
+  color: #4f8cff;
   cursor: pointer;
+  padding: 0;
 }
-.meta .link:hover {
-  color: #1677ff;
-  text-decoration: underline;
+
+.link-btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
-.meta .link.inert {
-  pointer-events: none;
-  cursor: default;
-  text-decoration: none;
+
+.kpi-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
-.tabs {
-  margin-top: 18px;
-  display: flex;
+
+.kpi-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 78%, transparent);
+  padding: 8px;
+}
+
+.kpi-card span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.kpi-card strong {
+  font-size: 22px;
+}
+
+.insights {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+
+.panel {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 12px;
+}
+
+.panel h3 {
+  margin: 0 0 8px;
+}
+
+.slider-wrap {
+  margin-top: 8px;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.bar-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.bar-block {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 8px;
+}
+
+.bar-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.controls {
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+}
+
 .tab {
-  border: none;
-  padding: 10px 16px;
-  border-radius: 20px;
-  background: var(--badge);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
   color: var(--fg);
+  padding: 6px 12px;
   cursor: pointer;
 }
+
 .tab.active {
-  background: var(--btn-primary);
-  color: var(--btn-text);
-  color: #fff;
+  border-color: #4f8cff;
+  box-shadow: inset 0 0 0 1px #4f8cff;
 }
-.grid {
-  margin-top: 16px;
-  background: var(--panel);
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+  color: var(--fg);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  border-color: #4f8cff;
+}
+
+.feed {
+  margin-top: 12px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
   border-radius: 14px;
-  padding: 16px;
-  min-height: 400px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  overflow: hidden;
+  cursor: pointer;
 }
+
+.cover {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.body {
+  padding: 10px;
+}
+
+.body h4 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.body p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meta {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.list-view {
+  display: grid;
+  gap: 10px;
+}
+
+.list-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.list-cover {
+  width: 180px;
+  height: 120px;
+  border-radius: 10px;
+}
+
+.list-body h4 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.list-body p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .empty {
+  margin-top: 12px;
+  border: 1px dashed color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 14px;
+  padding: 20px;
   text-align: center;
   color: var(--muted);
-  padding: 60px 0;
 }
-.empty-icon {
-  font-size: 28px;
-  margin-bottom: 10px;
-}
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-.card {
-  background: var(--panel);
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid #eee;
-  cursor: pointer;
-}
-.card .cover {
-  position: relative;
-  height: 180px;
-}
-.cover-img {
-  width: 100%;
-  height: 180px;
-}
-.img-skeleton {
-  position: absolute;
-  inset: 0;
-  background: var(--badge);
-}
-.card-title {
-  font-weight: 700;
-  padding: 8px 10px 4px;
-  color: var(--muted);
-}
-.card-meta {
-  padding: 0 10px 10px;
-  font-size: 12px;
-  color: var(--muted);
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.stat-icon {
-  color: #aaa;
-}
-.stat-icon.liked {
-  color: #ff2442;
-}
-.stat-icon.fav.active {
-  color: #f5a524;
-}
-.dot {
-  color: #bbb;
-}
+
 .followers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
 }
-.follower-item {
-  display: flex;
+
+.follower-row {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 8px;
   align-items: center;
-  gap: 10px;
 }
+
 .follower-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--badge);
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
 }
-.follower-name {
-  font-weight: 600;
+
+.avatar-editor {
+  display: grid;
+  gap: 8px;
 }
-.follower-meta {
-  font-size: 12px;
-  color: var(--muted);
-}
-.avatar-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.avatar-actions {
+
+.avatar-editor-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
+
 .avatar-preview {
-  display: inline-flex;
-  align-self: flex-start;
-  width: fit-content;
-  padding: 8px;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: var(--badge);
-  position: relative;
-}
-.avatar-preview.clickable {
+  width: 140px;
+  height: 140px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
   cursor: pointer;
 }
-.avatar-preview-mask {
-  position: absolute;
-  inset: 8px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-  font-weight: 700;
-  font-size: 13px;
-  pointer-events: none;
-}
-.avatar-preview:hover .avatar-preview-mask {
-  opacity: 1;
-}
+
 .avatar-preview-img {
-  width: 100px;
-  height: 100px;
-  border-radius: 10px;
+  width: 140px;
+  height: 140px;
 }
 
-@media (max-width: 1100px) {
-  .reco-insights {
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner),
+:deep(.el-select__wrapper) {
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  border-color: color-mix(in srgb, var(--panel-border) 78%, transparent) !important;
+  color: var(--fg) !important;
+}
+
+:deep(.el-input__inner),
+:deep(.el-textarea__inner),
+:deep(.el-select__selected-item),
+:deep(.el-select__placeholder) {
+  color: var(--fg) !important;
+}
+
+@media (max-width: 1180px) {
+  .insights {
     grid-template-columns: 1fr;
   }
-  .interest-sections {
+}
+
+@media (max-width: 960px) {
+  .profile-page {
     grid-template-columns: 1fr;
+  }
+
+  .left-rail {
+    display: none;
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .list-card {
+    grid-template-columns: 1fr;
+  }
+
+  .list-cover {
+    width: 100%;
+    height: 180px;
   }
 }
 </style>

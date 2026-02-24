@@ -1,89 +1,115 @@
 <template>
   <div class="page" v-if="post">
     <aside class="sidebar">
-      <div class="logo">Community</div>
-      <div class="nav">
-        <RouterLink to="/posts" class="nav-item active">Discover</RouterLink>
-        <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
-        <RouterLink to="/notifications" class="nav-item">Notifications</RouterLink>
-        <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">Me</RouterLink>
-        <div v-else class="nav-item muted">Me</div>
+      <div class="brand">Community</div>
+      <RouterLink to="/posts" class="nav-link">Discover</RouterLink>
+      <RouterLink to="/posts/publish" class="nav-link">Publish</RouterLink>
+      <RouterLink to="/notifications" class="nav-link">Notifications</RouterLink>
+      <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-link">Me</RouterLink>
+      <div v-else class="nav-link muted">Me</div>
+      <div class="side-meta">
+        <div>Post #{{ postId }}</div>
+        <div>{{ formatTime(post.created_at) }}</div>
       </div>
     </aside>
 
     <main class="content">
-      <div class="header">
+      <header class="toolbar">
         <el-button text @click="goBack">Back</el-button>
-        <div class="meta">
-          <span>Post #{{ postId }}</span>
+        <div class="toolbar-actions">
+          <el-button @click="copyPostLink">Copy link</el-button>
+          <el-button :disabled="!poiDetail?.id" @click="openPoiPostFeed">Related POI posts</el-button>
         </div>
-      </div>
+      </header>
 
-      <section class="panel">
-        <div class="media">
-          <el-carousel v-if="post.images?.length" height="100%">
-            <el-carousel-item v-for="(img, idx) in post.images" :key="idx">
-              <button class="media-photo-btn" @click.stop="openPhotoViewer(post.images, idx)">
-                <CroppedImage :src="img" :alt="`image-${idx}`" class="media-img" />
+      <div class="layout">
+        <section class="main">
+          <div class="media">
+            <button class="main-image-btn" @click="openPhotoViewer(postImages, mediaIndex)">
+              <CroppedImage
+                v-if="postImages[mediaIndex]"
+                :src="postImages[mediaIndex]"
+                :alt="`post-image-${mediaIndex}`"
+                class="main-image"
+              />
+              <div v-else class="image-empty">No image</div>
+            </button>
+            <div v-if="postImages.length > 1" class="thumbs">
+              <button
+                v-for="(img, idx) in postImages"
+                :key="`${img}-${idx}`"
+                class="thumb"
+                :class="{ active: mediaIndex === idx }"
+                @click="mediaIndex = idx"
+              >
+                <CroppedImage :src="img" :alt="`thumb-${idx}`" class="thumb-img" />
               </button>
-            </el-carousel-item>
-          </el-carousel>
-          <div v-else class="media-placeholder">No image</div>
-        </div>
-
-        <div class="body">
-          <div class="author">
-            <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="avatar-link">
-              <CroppedImage :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
-            </RouterLink>
-            <CroppedImage v-else :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
-            <div class="author-info">
-              <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="name-link">
-                <div class="name">{{ post.user?.nickname || 'Traveler' }}</div>
-              </RouterLink>
-              <div v-else class="name">{{ post.user?.nickname || 'Traveler' }}</div>
-              <div class="time">{{ formatTime(post.created_at) }}</div>
             </div>
-            <template v-if="auth.user && auth.user.id !== post.user?.id">
+          </div>
+
+          <article class="post-card">
+            <div class="author-row">
+              <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)">
+                <CroppedImage :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
+              </RouterLink>
+              <CroppedImage v-else :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
+              <div class="author-info">
+                <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)" class="author-name">
+                  {{ post.user?.nickname || 'Traveler' }}
+                </RouterLink>
+                <div v-else class="author-name">{{ post.user?.nickname || 'Traveler' }}</div>
+                <div class="time">{{ formatTime(post.created_at) }}</div>
+              </div>
               <el-button
-                class="follow-btn"
+                v-if="auth.user && auth.user.id !== post.user?.id"
+                size="small"
                 :type="following ? 'success' : 'primary'"
-                @click="toggleFollow"
                 plain
+                @click="toggleFollow"
               >
                 {{ following ? 'Following' : 'Follow' }}
               </el-button>
-            </template>
-          </div>
-
-          <h2 class="title">{{ post.title }}</h2>
-          <p class="text">{{ post.content }}</p>
-
-          <div class="tags" v-if="post.tags?.length">
-            <span v-for="tag in post.tags" :key="tag" class="tag">#{{ tag }}</span>
-          </div>
-
-          <div v-if="post.poi_id" class="poi-actions">
-            <div class="poi-meta">
-              <strong>{{ poiDetail?.name || 'POI from this post' }}</strong>
-              <span class="poi-cat" v-if="poiDetail?.category">{{ poiDetail.category }}</span>
-              <span class="poi-cat" v-else-if="poiLoading">Loading...</span>
             </div>
-            <div class="poi-buttons">
-              <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View on map</el-button>
-              <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">
-                Add to route
-              </el-button>
-              <el-button size="small" :disabled="!poiDetail?.id" @click="openPoiPostFeed">Related posts</el-button>
+
+            <h1>{{ post.title }}</h1>
+            <p class="text">{{ post.content }}</p>
+
+            <div v-if="post.tags?.length" class="tags">
+              <span v-for="tag in post.tags" :key="tag" class="tag">#{{ tag }}</span>
             </div>
-            <div v-if="poiGallery.length" class="poi-gallery">
-              <button
-                v-for="(img, idx) in poiGallery"
-                :key="`${poiDetail?.id || 'poi'}-${idx}`"
-                class="poi-gallery-item"
-                @click="openPhotoViewer(poiGallery, idx)"
-              >
-                <img :src="img" :alt="poiDetail?.name || 'POI photo'" />
+
+            <div class="stats">
+              <button class="pill" @click="toggleLikePost">
+                <el-icon :class="{ active: post._liked }">
+                  <component :is="post._liked ? CircleCheckFilled : CircleCheck" />
+                </el-icon>
+                <span>{{ post.like_count || 0 }}</span>
+              </button>
+              <button class="pill" @click="toggleFavPost">
+                <el-icon :class="{ active: post._fav }">
+                  <component :is="post._fav ? StarFilled : Star" />
+                </el-icon>
+                <span>{{ post.favorite_count || 0 }}</span>
+              </button>
+              <span class="time">{{ post.view_count || 0 }} views</span>
+            </div>
+          </article>
+
+          <section v-if="post.poi_id" class="poi-card">
+            <div class="poi-header">
+              <div>
+                <strong>{{ poiDetail?.name || 'Linked place' }}</strong>
+                <div class="time">{{ poiDetail?.category || 'POI' }}</div>
+              </div>
+              <div class="poi-actions">
+                <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View map</el-button>
+                <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">Add via</el-button>
+              </div>
+            </div>
+
+            <div class="poi-gallery" v-if="poiGallery.length">
+              <button v-for="(img, idx) in poiGallery" :key="`${img}-${idx}`" class="poi-photo" @click="openPhotoViewer(poiGallery, idx)">
+                <CroppedImage :src="img" :alt="`poi-${idx}`" class="poi-photo-img" />
               </button>
             </div>
             <el-alert
@@ -94,171 +120,115 @@
               show-icon
               class="inline-alert"
             />
-          </div>
+          </section>
 
-          <div class="stats">
-            <button class="pill" @click="toggleLikePost">
-              <el-icon :class="['stat-icon', { liked: post._liked }]">
-                <component :is="post._liked ? CircleCheckFilled : CircleCheck" />
-              </el-icon>
-              <span class="views">{{ post.like_count || 0 }}</span>
-            </button>
-            <button class="pill" @click="toggleFavPost">
-              <el-icon :class="['stat-icon', 'fav', { active: post._fav }]">
-                <component :is="post._fav ? StarFilled : Star" />
-              </el-icon>
-              <span class="views">{{ post.favorite_count || 0 }}</span>
-            </button>
-            <span class="views">{{ post.view_count || 0 }} views</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="comments">
-        <div class="comments-header">
-          <h3 class="title">Comments</h3>
-          <span class="count">{{ comments.length }}</span>
-        </div>
-        <div class="comment-editor">
-          <el-input
-            v-model="commentText"
-            type="textarea"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-            placeholder="Share your thoughts..."
-          />
-          <el-button type="primary" @click="submitComment()">Post</el-button>
-        </div>
-
-        <div class="comment-list">
-          <div v-for="c in comments" :key="c.id" class="comment-item">
-            <div class="comment-head">
-              <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="avatar-link">
-                <CroppedImage :src="c.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
-              </RouterLink>
-              <CroppedImage v-else :src="c.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
-              <div class="comment-meta">
-                <div class="name">
-                  <RouterLink v-if="c.user?.id" :to="profileLink(c.user.id)" class="inline-link">
-                    {{ c.user?.nickname || 'Traveler' }}
-                  </RouterLink>
-                  <span v-else>{{ c.user?.nickname || 'Traveler' }}</span>
-                </div>
-                <div class="time">{{ formatTime(c.created_at) }}</div>
-              </div>
-            </div>
-            <div class="comment-body">{{ c.content }}</div>
-            <div class="comment-actions">
-              <button class="icon-link" @click="likeComment(c)">
-                <el-icon :class="['stat-icon', { liked: c._liked }]">
-                  <component :is="c._liked ? CircleCheckFilled : CircleCheck" />
-                </el-icon>
-                <span>{{ c.like_count || 0 }}</span>
-              </button>
-              <button class="icon-link" @click="replyTarget = c.id">Reply</button>
-              <button
-                v-if="(c.replies?.length || 0) > 0"
-                class="icon-link"
-                @click="c._expanded = !c._expanded"
-              >
-                {{ c._expanded ? 'Collapse' : 'Expand' }}
-              </button>
-            </div>
-
-            <div v-if="replyTarget === c.id" class="reply-box">
-              <el-input
-                v-model="replyText"
-                type="textarea"
-                :autosize="{ minRows: 2, maxRows: 4 }"
-                placeholder="Reply..."
-              />
-              <div class="reply-actions">
-                <el-button size="small" @click="submitComment(c)">Send</el-button>
-                <el-button size="small" text @click="cancelReply">Cancel</el-button>
+          <section class="comments">
+            <div class="comments-head">
+              <h3>Comments ({{ commentTotal }})</h3>
+              <div class="comment-tools">
+                <el-input v-model="commentQuery" placeholder="Search comments" clearable />
+                <el-select v-model="commentSort" style="width: 120px">
+                  <el-option label="Newest" value="new" />
+                  <el-option label="Hottest" value="hot" />
+                </el-select>
               </div>
             </div>
 
-            <div v-if="c.replies?.length && c._expanded !== false" class="replies">
-              <div v-for="r in flattenReplies(c)" :key="r.id" class="reply-item">
-                <div class="comment-head reply-head">
-                  <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="avatar-link">
-                    <CroppedImage :src="r.user?.avatar_url || defaultAvatar" class="avatar small" :aspect-ratio="1" />
-                  </RouterLink>
-                  <CroppedImage v-else :src="r.user?.avatar_url || defaultAvatar" class="avatar small" :aspect-ratio="1" />
-                  <div class="comment-meta reply-meta">
-                    <div class="name" :class="{ muted: r._depth > 1 }">
-                      <template v-if="r._depth > 1">
-                        <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="inline-link">
-                          {{ r.user?.nickname || 'Traveler' }}
-                        </RouterLink>
-                        <span v-else>{{ r.user?.nickname || 'Traveler' }}</span>
-                        &rarr; {{ getReplyTargetName(r) }}
-                      </template>
-                      <template v-else>
-                        <RouterLink v-if="r.user?.id" :to="profileLink(r.user.id)" class="inline-link">
-                          {{ r.user?.nickname || 'Traveler' }}
-                        </RouterLink>
-                        <span v-else>{{ r.user?.nickname || 'Traveler' }}</span>
-                      </template>
-                    </div>
-                    <div class="time">{{ formatTime(r.created_at) }}</div>
+            <div class="comment-editor">
+              <el-input v-model="commentText" type="textarea" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="Write a comment" />
+              <el-button type="primary" @click="submitComment()">Post</el-button>
+            </div>
+
+            <div class="comment-list">
+              <article v-for="item in filteredComments" :key="item.id" class="comment-item">
+                <div class="comment-header">
+                  <CroppedImage :src="item.user?.avatar_url || defaultAvatar" class="comment-avatar" :aspect-ratio="1" />
+                  <div>
+                    <div class="comment-name">{{ item.user?.nickname || 'Traveler' }}</div>
+                    <div class="time">{{ formatTime(item.created_at) }}</div>
                   </div>
                 </div>
-                <div class="comment-body">{{ r.content }}</div>
+                <p class="comment-content">{{ item.content }}</p>
                 <div class="comment-actions">
-                  <button class="icon-link" @click="likeComment(r)">
-                    <el-icon :class="['stat-icon', { liked: r._liked }]">
-                      <component :is="r._liked ? CircleCheckFilled : CircleCheck" />
-                    </el-icon>
-                    <span>{{ r.like_count || 0 }}</span>
+                  <button class="mini-btn" @click="likeComment(item)">Like {{ item.like_count || 0 }}</button>
+                  <button class="mini-btn" @click="replyTarget = item.id">Reply</button>
+                  <button v-if="item.replies?.length" class="mini-btn" @click="item._expanded = !item._expanded">
+                    {{ item._expanded ? 'Hide' : 'Show' }} replies
                   </button>
-                  <button class="icon-link" @click="replyTarget = r.id">Reply</button>
                 </div>
-                <div v-if="replyTarget === r.id" class="reply-box nested">
-                  <el-input
-                    v-model="replyText"
-                    type="textarea"
-                    :autosize="{ minRows: 2, maxRows: 4 }"
-                    placeholder="Reply..."
-                  />
+
+                <div v-if="replyTarget === item.id" class="reply-box">
+                  <el-input v-model="replyText" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="Reply..." />
                   <div class="reply-actions">
-                    <el-button size="small" @click="submitComment(r)">Send</el-button>
-                    <el-button size="small" text @click="cancelReply">Cancel</el-button>
+                    <el-button size="small" type="primary" @click="submitComment(item)">Send</el-button>
+                    <el-button size="small" @click="cancelReply">Cancel</el-button>
                   </div>
                 </div>
-              </div>
+
+                <div v-if="item.replies?.length && item._expanded !== false" class="reply-list">
+                  <div v-for="reply in flattenReplies(item)" :key="reply.id" class="reply-item" :style="{ '--depth': reply._depth }">
+                    <div class="comment-header">
+                      <CroppedImage :src="reply.user?.avatar_url || defaultAvatar" class="comment-avatar small" :aspect-ratio="1" />
+                      <div>
+                        <div class="comment-name">{{ reply.user?.nickname || 'Traveler' }}</div>
+                        <div class="time">{{ formatTime(reply.created_at) }}</div>
+                      </div>
+                    </div>
+                    <p class="comment-content">{{ reply.content }}</p>
+                    <div class="comment-actions">
+                      <button class="mini-btn" @click="likeComment(reply)">Like {{ reply.like_count || 0 }}</button>
+                      <button class="mini-btn" @click="replyTarget = reply.id">Reply</button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <div v-if="filteredComments.length === 0" class="empty">No comments match your filter.</div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        </section>
+
+        <aside class="side">
+          <section class="side-card">
+            <h3>Post insights</h3>
+            <div class="kpi-grid">
+              <div class="kpi"><span>Likes</span><strong>{{ post.like_count || 0 }}</strong></div>
+              <div class="kpi"><span>Favorites</span><strong>{{ post.favorite_count || 0 }}</strong></div>
+              <div class="kpi"><span>Views</span><strong>{{ post.view_count || 0 }}</strong></div>
+              <div class="kpi"><span>Comments</span><strong>{{ commentTotal }}</strong></div>
+            </div>
+          </section>
+
+          <section class="side-card">
+            <h3>More from this place</h3>
+            <div v-if="relatedPosts.length" class="related-list">
+              <button v-for="item in relatedPosts" :key="item.id" class="related-item" @click="openPost(item.id)">
+                <div class="related-top">
+                  <div class="related-title">{{ item.title }}</div>
+                  <span class="related-badge">{{ item.like_count || 0 }} likes</span>
+                </div>
+                <div class="time">{{ item.user?.nickname || 'Traveler' }} · {{ formatTime(item.created_at) }}</div>
+              </button>
+            </div>
+            <div v-else class="empty">No related posts yet.</div>
+          </section>
+        </aside>
+      </div>
     </main>
 
     <div v-if="photoViewerOpen && activePhotoUrl" class="photo-viewer" @click.self="closePhotoViewer">
-      <button class="viewer-close" aria-label="Close photo viewer" @click="closePhotoViewer">x</button>
-      <button
-        v-if="photoViewerImages.length > 1"
-        class="viewer-nav prev"
-        aria-label="Previous photo"
-        @click.stop="showPrevPhoto"
-      >
-        <
-      </button>
+      <button class="viewer-close" @click="closePhotoViewer">x</button>
+      <button v-if="photoViewerImages.length > 1" class="viewer-nav prev" @click.stop="showPrevPhoto"><</button>
       <img class="viewer-image" :src="activePhotoUrl" :alt="`photo-${photoViewerIndex + 1}`" />
-      <button
-        v-if="photoViewerImages.length > 1"
-        class="viewer-nav next"
-        aria-label="Next photo"
-        @click.stop="showNextPhoto"
-      >
-        >
-      </button>
+      <button v-if="photoViewerImages.length > 1" class="viewer-nav next" @click.stop="showNextPhoto">></button>
       <div class="viewer-count">{{ photoViewerIndex + 1 }} / {{ photoViewerImages.length }}</div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
@@ -268,175 +238,211 @@ import CroppedImage from '../components/CroppedImage.vue'
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'
 const POI_API = 'http://localhost:3001/api/poi'
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const routeStore = useRouteStore()
+
 const post = ref(null)
 const comments = ref([])
+const relatedPosts = ref([])
 const commentText = ref('')
 const replyText = ref('')
 const replyTarget = ref(null)
+const commentQuery = ref('')
+const commentSort = ref('new')
+const mediaIndex = ref(0)
+
 const defaultAvatar = 'https://placehold.co/80x80'
 const likedIds = ref(new Set())
 const favIds = ref(new Set())
 const following = ref(false)
 const poiDetail = ref(null)
-const poiLoading = ref(false)
 const alertMessage = ref('')
 const alertType = ref('success')
+
 const photoViewerOpen = ref(false)
 const photoViewerImages = ref([])
 const photoViewerIndex = ref(0)
 
-const postId = computed(() => route.params.id)
+const postId = computed(() => Number(route.params.id))
 const activePhotoUrl = computed(() => photoViewerImages.value[photoViewerIndex.value] || '')
 
-const normalizeImageList = (list) =>
-  Array.from(new Set((list || []).map((img) => String(img || '').trim()).filter(Boolean)))
+const normalizeImageList = (list) => Array.from(new Set((list || []).map((img) => String(img || '').trim()).filter(Boolean)))
+const postImages = computed(() => normalizeImageList(post.value?.images || [post.value?.cover_image]))
+const poiGallery = computed(() => normalizeImageList([poiDetail.value?.image_url, ...(poiDetail.value?.photos || [])]).slice(0, 8))
 
-const poiGallery = computed(() => {
-  const fromPoi = Array.isArray(poiDetail.value?.photos) ? poiDetail.value.photos : []
-  const merged = normalizeImageList([poiDetail.value?.image_url, ...fromPoi])
-  return merged.slice(0, 6)
+const commentTotal = computed(() => {
+  const walk = (list) => (list || []).reduce((sum, item) => sum + 1 + walk(item.replies || []), 0)
+  return walk(comments.value)
 })
 
-const goBack = () => {
-  router.back()
+const hasQueryHit = (item, query) => {
+  const q = String(query || '').trim().toLowerCase()
+  if (!q) return true
+  const text = `${item.content || ''} ${item.user?.nickname || ''}`.toLowerCase()
+  if (text.includes(q)) return true
+  return (item.replies || []).some((r) => hasQueryHit(r, q))
 }
 
+const filteredComments = computed(() => {
+  const list = [...comments.value].filter((item) => hasQueryHit(item, commentQuery.value))
+  const sorter = commentSort.value === 'hot'
+    ? (a, b) => (Number(b.like_count) || 0) - (Number(a.like_count) || 0)
+    : (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  return list.sort(sorter)
+})
+
+const formatTime = (time) => (time ? new Date(time).toLocaleString() : '')
 const profileLink = (uid) => `/person?userid=${uid}`
 
-const formatTime = (time) => {
-  if (!time) return ''
-  return new Date(time).toLocaleString()
-}
-
-const fetchPost = async () => {
-  await loadReactions()
-  const res = await axios.get(`${API_BASE}/${postId.value}`, {
-    params: { user_id: auth.user?.id },
-  })
-  const data = res.data?.data
-  post.value = {
-    ...data,
-    _liked: likedIds.value.has(Number(postId.value)),
-    _fav: favIds.value.has(Number(postId.value)),
+const flattenReplies = (root) => {
+  const out = []
+  const walk = (arr, depth = 1) => {
+    ;(arr || []).forEach((item) => {
+      out.push({ ...item, _depth: depth })
+      if (item.replies?.length) walk(item.replies, depth + 1)
+    })
   }
-  await fetchFollowStatus()
-  await fetchPoiDetail()
-}
-
-const normalizeReplies = (replies = []) =>
-  (replies || []).map((r) => ({
-    ...r,
-    _liked: !!r.liked_by_user,
-    replies: normalizeReplies(r.replies || []),
-  }))
-
-const fetchComments = async () => {
-  const res = await axios.get(`${API_BASE}/${postId.value}/comments`, {
-    params: { user_id: auth.user?.id },
-  })
-  comments.value = (res.data?.data || []).map((c) => ({
-    ...c,
-    _liked: !!c.liked_by_user,
-    _expanded: true,
-    replies: normalizeReplies(c.replies || []),
-  }))
+  walk(root.replies || [], 1)
+  return out
 }
 
 const findCommentById = (id, list = comments.value) => {
-  for (const c of list) {
-    if (c.id === id) return c
-    const child = findCommentById(id, c.replies || [])
-    if (child) return child
+  for (const item of list) {
+    if (item.id === id) return item
+    const nested = findCommentById(id, item.replies || [])
+    if (nested) return nested
   }
   return null
 }
 
-const flattenReplies = (root) => {
-  const result = []
-  const walk = (arr, depth = 1) => {
-    arr.forEach((r) => {
-      result.push({ ...r, _depth: depth })
-      if (r.replies?.length) walk(r.replies, depth + 1)
-    })
-  }
-  walk(root.replies || [], 1)
-  return result
-}
-
-const getReplyTargetName = (reply) => {
-  const parent = reply.parent_id ? findCommentById(reply.parent_id) : null
-  return parent?.user?.nickname || 'Traveler'
-}
+const normalizeReplies = (replies = []) =>
+  (replies || []).map((item) => ({
+    ...item,
+    _liked: !!item.liked_by_user,
+    replies: normalizeReplies(item.replies || []),
+  }))
 
 const loadReactions = async () => {
-  if (!auth.user) {
+  if (!auth.user?.id) {
     likedIds.value = new Set()
     favIds.value = new Set()
     return
   }
   try {
     const [likedRes, favRes] = await Promise.all([
-      axios.get(API_BASE, { params: { liked_by: auth.user.id, limit: 200 } }),
-      axios.get(API_BASE, { params: { favorited_by: auth.user.id, limit: 200 } }),
+      axios.get(API_BASE, { params: { liked_by: auth.user.id, limit: 300 } }),
+      axios.get(API_BASE, { params: { favorited_by: auth.user.id, limit: 300 } }),
     ])
-    likedIds.value = new Set((likedRes.data?.data || []).map((p) => p.id))
-    favIds.value = new Set((favRes.data?.data || []).map((p) => p.id))
-  } catch (e) {
+    likedIds.value = new Set((likedRes.data?.data || []).map((item) => Number(item.id)))
+    favIds.value = new Set((favRes.data?.data || []).map((item) => Number(item.id)))
+  } catch {
     likedIds.value = new Set()
     favIds.value = new Set()
   }
+}
+
+const fetchPost = async () => {
+  await loadReactions()
+  const res = await axios.get(`${API_BASE}/${postId.value}`, { params: { user_id: auth.user?.id } })
+  const data = res.data?.data
+  post.value = {
+    ...data,
+    _liked: likedIds.value.has(postId.value),
+    _fav: favIds.value.has(postId.value),
+  }
+  mediaIndex.value = 0
+  await Promise.all([fetchFollowStatus(), fetchPoiDetail(), fetchRelatedPosts()])
+}
+
+const fetchComments = async () => {
+  const res = await axios.get(`${API_BASE}/${postId.value}/comments`, { params: { user_id: auth.user?.id } })
+  comments.value = (res.data?.data || []).map((item) => ({
+    ...item,
+    _liked: !!item.liked_by_user,
+    _expanded: true,
+    replies: normalizeReplies(item.replies || []),
+  }))
+}
+
+const fetchRelatedPosts = async () => {
+  if (!post.value?.poi_id) {
+    relatedPosts.value = []
+    return
+  }
+  try {
+    const res = await axios.get(API_BASE, { params: { poi_id: post.value.poi_id, limit: 8 } })
+    const dedup = new Set()
+    relatedPosts.value = (res.data?.data || [])
+      .filter((item) => Number(item.id) !== postId.value)
+      .filter((item) => {
+        const key = `${String(item.title || '').trim().toLowerCase()}__${String(item.user?.id || item.user_id || '')}`
+        if (dedup.has(key)) return false
+        dedup.add(key)
+        return true
+      })
+      .slice(0, 8)
+  } catch {
+    relatedPosts.value = []
+  }
+}
+
+const updateCommentTree = (updated) => {
+  const patch = (list) =>
+    list.map((item) => {
+      if (item.id === updated.id) return { ...item, ...updated }
+      return { ...item, replies: item.replies?.length ? patch(item.replies) : [] }
+    })
+  comments.value = patch(comments.value)
 }
 
 const toggleLikePost = async () => {
   if (!post.value) return
   const res = await axios.post(`${API_BASE}/${postId.value}/like`, { user_id: auth.user?.id })
   const updated = res.data?.data
-  if (updated) {
-    const liked = !!res.data?.liked
-    likedIds.value = liked
-      ? new Set([...likedIds.value, Number(postId.value)])
-      : new Set([...likedIds.value].filter((id) => id !== Number(postId.value)))
-    post.value = { ...updated, _liked: liked, _fav: post.value._fav }
-  }
+  if (!updated) return
+  const liked = !!res.data?.liked
+  likedIds.value = liked ? new Set([...likedIds.value, postId.value]) : new Set([...likedIds.value].filter((id) => id !== postId.value))
+  post.value = { ...updated, _liked: liked, _fav: post.value._fav }
 }
 
 const toggleFavPost = async () => {
   if (!post.value) return
   const res = await axios.post(`${API_BASE}/${postId.value}/favorite`, { user_id: auth.user?.id })
   const updated = res.data?.data
-  if (updated) {
-    const favored = !!res.data?.favorited
-    favIds.value = favored
-      ? new Set([...favIds.value, Number(postId.value)])
-      : new Set([...favIds.value].filter((id) => id !== Number(postId.value)))
-    post.value = { ...updated, _fav: favored, _liked: post.value._liked }
-  }
+  if (!updated) return
+  const favored = !!res.data?.favorited
+  favIds.value = favored ? new Set([...favIds.value, postId.value]) : new Set([...favIds.value].filter((id) => id !== postId.value))
+  post.value = { ...updated, _fav: favored, _liked: post.value._liked }
 }
 
 const submitComment = async (parent) => {
   const content = parent ? replyText.value : commentText.value
   if (!content || !content.trim()) return
-  const payload = { content: content.trim(), parent_id: parent ? parent.id : null, user_id: auth.user?.id }
   try {
-    const res = await axios.post(`${API_BASE}/${postId.value}/comments`, payload)
+    const res = await axios.post(`${API_BASE}/${postId.value}/comments`, {
+      content: content.trim(),
+      parent_id: parent ? parent.id : null,
+      user_id: auth.user?.id,
+    })
     const item = { ...res.data?.data, _liked: false, replies: [] }
     if (parent) {
       const target = findCommentById(parent.id)
       if (target) {
         target.replies = [...(target.replies || []), item]
+        target._expanded = true
       }
       replyText.value = ''
       replyTarget.value = null
-    } else {
-      comments.value = [...comments.value, item]
-      commentText.value = ''
+      return
     }
-  } catch (e) {
-    console.error('comment failed', e)
+    comments.value = [...comments.value, { ...item, _expanded: true }]
+    commentText.value = ''
+  } catch {
+    alertType.value = 'error'
+    alertMessage.value = 'Failed to submit comment.'
   }
 }
 
@@ -445,137 +451,23 @@ const cancelReply = () => {
   replyTarget.value = null
 }
 
-const updateCommentInTree = (updated) => {
-  const replace = (list) =>
-    list.map((c) => {
-      if (c.id === updated.id) return { ...c, ...updated }
-      const replies = c.replies?.length ? replace(c.replies) : []
-      return { ...c, replies }
-    })
-  comments.value = replace(comments.value)
-}
-
 const likeComment = async (comment) => {
   const res = await axios.post(`${API_BASE}/comments/${comment.id}/like`, { user_id: auth.user?.id })
   const data = res.data?.data
-  if (data) {
-    updateCommentInTree({ ...data, _liked: res.data?.liked })
-  }
+  if (data) updateCommentTree({ ...data, _liked: !!res.data?.liked })
 }
 
 const fetchPoiDetail = async () => {
-  const poiId = post.value?.poi_id
-  if (!poiId) {
+  if (!post.value?.poi_id) {
     poiDetail.value = null
     return
   }
-  poiLoading.value = true
   try {
-    const res = await axios.get(`${POI_API}/${poiId}`)
+    const res = await axios.get(`${POI_API}/${post.value.poi_id}`)
     poiDetail.value = res.data?.data || null
-  } catch (e) {
+  } catch {
     poiDetail.value = null
-  } finally {
-    poiLoading.value = false
   }
-}
-
-const openPhotoViewer = (images, index = 0) => {
-  const normalized = normalizeImageList(images)
-  if (!normalized.length) return
-  photoViewerImages.value = normalized
-  const safe = Math.max(0, Math.min(Number(index) || 0, normalized.length - 1))
-  photoViewerIndex.value = safe
-  photoViewerOpen.value = true
-}
-
-const closePhotoViewer = () => {
-  photoViewerOpen.value = false
-}
-
-const showPrevPhoto = () => {
-  if (!photoViewerImages.value.length) return
-  photoViewerIndex.value =
-    (photoViewerIndex.value - 1 + photoViewerImages.value.length) % photoViewerImages.value.length
-}
-
-const showNextPhoto = () => {
-  if (!photoViewerImages.value.length) return
-  photoViewerIndex.value = (photoViewerIndex.value + 1) % photoViewerImages.value.length
-}
-
-const onPhotoViewerKeydown = (event) => {
-  if (!photoViewerOpen.value) return
-  if (event.key === 'Escape') {
-    closePhotoViewer()
-    return
-  }
-  if (event.key === 'ArrowLeft') {
-    showPrevPhoto()
-    return
-  }
-  if (event.key === 'ArrowRight') {
-    showNextPhoto()
-  }
-}
-
-const viewOnMap = () => {
-  if (!poiDetail.value) return
-  const { lat, lng, name, id } = poiDetail.value
-  const poiId = Number(id) || id
-  router.push({
-    path: '/map',
-    query: {
-      poi_lat: lat,
-      poi_lng: lng,
-      poi_name: name,
-      poi_id: poiId,
-    },
-  })
-}
-
-const addToRoute = () => {
-  if (!poiDetail.value) return
-  const { id, name, lat, lng } = poiDetail.value
-  const latNum = Number(lat)
-  const lngNum = Number(lng)
-  const currentId = id !== undefined && id !== null ? String(id) : null
-  const exists = routeStore.viaPoints.some((p) => {
-    const pid = p.id !== undefined && p.id !== null ? String(p.id) : null
-    if (pid && currentId) return pid === currentId
-    if (
-      typeof p.lat === 'number' &&
-      typeof p.lng === 'number' &&
-      !Number.isNaN(latNum) &&
-      !Number.isNaN(lngNum)
-    ) {
-      return Number(p.lat) === latNum && Number(p.lng) === lngNum
-    }
-    return false
-  })
-  if (exists) {
-    alertType.value = 'warning'
-    alertMessage.value = 'Already added to route'
-    console.log('addToRoute skipped duplicate', { currentId, latNum, lngNum, viaPoints: routeStore.viaPoints })
-    return
-  }
-  routeStore.addViaPoint({
-    id,
-    name,
-    lat: latNum,
-    lng: lngNum,
-  })
-  alertType.value = 'success'
-  alertMessage.value = 'Added to route'
-  console.log('addToRoute success', { id, latNum, lngNum, viaPoints: routeStore.viaPoints })
-}
-
-const openPoiPostFeed = () => {
-  if (!poiDetail.value?.id) return
-  router.push({
-    path: '/posts',
-    query: { poi_id: String(poiDetail.value.id), poi_name: poiDetail.value.name || '' },
-  })
 }
 
 const fetchFollowStatus = async () => {
@@ -588,7 +480,7 @@ const fetchFollowStatus = async () => {
       params: { user_id: auth.user.id, target_id: post.value.user.id },
     })
     following.value = !!res.data?.following
-  } catch (e) {
+  } catch {
     following.value = false
   }
 }
@@ -596,468 +488,215 @@ const fetchFollowStatus = async () => {
 const toggleFollow = async () => {
   if (!auth.user || !post.value?.user?.id || auth.user.id === post.value.user.id) return
   try {
-    const res = await axios.post(`${FOLLOW_API}/toggle`, {
-      user_id: auth.user.id,
-      target_id: post.value.user.id,
-    })
+    const res = await axios.post(`${FOLLOW_API}/toggle`, { user_id: auth.user.id, target_id: post.value.user.id })
     following.value = !!res.data?.following
-  } catch (e) {
+  } catch {
     // ignore
   }
 }
 
+const viewOnMap = () => {
+  if (!poiDetail.value) return
+  const { lat, lng, name, id } = poiDetail.value
+  router.push({ path: '/map', query: { poi_lat: lat, poi_lng: lng, poi_name: name, poi_id: id } })
+}
+
+const addToRoute = () => {
+  if (!poiDetail.value) return
+  const { id, name, lat, lng } = poiDetail.value
+  const exists = (routeStore.viaPoints || []).some((item) => String(item.id || '') === String(id || ''))
+  if (exists) {
+    alertType.value = 'warning'
+    alertMessage.value = 'Already in via points.'
+    return
+  }
+  routeStore.addViaPoint({ id, name, lat: Number(lat), lng: Number(lng) })
+  alertType.value = 'success'
+  alertMessage.value = 'Added to route.'
+}
+
+const openPoiPostFeed = () => {
+  if (!poiDetail.value?.id) return
+  router.push({ path: '/posts', query: { poi_id: String(poiDetail.value.id), poi_name: poiDetail.value.name || '' } })
+}
+
+const goBack = () => router.back()
+const openPost = (id) => id && router.push(`/posts/postsid=${id}`)
+
+const copyPostLink = async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    alertType.value = 'success'
+    alertMessage.value = 'Post link copied.'
+  } catch {
+    alertType.value = 'warning'
+    alertMessage.value = 'Copy failed.'
+  }
+}
+
+const openPhotoViewer = (images, index = 0) => {
+  const list = normalizeImageList(images)
+  if (!list.length) return
+  photoViewerImages.value = list
+  photoViewerIndex.value = Math.max(0, Math.min(Number(index) || 0, list.length - 1))
+  photoViewerOpen.value = true
+}
+const closePhotoViewer = () => {
+  photoViewerOpen.value = false
+}
+const showPrevPhoto = () => {
+  if (!photoViewerImages.value.length) return
+  photoViewerIndex.value = (photoViewerIndex.value - 1 + photoViewerImages.value.length) % photoViewerImages.value.length
+}
+const showNextPhoto = () => {
+  if (!photoViewerImages.value.length) return
+  photoViewerIndex.value = (photoViewerIndex.value + 1) % photoViewerImages.value.length
+}
+const onPhotoViewerKeydown = (event) => {
+  if (!photoViewerOpen.value) return
+  if (event.key === 'Escape') closePhotoViewer()
+  if (event.key === 'ArrowLeft') showPrevPhoto()
+  if (event.key === 'ArrowRight') showNextPhoto()
+}
+
+const init = async () => {
+  if (!postId.value) return
+  await Promise.all([fetchPost(), fetchComments()])
+}
+
 onMounted(() => {
-  fetchPost()
-  fetchComments()
+  init()
   window.addEventListener('keydown', onPhotoViewerKeydown)
 })
+
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPhotoViewerKeydown)
 })
+
+watch(
+  () => route.params.id,
+  () => {
+    commentText.value = ''
+    replyText.value = ''
+    replyTarget.value = null
+    alertMessage.value = ''
+    init()
+  }
+)
 </script>
 
 <style scoped>
-.page {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  height: 100%;
-  background: var(--bg-main);
-  color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto,
-    Helvetica, Arial, sans-serif;
-}
-.sidebar {
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  border-right: 1px solid var(--panel-border);
-  padding: 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.logo {
-  font-weight: 800;
-  color: var(--fg);
-  font-size: 20px;
-  padding: 8px 6px;
-}
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.nav-item {
-  padding: 10px 12px;
-  border-radius: 12px;
-  color: var(--fg);
-  text-decoration: none;
-}
-.nav-item.active,
-.nav-item:hover,
-.nav :global(.router-link-active.nav-item) {
-  background: var(--badge);
-  color: var(--fg);
-}
-.nav-item.muted {
-  color: var(--muted);
-}
-.content {
-  overflow-y: auto;
-  padding: 18px 22px 40px;
-  scrollbar-gutter: stable;
-}
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.panel {
-  display: grid;
-  grid-template-columns: 60% 40%;
-  gap: 18px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-  padding: 16px 30px 16px 16px;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-.media {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--badge);
-  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
-}
-.media :deep(.el-carousel),
-.media :deep(.el-carousel__container) {
-  border-radius: 16px;
-  height: 100%;
-}
-.media :deep(.el-carousel__container) {
-  overflow: hidden;
-}
-.media :deep(.el-carousel__item) {
-  height: 100%;
-}
-.media-photo-btn {
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: zoom-in;
-}
-.media-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.media-placeholder {
-  height: 100%;
-  background: var(--badge);
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.author {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.avatar-link {
-  display: inline-block;
-}
-.avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--badge);
-}
-.avatar.small {
-  width: 36px;
-  height: 36px;
-}
-.author-info .name {
-  font-weight: 700;
-  color: var(--fg);
-}
-.author-info .time {
-  color: var(--muted);
-  font-size: 12px;
-}
-.name-link {
-  text-decoration: none;
-  color: inherit;
-}
-.title {
-  margin: 6px 0;
-  color: var(--fg);
-  letter-spacing: -0.02em;
-}
-.text {
-  line-height: 1.6;
-  color: var(--fg);
-  white-space: pre-wrap;
-}
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.poi-actions {
-  padding: 10px;
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  background: var(--badge);
-  color: var(--fg);
-}
-.poi-cat{
-  margin-left: 12px;
-}
-.poi-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-.poi-gallery {
-  margin-top: 10px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.poi-gallery-item {
-  width: 88px;
-  height: 62px;
-  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+.page { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 56px); background: var(--bg-main); color: var(--fg); }
+.sidebar { border-right: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 88%, transparent); padding: 16px 12px; display: grid; gap: 8px; align-content: start; }
+.brand { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+.nav-link { text-decoration: none; color: var(--fg); padding: 9px 11px; border-radius: 12px; }
+.nav-link:hover, .sidebar :global(.router-link-active.nav-link) { background: var(--badge); }
+.nav-link.muted { color: var(--muted); }
+.side-meta { margin-top: 8px; border: 1px solid var(--panel-border); border-radius: 12px; padding: 10px; color: var(--muted); display: grid; gap: 4px; font-size: 12px; }
+.content { overflow-y: auto; padding: 16px 18px 24px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.toolbar-actions { display: flex; gap: 8px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; }
+.main { display: grid; gap: 12px; }
+.media, .post-card, .poi-card, .comments, .side-card { border: 1px solid var(--panel-border); border-radius: 16px; background: color-mix(in srgb, var(--panel) 90%, transparent); }
+.media { padding: 12px; }
+.main-image-btn { width: 100%; border: none; background: transparent; padding: 0; cursor: zoom-in; }
+.main-image, .image-empty { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: var(--badge); overflow: hidden; }
+.image-empty { display: grid; place-items: center; color: var(--muted); }
+.thumbs { margin-top: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.thumb { border: 1px solid var(--panel-border); border-radius: 8px; padding: 0; overflow: hidden; cursor: pointer; background: transparent; }
+.thumb.active { outline: 2px solid #4f8cff; }
+.thumb-img { width: 100%; height: 52px; }
+.post-card { padding: 14px; }
+.author-row { display: flex; align-items: center; gap: 8px; }
+.avatar { width: 44px; height: 44px; border-radius: 999px; }
+.author-info { flex: 1; min-width: 0; }
+.author-name { text-decoration: none; color: var(--fg); font-weight: 700; }
+h1 { margin: 12px 0 8px; font-size: 30px; letter-spacing: -0.02em; }
+.text { margin: 0; line-height: 1.7; white-space: pre-wrap; }
+.tags { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.tag { padding: 4px 9px; border: 1px solid var(--panel-border); border-radius: 999px; font-size: 12px; color: var(--muted); }
+.stats { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+.pill { border: 1px solid var(--panel-border); border-radius: 12px; padding: 6px 10px; background: var(--badge); color: var(--fg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pill .active { color: #4f8cff; }
+.time { color: var(--muted); font-size: 12px; }
+.poi-card { padding: 12px; }
+.poi-header { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.poi-actions { display: flex; gap: 8px; }
+.poi-gallery { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+.poi-photo { border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; padding: 0; background: transparent; cursor: zoom-in; }
+.poi-photo-img { width: 100%; height: 62px; }
+.inline-alert { margin-top: 8px; }
+.comments { padding: 12px; }
+.comments-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.comment-tools { display: flex; gap: 8px; }
+.comment-editor { margin-top: 10px; display: grid; gap: 8px; }
+.comment-list { margin-top: 10px; display: grid; gap: 10px; }
+.comment-item { border: 1px solid var(--panel-border); border-radius: 12px; padding: 10px; background: var(--badge); }
+.comment-header { display: flex; align-items: center; gap: 8px; }
+.comment-avatar { width: 30px; height: 30px; border-radius: 999px; }
+.comment-avatar.small { width: 24px; height: 24px; }
+.comment-name { font-size: 13px; font-weight: 700; }
+.comment-content { margin: 8px 0 0; line-height: 1.55; white-space: pre-wrap; }
+.comment-actions { margin-top: 8px; display: flex; gap: 8px; }
+.mini-btn { border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--muted); padding: 3px 9px; cursor: pointer; font-size: 12px; }
+.reply-box { margin-top: 8px; display: grid; gap: 8px; }
+.reply-actions { display: flex; gap: 8px; }
+.reply-list { margin-top: 8px; display: grid; gap: 8px; }
+.reply-item { margin-left: calc(8px + (var(--depth, 1) - 1) * 10px); border-left: 2px solid var(--panel-border); padding-left: 8px; }
+.side { display: grid; gap: 12px; align-content: start; position: sticky; top: 12px; max-height: calc(100vh - 90px); }
+.side-card { padding: 12px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.kpi { border: 1px solid var(--panel-border); border-radius: 10px; padding: 8px; background: var(--badge); }
+.kpi span { display: block; color: var(--muted); font-size: 12px; }
+.kpi strong { font-size: 18px; }
+.related-list { display: grid; gap: 8px; }
+.related-item {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
   border-radius: 10px;
-  background: transparent;
-  padding: 0;
-  overflow: hidden;
-  cursor: zoom-in;
-}
-.poi-gallery-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.inline-alert {
-  margin-top: 8px;
-}
-.tag {
-  background: var(--badge);
-  color: var(--fg);
-  padding: 6px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-.stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--fg);
-}
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--panel-border) 85%, transparent);
   background: color-mix(in srgb, var(--badge) 80%, transparent);
-  border-radius: 16px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
-}
-.pill:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--panel-border) 100%, transparent);
-  background: color-mix(in srgb, var(--badge) 90%, transparent);
-}
-.stat-icon {
-  color: color-mix(in srgb, var(--fg) 50%, transparent);
-}
-.stat-icon.liked {
-  color: #ff2442;
-}
-.stat-icon.fav.active {
-  color: #f5a524;
-}
-.views {
-  color: var(--muted);
-  font-size: 13px;
-}
-.comments {
-  margin-top: 18px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
-  border-radius: 18px;
-  padding: 16px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-.comments-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.comments-header .count {
-  color: var(--muted);
-}
-.comment-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-:deep(.el-input__wrapper),
-:deep(.el-textarea__inner) {
-  background: color-mix(in srgb, var(--badge) 70%, transparent) !important;
-  color: var(--fg) !important;
-  border-color: color-mix(in srgb, var(--panel-border) 80%, transparent) !important;
-}
-:deep(.el-input__inner) {
-  color: var(--fg);
-}
-
-.comment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.comment-item,
-.reply-item {
-  background: color-mix(in srgb, var(--badge) 76%, transparent);
-  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
-  border-radius: 16px;
-  padding: 14px;
-  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
-}
-.comment-item:hover,
-.reply-item:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--panel-border) 100%, transparent);
-  background: color-mix(in srgb, var(--badge) 86%, transparent);
-}
-.reply-head .avatar.small {
-  width: 36px;
-  height: 36px;
-}
-.reply-meta {
-  font-size: 12px;
-  color: var(--muted);
-}
-.reply-meta .name.muted {
-  color: var(--muted);
-  font-size: 12px;
-}
-.comment-head {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.comment-meta .name {
-  font-weight: 600;
-  color: var(--fg);
-  line-height: 1.2;
-}
-.comment-meta .time {
-  color: var(--muted);
-  font-size: 12px;
-}
-.inline-link {
-  text-decoration: none;
-  color: inherit;
-}
-.inline-link:hover {
-  opacity: 0.92;
-}
-.comment-body {
-  margin: 6px 0;
-  color: var(--fg);
-  font-size: 15px;
-  line-height: 1.55;
-}
-.comment-actions {
-  display: flex;
-  gap: 12px;
-}
-.icon-link {
-  display: inline-flex;
-  align-items: center;
+  padding: 8px;
+  display: grid;
   gap: 6px;
-  border: none;
-  background: color-mix(in srgb, var(--panel) 30%, transparent);
-  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
-  border-radius: 999px;
-  color: var(--muted);
   cursor: pointer;
-  padding: 6px 10px;
-  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
 }
-.icon-link:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--panel-border) 100%, transparent);
-  background: color-mix(in srgb, var(--panel) 42%, transparent);
-}
-.reply-box {
-  margin-top: 8px;
-}
-.reply-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-.replies {
-  margin-top: 8px;
-  padding-left: 12px;
-  border-left: 1px solid color-mix(in srgb, var(--panel-border) 60%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.photo-viewer {
-  position: fixed;
-  inset: 0;
-  z-index: 1800;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.82);
-  backdrop-filter: blur(6px);
-  padding: 22px;
-}
-.viewer-image {
-  max-width: min(92vw, 1400px);
-  max-height: 84vh;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  object-fit: contain;
-  background: #0f172a;
-}
-.viewer-close,
-.viewer-nav {
-  position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(15, 23, 42, 0.72);
-  color: #f8fafc;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.viewer-close {
-  top: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  font-size: 20px;
-}
-.viewer-nav {
-  top: 50%;
-  transform: translateY(-50%);
-  width: 46px;
-  height: 68px;
-  border-radius: 12px;
-  font-size: 34px;
-  line-height: 1;
-}
-.viewer-nav.prev {
-  left: 16px;
-}
-.viewer-nav.next {
-  right: 16px;
-}
-.viewer-count {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(15, 23, 42, 0.7);
-  color: #e2e8f0;
-  font-size: 12px;
+.related-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.related-title {
   font-weight: 700;
+  font-size: 13px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-
-@media (max-width: 1100px) {
-  .panel {
-    grid-template-columns: 1fr;
-  }
-  .media-placeholder {
-    height: 100%;
-  }
+.related-badge {
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.empty { text-align: center; color: var(--muted); padding: 14px; }
+.photo-viewer { position: fixed; inset: 0; background: rgba(5, 8, 13, 0.92); z-index: 3000; display: grid; place-items: center; }
+.viewer-image { max-width: min(94vw, 1400px); max-height: 84vh; border-radius: 12px; object-fit: contain; }
+.viewer-close { position: absolute; top: 20px; right: 24px; width: 34px; height: 34px; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; background: rgba(0,0,0,0.25); color: #fff; font-size: 20px; cursor: pointer; }
+.viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.24); color: #fff; font-size: 22px; cursor: pointer; }
+.viewer-nav.prev { left: 20px; }
+.viewer-nav.next { right: 20px; }
+.viewer-count { position: absolute; bottom: 18px; color: #fff; font-size: 13px; }
+:deep(.el-input__wrapper), :deep(.el-textarea__inner), :deep(.el-select__wrapper) { background: color-mix(in srgb, var(--panel) 88%, transparent) !important; border-color: var(--panel-border) !important; color: var(--fg) !important; }
+:deep(.el-input__inner), :deep(.el-select__placeholder), :deep(.el-select__selected-item), :deep(.el-textarea__inner) { color: var(--fg) !important; }
+@media (max-width: 1180px) {
+  .layout { grid-template-columns: 1fr; }
+  .side { position: static; max-height: none; }
+}
+@media (max-width: 860px) {
+  .page { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .content { padding: 12px; }
+  .comments-head { flex-direction: column; align-items: stretch; }
+  .comment-tools { width: 100%; }
 }
 </style>

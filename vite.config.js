@@ -5,12 +5,25 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
-      // 代理 /osrm 到本机 OSRM 后端 5000 端口
       '/osrm': {
         target: 'http://127.0.0.1:5000',
-        // target: 'https://router.project-osrm.org',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/osrm/, ''),
+      },
+    },
+  },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) return 'framework'
+          if (id.includes('element-plus') || id.includes('@element-plus')) return 'element-plus'
+          if (id.includes('leaflet') || id.includes('leaflet-routing-machine')) return 'map-core'
+          if (id.includes('axios')) return 'http'
+          return 'vendor'
+        },
       },
     },
   },

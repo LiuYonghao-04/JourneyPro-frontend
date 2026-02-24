@@ -1,179 +1,181 @@
 <template>
-  <div class="page">
-    <aside class="sidebar">
-      <div class="logo">Community</div>
-      <nav class="nav">
-        <RouterLink to="/posts" class="nav-item">Discover</RouterLink>
-        <RouterLink to="/posts/publish" class="nav-item">Publish</RouterLink>
-        <div class="nav-item active">Notifications</div>
-        <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="nav-item">Me</RouterLink>
-        <div v-else class="nav-item muted">Me</div>
-      </nav>
+  <div class="notify-page">
+    <aside class="rail">
+      <div class="rail-brand">Inbox</div>
+      <RouterLink to="/posts" class="rail-link">Discover</RouterLink>
+      <RouterLink to="/posts/publish" class="rail-link">Publish</RouterLink>
+      <div class="rail-link active">Notifications</div>
+      <RouterLink v-if="auth.user" :to="`/person?userid=${auth.user.id}`" class="rail-link">Me</RouterLink>
+      <div v-else class="rail-link muted">Me</div>
     </aside>
 
-    <main class="content">
-      <header class="top">
-        <h2>Notifications</h2>
-        <div class="hint">Likes &middot; Favorites &middot; Comments</div>
+    <main class="view">
+      <header class="hero">
+        <div>
+          <h1>Notification Center</h1>
+          <p>Likes, favorites, comments, follows and chats in one streamlined workspace.</p>
+        </div>
+        <div class="hero-actions" v-if="auth.user">
+          <el-button @click="refreshAll">Refresh</el-button>
+          <el-button type="primary" plain @click="markRead('all')">Mark all read</el-button>
+        </div>
       </header>
 
-      <section v-if="!auth.user" class="empty">
-        <p>Please login to view your notifications.</p>
+      <section v-if="!auth.user" class="guest">
+        <p>Please login to view notifications and chats.</p>
         <el-button type="primary" @click="$router.push('/login')">Login</el-button>
       </section>
 
-      <section v-else-if="activeType !== 'chat'" class="list" v-loading="loading">
-        <div class="filter">
-          <el-button
+      <template v-else>
+        <section class="stats">
+          <div class="stat-card">
+            <span>Total</span>
+            <strong>{{ items.length }}</strong>
+          </div>
+          <div class="stat-card">
+            <span>Unread</span>
+            <strong>{{ unreadTotal }}</strong>
+          </div>
+          <div class="stat-card">
+            <span>Comments</span>
+            <strong>{{ countMap.comment || 0 }}</strong>
+          </div>
+          <div class="stat-card">
+            <span>Chat unread</span>
+            <strong>{{ chatUnread }}</strong>
+          </div>
+        </section>
+
+        <section class="tabs">
+          <button
             v-for="c in categories"
             :key="c.key"
-            size="small"
-            :type="activeType === c.key ? 'primary' : 'default'"
+            :class="['tab', { active: activeType === c.key }]"
             @click="switchType(c.key)"
           >
-            {{ c.label }}<span v-if="countMap[c.key]"> ({{ countMap[c.key] }})</span>
-          </el-button>
-        </div>
-        <div v-if="filteredItems.length === 0" class="empty">
-          <p>No notifications yet.</p>
-        </div>
-        <div v-else>
-          <div v-for="(item, idx) in filteredItems" :key="idx" class="card">
-            <RouterLink
-              class="avatar"
-              v-if="item.actor_id"
-              :to="`/person?userid=${item.actor_id}`"
-            >
-              <CroppedImage :src="item.avatar_url || placeholder" class="avatar-img" :aspect-ratio="1" />
-            </RouterLink>
-            <div class="avatar" v-else>
-              <CroppedImage :src="item.avatar_url || placeholder" class="avatar-img" :aspect-ratio="1" />
+            <span>{{ c.label }}</span>
+            <span v-if="unreadByType[c.key]" class="unread-dot">{{ unreadByType[c.key] }}</span>
+            <span v-else-if="countMap[c.key]" class="count-dot">{{ countMap[c.key] }}</span>
+          </button>
+          <div class="tabs-spacer"></div>
+          <el-button v-if="activeType !== 'chat'" size="small" plain @click="markCurrentRead">Mark current read</el-button>
+          <el-button v-else size="small" plain @click="markRead('chat')">Mark chat read</el-button>
+        </section>
+
+        <section v-if="activeType !== 'chat'" class="list">
+          <article v-for="(item, idx) in filteredItems" :key="`${item.type}-${item.actor_id}-${idx}`" class="notice">
+            <div class="notice-left">
+              <span v-if="item.unread" class="dot-unread"></span>
+              <RouterLink v-if="item.actor_id" :to="`/person?userid=${item.actor_id}`">
+                <CroppedImage :src="item.avatar_url || placeholder" class="avatar" :aspect-ratio="1" />
+              </RouterLink>
+              <CroppedImage v-else :src="item.avatar_url || placeholder" class="avatar" :aspect-ratio="1" />
             </div>
-            <div class="body">
-              <div class="row">
-                <span class="name">{{ item.nickname || 'Someone' }}</span>
-                <span class="action" :class="item.type">{{ label(item.type) }}</span>
-                <RouterLink v-if="item.post_id" class="post" :to="`/posts/postsid=${item.post_id}`">
+            <div class="notice-body">
+              <div class="line">
+                <strong>{{ item.nickname || 'Someone' }}</strong>
+                <span class="muted">{{ actionLabel(item.type) }}</span>
+                <RouterLink v-if="item.post_id" :to="`/posts/postsid=${item.post_id}`" class="post-link">
                   {{ item.title }}
                 </RouterLink>
-                <span v-else class="post">you</span>
+                <span v-else class="muted">you</span>
               </div>
-              <div v-if="item.content" class="content">{{ item.content }}</div>
+              <p v-if="item.content" class="content">{{ item.content }}</p>
               <div class="time">{{ formatTime(item.created_at) }}</div>
             </div>
-          </div>
-        </div>
-      </section>
+          </article>
+          <div v-if="filteredItems.length === 0" class="empty">No notifications in this category.</div>
+        </section>
 
-      <section v-else class="chat-wrap" v-loading="chatLoading">
-        <div class="chat-filter">
-          <el-button
-            v-for="c in categories"
-            :key="c.key"
-            size="small"
-            :type="activeType === c.key ? 'primary' : 'default'"
-            @click="switchType(c.key)"
-          >
-            {{ c.label }}<span v-if="countMap[c.key]"> ({{ countMap[c.key] }})</span>
-          </el-button>
-        </div>
-        <div class="chat-box">
-          <div class="chat-sidebar">
-            <div class="chat-sidebar-title">Chats</div>
+        <section v-else class="chat">
+          <aside class="chat-left">
             <div class="chat-search">
               <el-input
                 v-model="searchKey"
-                placeholder="Search by nickname or ID"
-                size="small"
+                placeholder="Search by nickname or id"
                 clearable
+                size="small"
                 @change="searchUsers"
-                @clear="() => { searchResults = [] }"
+                @clear="searchResults = []"
               />
-              <div v-if="searchResults.length" class="search-results">
-                <div
-                  v-for="u in searchResults"
-                  :key="u.id"
-                  class="search-item"
-                  @click="startChatWithUser(u)"
-                >
-                  <RouterLink :to="`/person?userid=${u.id}`">
-                    <CroppedImage :src="u.avatar_url || placeholder" class="chat-avatar" :aspect-ratio="1" />
-                  </RouterLink>
-                  <div class="search-text">
-                    <div class="chat-name">{{ u.nickname || u.username || ('User ' + u.id) }}</div>
-                    <div class="chat-time">ID: {{ u.id }}</div>
-                  </div>
-                </div>
-              </div>
             </div>
-            <div v-if="conversations.length === 0" class="chat-empty">No conversations yet.</div>
-            <div
+
+            <div v-if="searchResults.length" class="search-results">
+              <button v-for="u in searchResults" :key="u.id" class="search-item" @click="startChatWithUser(u)">
+                <CroppedImage :src="u.avatar_url || placeholder" class="small-avatar" :aspect-ratio="1" />
+                <div class="meta">
+                  <div>{{ u.nickname || u.username || `User ${u.id}` }}</div>
+                  <div class="muted">ID: {{ u.id }}</div>
+                </div>
+              </button>
+            </div>
+
+            <button
               v-for="c in conversations"
               :key="c.peer_id"
-              class="chat-conv"
-              :class="{ active: activePeerId === c.peer_id }"
+              :class="['conv', { active: activePeerId === c.peer_id }]"
               @click="openConversation(c.peer_id)"
             >
-              <RouterLink :to="`/person?userid=${c.peer_id}`">
-                <CroppedImage class="chat-avatar" :src="c.avatar_url || placeholder" :aspect-ratio="1" />
-              </RouterLink>
-              <div class="chat-conv-main">
-                <div class="chat-conv-top">
-                  <span class="chat-name">{{ c.nickname || ('User ' + c.peer_id) }}</span>
-                  <span class="chat-time">{{ formatTime(c.last_time) }}</span>
+              <CroppedImage :src="c.avatar_url || placeholder" class="small-avatar" :aspect-ratio="1" />
+              <div class="conv-body">
+                <div class="conv-top">
+                  <span>{{ c.nickname || `User ${c.peer_id}` }}</span>
+                  <span class="muted">{{ formatTime(c.last_time) }}</span>
                 </div>
-                <div class="chat-conv-bottom">
-                  <span class="chat-preview">{{ c.last_content || 'Start chatting' }}</span>
-                  <span v-if="c.unreadCount" class="chat-badge">{{ c.unreadCount }}</span>
+                <div class="conv-bottom">
+                  <span class="muted line-clamp">{{ c.last_content || 'Start chatting' }}</span>
+                  <span v-if="c.unreadCount" class="badge">{{ c.unreadCount }}</span>
                 </div>
               </div>
-            </div>
-          </div>
-            <div class="chat-panel" v-if="activePeerId">
-              <div class="chat-panel-header">
-                <div class="chat-peer">{{ activePeer?.nickname || ('User ' + activePeerId) }}</div>
-              </div>
-              <div class="chat-messages" ref="messageContainer">
+            </button>
+            <div v-if="conversations.length === 0" class="empty">No conversations yet.</div>
+          </aside>
+
+          <div v-if="activePeerId" class="chat-main">
+            <header class="chat-head">
+              <div>{{ activePeer?.nickname || `User ${activePeerId}` }}</div>
+            </header>
+
+            <div class="messages" ref="messageContainer">
               <div
                 v-for="msg in chatMessages"
                 :key="msg.id || msg.local_id"
-                class="chat-bubble"
-                :class="{ me: msg.sender_id === auth.user.id }"
+                :class="['bubble', { me: msg.sender_id === auth.user.id }]"
               >
-                <div class="chat-text">{{ msg.content }}</div>
-                <div class="chat-meta">{{ formatTime(msg.created_at) }}</div>
+                <div>{{ msg.content }}</div>
+                <div class="bubble-time">{{ formatTime(msg.created_at) }}</div>
               </div>
             </div>
-              <div class="chat-input">
-                <div class="chat-toolbar">
-                  <el-popover placement="top-start" width="240" trigger="click" v-model:visible="emojiVisible">
-                    <template #reference>
-                      <el-button size="small" text>Emoji</el-button>
-                    </template>
-                    <div class="emoji-grid">
-                      <span v-for="(em, idx) in emojis" :key="idx" class="emoji-cell" @click="addEmoji(em)">
-                        {{ em }}
-                      </span>
-                    </div>
-                  </el-popover>
-                </div>
-                <el-input
-                  v-model="chatInput"
-                  type="textarea"
-                  rows="2"
-                  placeholder="Type a message"
-                  @keydown.enter.prevent="sendMessage"
-                />
-                <div class="chat-actions">
-                  <el-button type="primary" @click="sendMessage" :loading="chatSending">Send</el-button>
-                </div>
+
+            <footer class="composer">
+              <div class="composer-tools">
+                <el-popover placement="top-start" width="220" trigger="click" v-model:visible="emojiVisible">
+                  <template #reference>
+                    <el-button size="small" text>Emoji</el-button>
+                  </template>
+                  <div class="emoji-grid">
+                    <span v-for="(em, idx) in emojis" :key="idx" class="emoji" @click="addEmoji(em)">{{ em }}</span>
+                  </div>
+                </el-popover>
+                <span class="muted">Enter to send</span>
               </div>
-            </div>
-          <div class="chat-panel empty-state" v-else>
-            <p>Select a conversation to start chatting.</p>
+              <el-input
+                v-model="chatInput"
+                type="textarea"
+                :rows="2"
+                placeholder="Type a message"
+                @keydown.enter.prevent="sendMessage"
+              />
+              <div class="send-row">
+                <el-button type="primary" :loading="chatSending" @click="sendMessage">Send</el-button>
+              </div>
+            </footer>
           </div>
-        </div>
-      </section>
+          <div v-else class="chat-empty">
+            Select a conversation to start chatting.
+          </div>
+        </section>
+      </template>
     </main>
   </div>
 </template>
@@ -187,13 +189,26 @@ import CroppedImage from '../components/CroppedImage.vue'
 
 const API_BASE = 'http://localhost:3001/api/notifications'
 const CHAT_BASE = 'http://localhost:3001/api/chat'
+
 const auth = useAuthStore()
-const items = ref([])
-const loading = ref(false)
-const placeholder = 'https://placehold.co/80x80'
-let es = null
 const route = useRoute()
 const router = useRouter()
+
+const placeholder = 'https://placehold.co/80x80'
+const items = ref([])
+const state = ref(null)
+const activeType = ref('all')
+const conversations = ref([])
+const chatMessages = ref([])
+const activePeerId = ref(null)
+const chatInput = ref('')
+const chatSending = ref(false)
+const messageContainer = ref(null)
+const emojiVisible = ref(false)
+const searchKey = ref('')
+const searchResults = ref([])
+let es = null
+
 const categories = [
   { key: 'all', label: 'All' },
   { key: 'like', label: 'Likes' },
@@ -202,74 +217,16 @@ const categories = [
   { key: 'follow', label: 'Follows' },
   { key: 'chat', label: 'Chat' },
 ]
-const activeType = ref('all')
+
+const emojis = [':)', ':D', '<3', 'wow', 'ok', 'go', 'nice', 'gg', 'lol', 'ty']
+
 const filteredItems = computed(() =>
   activeType.value === 'all' ? items.value : items.value.filter((it) => it.type === activeType.value)
 )
 
-const conversations = ref([])
-const chatMessages = ref([])
-const activePeerId = ref(null)
-const chatInput = ref('')
-const chatLoading = ref(false)
-const chatSending = ref(false)
-const messageContainer = ref(null)
-const emojiVisible = ref(false)
-const emojis = [
-  '\u{1F600}',
-  '\u{1F603}',
-  '\u{1F604}',
-  '\u{1F601}',
-  '\u{1F606}',
-  '\u{1F979}',
-  '\u{1F60A}',
-  '\u{1F609}',
-  '\u{1F60D}',
-  '\u{1F618}',
-  '\u{1F61C}',
-  '\u{1F92A}',
-  '\u{1F60E}',
-  '\u{1F914}',
-  '\u{1F928}',
-  '\u{1F634}',
-  '\u{1F637}',
-  '\u{1F912}',
-  '\u{1F915}',
-  '\u{1F92E}',
-  '\u{1F973}',
-  '\u{1F92F}',
-  '\u{1F607}',
-  '\u{1F62D}',
-  '\u{1F621}',
-  '\u{1F44D}',
-  '\u{1F44E}',
-  '\u{1F64F}',
-  '\u{1F44F}',
-  '\u{1F44C}',
-  '\u{1F91D}',
-  '\u{1F4AA}',
-  '\u{1F525}',
-  '\u{2728}',
-  '\u{2764}\u{FE0F}',
-  '\u{1F494}',
-  '\u{1F4AF}',
-  '\u{1F389}',
-  '\u{1F381}',
-  '\u{1F31F}',
-  '\u{1F340}',
-  '\u{1F354}',
-  '\u{1F355}',
-  '\u{1F35C}',
-  '\u{1F363}',
-  '\u{1F37A}',
-  '\u{2615}\u{FE0F}',
-]
-const searchKey = ref('')
-const searchResults = ref([])
-const searchLoading = ref(false)
-
 const activePeer = computed(() => conversations.value.find((c) => c.peer_id === activePeerId.value))
 const chatUnread = computed(() => conversations.value.reduce((sum, c) => sum + (c.unreadCount || 0), 0))
+
 const countMap = computed(() => {
   const m = { all: items.value.length, chat: chatUnread.value }
   items.value.forEach((it) => {
@@ -278,17 +235,70 @@ const countMap = computed(() => {
   return m
 })
 
+const unreadByType = computed(() => {
+  const m = { all: 0, like: 0, favorite: 0, comment: 0, follow: 0, chat: chatUnread.value }
+  items.value.forEach((it) => {
+    if (it.unread) {
+      m.all += 1
+      m[it.type] = (m[it.type] || 0) + 1
+    }
+  })
+  return m
+})
+
+const unreadTotal = computed(() => unreadByType.value.all + (chatUnread.value || 0))
+
+const formatTime = (ts) => (ts ? new Date(ts).toLocaleString() : '')
+const actionLabel = (type) => {
+  if (type === 'like') return 'liked your post'
+  if (type === 'favorite') return 'favorited your post'
+  if (type === 'comment') return 'commented on your post'
+  if (type === 'follow') return 'followed you'
+  if (type === 'chat') return 'sent you a message'
+  return 'activity'
+}
+
+const fetchState = async () => {
+  if (!auth.user?.id) return
+  try {
+    const res = await axios.get(`${API_BASE}/state`, { params: { user_id: auth.user.id } })
+    state.value = res.data?.state || null
+  } catch {
+    state.value = null
+  }
+}
+
 const fetchData = async () => {
   if (!auth.user) return
-  loading.value = true
   try {
     const res = await axios.get(API_BASE, { params: { user_id: auth.user.id } })
     items.value = res.data?.data || []
-  } catch (e) {
+    state.value = res.data?.state || state.value
+  } catch {
     items.value = []
-  } finally {
-    loading.value = false
   }
+}
+
+const markRead = async (type = 'all') => {
+  if (!auth.user?.id) return
+  try {
+    const res = await axios.post(`${API_BASE}/read`, {
+      user_id: auth.user.id,
+      type,
+      ts: new Date().toISOString(),
+    })
+    state.value = res.data?.state || state.value
+    if (type === 'chat' || type === 'all') {
+      conversations.value = (conversations.value || []).map((c) => ({ ...c, unreadCount: 0 }))
+    }
+    await fetchData()
+  } catch {
+    // ignore
+  }
+}
+
+const markCurrentRead = () => {
+  markRead(activeType.value === 'all' ? 'all' : activeType.value)
 }
 
 const setupStream = () => {
@@ -299,13 +309,12 @@ const setupStream = () => {
     try {
       const data = JSON.parse(evt.data)
       if (data.connected) return
-       // chat pushes are handled separately
       if (data.type === 'chat') {
         handleIncomingChat(data)
         return
       }
-      items.value = [data, ...items.value].slice(0, 100)
-    } catch (e) {
+      items.value = [{ ...data, unread: true }, ...items.value].slice(0, 140)
+    } catch {
       // ignore parse errors
     }
   }
@@ -315,33 +324,38 @@ const setupStream = () => {
   }
 }
 
-const formatTime = (ts) => (ts ? new Date(ts).toLocaleString() : '')
-const label = (type) => {
-  if (type === 'like') return 'liked your post'
-  if (type === 'favorite') return 'favorited your post'
-  if (type === 'comment') return 'commented on your post'
-  if (type === 'follow') return 'followed you'
-  if (type === 'chat') return 'sent you a message'
-  return 'activity'
-}
-
 const fetchConversations = async () => {
   if (!auth.user) return
-  chatLoading.value = true
   try {
     const res = await axios.get(`${CHAT_BASE}/list`, { params: { user_id: auth.user.id } })
-    const data = res.data?.data || []
-    conversations.value = data.map((c) => ({
+    conversations.value = (res.data?.data || []).map((c) => ({
       ...c,
       last_content: c.content,
       last_time: c.created_at,
       unreadCount: c.unreadCount || 0,
     }))
-  } catch (e) {
+  } catch {
     conversations.value = []
-  } finally {
-    chatLoading.value = false
   }
+}
+
+const fetchHistory = async (peerId) => {
+  if (!auth.user || !peerId) return
+  try {
+    const res = await axios.get(`${CHAT_BASE}/history`, { params: { user_id: auth.user.id, peer_id: peerId } })
+    chatMessages.value = res.data?.data || []
+    await nextTick()
+    scrollToBottom()
+  } catch {
+    chatMessages.value = []
+  }
+}
+
+const openConversation = (peerId) => {
+  activePeerId.value = peerId
+  const row = conversations.value.find((c) => c.peer_id === peerId)
+  if (row) row.unreadCount = 0
+  fetchHistory(peerId)
 }
 
 const searchUsers = async () => {
@@ -351,16 +365,11 @@ const searchUsers = async () => {
     searchResults.value = []
     return
   }
-  searchLoading.value = true
   try {
-    const res = await axios.get(`${CHAT_BASE}/search`, {
-      params: { keyword, user_id: auth.user.id },
-    })
+    const res = await axios.get(`${CHAT_BASE}/search`, { params: { keyword, user_id: auth.user.id } })
     searchResults.value = res.data?.data || []
-  } catch (e) {
+  } catch {
     searchResults.value = []
-  } finally {
-    searchLoading.value = false
   }
 }
 
@@ -378,45 +387,9 @@ const startChatWithUser = (user) => {
     })
   }
   activePeerId.value = user.id
-  searchResults.value = []
   searchKey.value = ''
+  searchResults.value = []
   fetchHistory(user.id)
-}
-
-const addEmoji = (emoji) => {
-  chatInput.value = (chatInput.value || '') + emoji
-  emojiVisible.value = false
-}
-
-const fetchHistory = async (peerId) => {
-  if (!auth.user || !peerId) return
-  chatLoading.value = true
-  try {
-    const res = await axios.get(`${CHAT_BASE}/history`, {
-      params: { user_id: auth.user.id, peer_id: peerId },
-    })
-    chatMessages.value = res.data?.data || []
-    await nextTick()
-    scrollToBottom()
-  } catch (e) {
-    chatMessages.value = []
-  } finally {
-    chatLoading.value = false
-  }
-}
-
-const openConversation = (peerId) => {
-  activePeerId.value = peerId
-  const target = conversations.value.find((c) => c.peer_id === peerId)
-  if (target) target.unreadCount = 0
-  fetchHistory(peerId)
-}
-
-const scrollToBottom = () => {
-  if (!messageContainer.value) return
-  requestAnimationFrame(() => {
-    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
-  })
 }
 
 const upsertConversation = (payload) => {
@@ -428,22 +401,21 @@ const upsertConversation = (payload) => {
     avatar_url: payload.avatar_url,
     last_content: payload.content,
     last_time: payload.created_at || new Date().toISOString(),
-    unreadCount: 0,
+    unreadCount: payload.unreadCount || 0,
   }
   if (idx >= 0) {
-    const existing = conversations.value[idx]
+    const old = conversations.value[idx]
     const updated = {
-      ...existing,
+      ...old,
       ...base,
-      unreadCount:
-        peerId === activePeerId.value ? 0 : (existing.unreadCount || 0) + (payload.incrementUnread ? 1 : 0),
+      unreadCount: peerId === activePeerId.value ? 0 : (old.unreadCount || 0) + (payload.incrementUnread ? 1 : 0),
     }
     conversations.value.splice(idx, 1)
     conversations.value.unshift(updated)
   } else {
     conversations.value.unshift({
       ...base,
-      unreadCount: peerId === activePeerId.value ? 0 : (payload.incrementUnread ? 1 : 0),
+      unreadCount: peerId === activePeerId.value ? 0 : payload.incrementUnread ? 1 : 0,
     })
   }
 }
@@ -471,6 +443,11 @@ const handleIncomingChat = (data) => {
   }
 }
 
+const addEmoji = (emoji) => {
+  chatInput.value = `${chatInput.value || ''}${emoji}`
+  emojiVisible.value = false
+}
+
 const sendMessage = async () => {
   if (!auth.user || !activePeerId.value) return
   const content = (chatInput.value || '').trim()
@@ -496,21 +473,38 @@ const sendMessage = async () => {
       avatar_url: activePeer.value?.avatar_url,
       content,
       created_at: msg.created_at,
-      incrementUnread: false,
     })
     chatInput.value = ''
     scrollToBottom()
-  } catch (e) {
+  } catch {
     // ignore
   } finally {
     chatSending.value = false
   }
 }
 
+const scrollToBottom = () => {
+  if (!messageContainer.value) return
+  requestAnimationFrame(() => {
+    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+  })
+}
+
+const switchType = (key) => {
+  router.push(key === 'all' ? '/notifications' : `/notifications/${key}`)
+}
+
+const refreshAll = async () => {
+  await Promise.all([fetchData(), fetchState()])
+  if (activeType.value === 'chat') fetchConversations()
+}
+
 onMounted(() => {
   fetchData()
+  fetchState()
   setupStream()
 })
+
 onUnmounted(() => {
   es?.close()
 })
@@ -519,6 +513,7 @@ watch(
   () => auth.user?.id,
   () => {
     fetchData()
+    fetchState()
     fetchConversations()
     setupStream()
   }
@@ -527,381 +522,472 @@ watch(
 watch(
   () => route.params.type,
   (val) => {
-    activeType.value = (val || 'all')
-    if (activeType.value === 'chat') {
-      fetchConversations()
-    }
+    activeType.value = val || 'all'
+    if (activeType.value === 'chat') fetchConversations()
   },
   { immediate: true }
 )
 
-const switchType = (key) => {
-  router.push(key === 'all' ? '/notifications' : `/notifications/${key}`)
-}
-
 watch(
   () => activePeerId.value,
-  () => {
-    nextTick(() => scrollToBottom())
-  }
+  () => nextTick(() => scrollToBottom())
 )
 </script>
 
 <style scoped>
-.page {
+.notify-page {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 220px 1fr;
   min-height: calc(100vh - 56px);
-  background: var(--bg-main);
-}
-.sidebar {
-  background: var(--panel);
-  border-right: 1px solid var(--panel-border);
-  padding: 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-height: calc(100vh - 56px);
-}
-.logo {
-  font-weight: 800;
   color: var(--fg);
+  background:
+    radial-gradient(circle at 10% 10%, color-mix(in srgb, #7ea6ff 10%, transparent), transparent 36%),
+    radial-gradient(circle at 90% 0%, color-mix(in srgb, #81ffe0 9%, transparent), transparent 28%),
+    var(--bg-main);
+}
+
+.rail {
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 16px 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.rail-brand {
   font-size: 20px;
-  padding: 8px 6px;
+  font-weight: 800;
+  margin-bottom: 8px;
 }
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.nav-item {
-  padding: 10px 12px;
-  border-radius: 12px;
-  cursor: pointer;
-  color: var(--fg);
+
+.rail-link {
   text-decoration: none;
-}
-.nav-item.active,
-.nav-item:hover,
-.nav :global(.router-link-active.nav-item) {
-  background: var(--badge);
   color: var(--fg);
+  padding: 9px 11px;
+  border-radius: 12px;
 }
-.nav-item.muted {
+
+.rail-link:hover,
+.rail-link.active,
+.rail :global(.router-link-active.rail-link) {
+  background: color-mix(in srgb, var(--badge) 88%, transparent);
+}
+
+.rail-link.muted {
   color: var(--muted);
 }
-.content {
-  padding: 18px 20px;
+
+.view {
   overflow-y: auto;
+  padding: 16px 18px 24px;
 }
-.top {
+
+.hero {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 16px;
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.hint {
-  color: var(--muted);
-  font-size: 13px;
-}
-.list {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  padding: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
-  min-height: 200px;
-}
-.card {
-  display: flex;
-  gap: 12px;
-  padding: 10px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.card:last-child {
-  border-bottom: none;
-}
-.avatar {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  display: grid;
-  place-items: center;
-}
-.avatar-img {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: var(--badge);
-}
-.body {
-  flex: 1;
-}
-.row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
+  gap: 14px;
 }
-.name {
-  font-weight: 700;
+
+.hero h1 {
+  margin: 0 0 6px;
+  font-size: 32px;
+  letter-spacing: -0.02em;
 }
-.action {
+
+.hero p {
+  margin: 0;
   color: var(--muted);
 }
-.action.like {
-  color: #ff2442;
-}
-.action.favorite {
-  color: #f5a524;
-}
-.action.comment {
-  color: #1677ff;
-}
-.post {
-  color: #1677ff;
-}
-.badge {
-  background: #f1f3f5;
-  color: var(--muted);
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-size: 12px;
-}
-.content {
-  margin: 4px 0;
-  color: var(--fg);
-}
-.time {
-  color: var(--muted);
-  font-size: 12px;
-}
-.empty {
-  text-align: center;
-  color: var(--muted);
-  padding: 40px 0;
-}
-.chat-wrap {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  padding: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
-  min-height: 520px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.chat-filter {
+
+.hero-actions {
   display: flex;
   gap: 8px;
 }
-.chat-box {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 10px;
-  height: 640px;
-}
-.chat-sidebar {
-  border-right: 1px solid var(--panel-border);
-  padding-right: 10px;
-  overflow-y: auto;
-}
-.chat-sidebar-title {
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.chat-search {
-  margin-bottom: 10px;
-  position: relative;
-}
-:deep(.el-input__wrapper),
-:deep(.el-textarea__inner) {
-  background: var(--panel) !important;
-  color: var(--fg) !important;
-  border-color: var(--panel-border) !important;
-}
-:deep(.el-input__inner) {
-  color: var(--fg);
-}
-.search-results {
-  position: absolute;
-  z-index: 5;
-  left: 0;
-  right: 0;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
-  max-height: 220px;
-  overflow-y: auto;
-}
-.search-item {
-  display: flex;
-  gap: 10px;
-  padding: 8px 10px;
-  cursor: pointer;
-}
-.search-item:hover {
-  background: #f6f7f9;
-}
-.search-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.chat-conv {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-.chat-conv:hover,
-.chat-conv.active {
-  background: #9f9d9d;
-}
-.chat-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: #f3f3f3;
-}
-.chat-conv-main {
-  flex: 1;
-  min-width: 0;
-}
-.chat-conv-top {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-.chat-name {
-  font-weight: 700;
-}
-.chat-time {
+
+.guest {
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 18px;
+  text-align: center;
   color: var(--muted);
 }
-.chat-conv-bottom {
+
+.stats {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stat-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  padding: 10px;
+}
+
+.stat-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stat-card strong {
+  font-size: 24px;
+}
+
+.tabs {
+  margin-top: 12px;
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  color: var(--fg);
+  padding: 6px 12px;
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.chat-preview {
+
+.tab.active {
+  border-color: #4f8cff;
+  box-shadow: inset 0 0 0 1px #4f8cff;
+}
+
+.tabs-spacer {
+  flex: 1;
+}
+
+.count-dot,
+.unread-dot {
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.count-dot {
+  background: color-mix(in srgb, var(--badge) 90%, transparent);
   color: var(--muted);
-  font-size: 13px;
+}
+
+.unread-dot {
+  background: #ef4444;
+  color: #fff;
+}
+
+.list {
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.notice {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 10px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+}
+
+.notice-left {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 6px;
+}
+
+.dot-unread {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.post-link {
+  color: #4f8cff;
+  text-decoration: none;
+}
+
+.content {
+  margin: 8px 0 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.time {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 14px;
+}
+
+.chat {
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 10px;
+  min-height: 620px;
+}
+
+.chat-left {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 10px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.chat-search {
+  margin-bottom: 4px;
+}
+
+.search-results {
+  display: grid;
+  gap: 6px;
+}
+
+.search-item,
+.conv {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  color: var(--fg);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.conv.active {
+  border-color: #4f8cff;
+  box-shadow: inset 0 0 0 1px #4f8cff;
+}
+
+.small-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+}
+
+.meta,
+.conv-body {
+  min-width: 0;
+}
+
+.conv-top,
+.conv-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.line-clamp {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chat-badge {
+
+.badge {
   min-width: 18px;
-  padding: 2px 6px;
-  background: #ff4d4f;
-  color: var(--fg);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 11px;
+  background: #ef4444;
+  color: #fff;
+  text-align: center;
+}
+
+.chat-main {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
   border-radius: 12px;
-  font-size: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
 }
-.chat-panel {
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--panel-border);
-  padding-left: 10px;
-}
-.chat-panel-header {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--panel-border);
+
+.chat-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  padding: 10px 12px;
   font-weight: 700;
 }
-.chat-messages {
-  flex: 1;
+
+.messages {
   overflow-y: auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.chat-bubble {
-  max-width: 70%;
-  background: #f4f6f8;
-  padding: 10px 12px;
-  border-radius: 14px;
-  align-self: flex-start;
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.04);
-}
-.chat-bubble.me {
-  background: #4b8afc;
-  color: var(--fg);
-  align-self: flex-end;
-}
-.chat-text {
-  font-size: 14px;
-}
-.chat-meta {
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
-  margin-top: 4px;
-}
-.chat-bubble.me .chat-meta {
-  color: rgba(255, 255, 255, 0.8);
-}
-.chat-input {
-  border-top: 1px solid var(--panel-border);
-  padding-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.chat-toolbar {
-  display: flex;
-  gap: 8px;
-}
-.emoji-grid {
+  padding: 12px;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  padding: 6px;
+  gap: 8px;
+  align-content: start;
+}
+
+.bubble {
+  max-width: 72%;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 78%, transparent);
+  padding: 8px 10px;
+}
+
+.bubble.me {
+  justify-self: end;
+  background: #4f8cff;
+  color: #fff;
+  border-color: #4f8cff;
+}
+
+.bubble-time {
+  margin-top: 4px;
+  font-size: 11px;
   color: var(--muted);
 }
-.emoji-cell {
-  cursor: pointer;
-  font-size: 18px;
+
+.bubble.me .bubble-time {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.composer {
+  border-top: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.composer-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.emoji {
   text-align: center;
-  line-height: 32px;
+  line-height: 26px;
   border-radius: 8px;
+  cursor: pointer;
 }
-.emoji-cell:hover {
-  background: #f4f5f7;
+
+.emoji:hover {
+  background: color-mix(in srgb, var(--badge) 92%, transparent);
 }
-.chat-actions {
+
+.send-row {
   display: flex;
   justify-content: flex-end;
 }
+
 .chat-empty {
-  color: var(--muted);
-  padding: 12px;
-}
-.empty-state {
-  justify-content: center;
-  align-items: center;
+  border: 1px dashed color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
   color: var(--muted);
 }
-@media (max-width: 780px) {
-  .page {
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner),
+:deep(.el-select__wrapper) {
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  border-color: color-mix(in srgb, var(--panel-border) 78%, transparent) !important;
+  color: var(--fg) !important;
+}
+
+:deep(.el-input__inner),
+:deep(.el-textarea__inner),
+:deep(.el-select__selected-item),
+:deep(.el-select__placeholder) {
+  color: var(--fg) !important;
+}
+
+@media (max-width: 1180px) {
+  .chat {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 920px) {
+  .notify-page {
     grid-template-columns: 1fr;
   }
-  .sidebar {
+
+  .rail {
     display: none;
   }
-  .chat-box {
-    grid-template-columns: 1fr;
-    height: auto;
+
+  .view {
+    padding: 12px;
   }
-  .chat-panel {
-    border-left: none;
-    padding-left: 0;
+
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
