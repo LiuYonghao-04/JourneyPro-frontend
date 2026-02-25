@@ -63,7 +63,7 @@
         </section>
 
         <section v-if="activeType !== 'chat'" class="list">
-          <article v-for="(item, idx) in filteredItems" :key="`${item.type}-${item.actor_id}-${idx}`" class="notice">
+          <article v-for="item in filteredItems" :key="makeNotificationKey(item)" :class="['notice', { unread: item.unread } ]">
             <div class="notice-left">
               <span v-if="item.unread" class="dot-unread"></span>
               <RouterLink v-if="item.actor_id" :to="`/person?userid=${item.actor_id}`">
@@ -81,7 +81,10 @@
                 <span v-else class="muted">you</span>
               </div>
               <p v-if="item.content" class="content">{{ item.content }}</p>
-              <div class="time">{{ formatTime(item.created_at) }}</div>
+              <div class="time">
+                <span>{{ formatTime(item.created_at) }}</span>
+                <span v-if="item.unread" class="unread-pill">Unread</span>
+              </div>
             </div>
           </article>
           <div v-if="filteredItems.length === 0" class="empty">No notifications in this category.</div>
@@ -181,7 +184,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
@@ -207,7 +210,15 @@ const messageContainer = ref(null)
 const emojiVisible = ref(false)
 const searchKey = ref('')
 const searchResults = ref([])
+const latestCreatedAt = ref('')
 let es = null
+
+const NOTIFICATION_CACHE_PREFIX = 'jp_notifications_cache_v1_'
+const BASE_LIMIT = 40
+const DELTA_LIMIT = 120
+const MAX_ITEMS = 320
+const TYPE_HYDRATE_LIMIT = 80
+const FUTURE_SKEW_MS = 5 * 60 * 1000
 
 const categories = [
   { key: 'all', label: 'All' },
@@ -258,24 +269,160 @@ const actionLabel = (type) => {
   return 'activity'
 }
 
-const fetchState = async () => {
-  if (!auth.user?.id) return
+const toTime = (v) => {
+  if (!v) return 0
+  const ts = new Date(v).getTime()
+  return Number.isFinite(ts) ? ts : 0
+}
+
+const makeNotificationKey = (item = {}) =>
+  [item.type || 'unknown', item.actor_id || 0, item.post_id || 0, item.created_at || '', item.content || ''].join('::')
+
+const getCacheKey = (userId) => `${NOTIFICATION_CACHE_PREFIX}${userId}`
+
+const isUnreadByState = (item, stateRow) => {
+  const nowMs = Date.now()
+  const nowSec = Math.floor(Date.now() / 1000)
+  const allReadAtRaw = toTime(stateRow?.read_all_at)
+  const typeReadAtRaw = toTime(stateRow?.[`read_${String(item?.type || '')}_at`])
+  const readAnchorRaw = Math.max(allReadAtRaw || 0, typeReadAtRaw || 0)
+  const createdAtRaw = toTime(item?.created_at)
+  const normalizedCreatedRaw =
+    createdAtRaw > nowMs + FUTURE_SKEW_MS ? (readAnchorRaw || nowMs) : createdAtRaw
+  const createdAt = normalizedCreatedRaw ? Math.floor(normalizedCreatedRaw / 1000) : 0
+  if (!createdAt) return false
+  const allReadAt = allReadAtRaw ? Math.min(Math.floor(allReadAtRaw / 1000), nowSec) : 0
+  if (allReadAt && createdAt <= allReadAt) return false
+  const typeReadAt = typeReadAtRaw ? Math.min(Math.floor(typeReadAtRaw / 1000), nowSec) : 0
+  if (typeReadAt && createdAt <= typeReadAt) return false
+  return true
+}
+
+const dedupeSortTrim = (list) => {
+  const map = new Map()
+  ;(list || []).forEach((it) => {
+    const key = makeNotificationKey(it)
+    const old = map.get(key)
+    if (!old || toTime(it?.created_at) >= toTime(old?.created_at)) {
+      map.set(key, it)
+    }
+  })
+  return Array.from(map.values())
+    .sort((a, b) => toTime(b?.created_at) - toTime(a?.created_at))
+    .slice(0, MAX_ITEMS)
+}
+
+const applyUnreadState = (list, stateRow) => {
+  if (!stateRow) return list
+  return (list || []).map((it) => ({
+    ...it,
+    unread: isUnreadByState(it, stateRow),
+  }))
+}
+
+const syncLatestCursor = () => {
+  latestCreatedAt.value = items.value[0]?.created_at || latestCreatedAt.value || ''
+}
+
+const persistCache = () => {
+  if (typeof window === 'undefined') return
+  const userId = auth.user?.id
+  if (!userId) return
   try {
-    const res = await axios.get(`${API_BASE}/state`, { params: { user_id: auth.user.id } })
-    state.value = res.data?.state || null
+    localStorage.setItem(
+      getCacheKey(userId),
+      JSON.stringify({
+        items: items.value.slice(0, MAX_ITEMS),
+        state: state.value || null,
+        latest_created_at: latestCreatedAt.value || '',
+        updated_at: new Date().toISOString(),
+      })
+    )
   } catch {
-    state.value = null
+    // ignore localStorage failures
   }
 }
 
-const fetchData = async () => {
-  if (!auth.user) return
+const hydrateCache = () => {
+  if (typeof window === 'undefined') return false
+  const userId = auth.user?.id
+  if (!userId) return false
   try {
-    const res = await axios.get(API_BASE, { params: { user_id: auth.user.id } })
-    items.value = res.data?.data || []
-    state.value = res.data?.state || state.value
+    const raw = localStorage.getItem(getCacheKey(userId))
+    if (!raw) return false
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed?.items)) return false
+    if (parsed?.state) {
+      state.value = parsed.state
+    }
+    const cached = dedupeSortTrim(parsed.items)
+    items.value = state.value ? applyUnreadState(cached, state.value) : cached
+    latestCreatedAt.value = parsed.latest_created_at || items.value[0]?.created_at || ''
+    return items.value.length > 0
   } catch {
-    items.value = []
+    return false
+  }
+}
+
+const resetNotificationState = () => {
+  items.value = []
+  state.value = null
+  latestCreatedAt.value = ''
+  conversations.value = []
+  chatMessages.value = []
+  activePeerId.value = null
+}
+
+const fetchData = async ({ incremental = true, forceFull = false } = {}) => {
+  if (!auth.user?.id) return
+  const useDelta = incremental && !forceFull && !!latestCreatedAt.value
+  const params = {
+    user_id: auth.user.id,
+    limit: useDelta ? DELTA_LIMIT : BASE_LIMIT,
+  }
+  if (useDelta) {
+    params.since = latestCreatedAt.value
+  }
+  try {
+    const res = await axios.get(API_BASE, { params })
+    const incoming = Array.isArray(res.data?.data) ? res.data.data : []
+    state.value = res.data?.state || state.value
+    items.value = useDelta ? dedupeSortTrim([...incoming, ...items.value]) : dedupeSortTrim(incoming)
+    if (state.value) {
+      items.value = applyUnreadState(items.value, state.value)
+    }
+    latestCreatedAt.value = res.data?.cursor || items.value[0]?.created_at || latestCreatedAt.value || ''
+    persistCache()
+  } catch {
+    // keep cache/in-memory data on request failures
+  }
+}
+
+const hydrateTypeIfNeeded = async (typeKey) => {
+  if (!auth.user?.id) return
+  const type = String(typeKey || '').toLowerCase()
+  if (!type || type === 'all' || type === 'chat') return
+  const exists = items.value.some((it) => it.type === type)
+  if (exists) return
+  try {
+    const res = await axios.get(API_BASE, {
+      params: {
+        user_id: auth.user.id,
+        type,
+        limit: TYPE_HYDRATE_LIMIT,
+      },
+    })
+    const incoming = Array.isArray(res.data?.data) ? res.data.data : []
+    if (!incoming.length) return
+    state.value = res.data?.state || state.value
+    items.value = dedupeSortTrim([...incoming, ...items.value])
+    if (state.value) {
+      items.value = applyUnreadState(items.value, state.value)
+    }
+    syncLatestCursor()
+    persistCache()
+  } catch {
+    // ignore
   }
 }
 
@@ -285,13 +432,17 @@ const markRead = async (type = 'all') => {
     const res = await axios.post(`${API_BASE}/read`, {
       user_id: auth.user.id,
       type,
-      ts: new Date().toISOString(),
     })
     state.value = res.data?.state || state.value
     if (type === 'chat' || type === 'all') {
       conversations.value = (conversations.value || []).map((c) => ({ ...c, unreadCount: 0 }))
     }
-    await fetchData()
+    if (type === 'all') {
+      items.value = items.value.map((it) => ({ ...it, unread: false }))
+    } else if (type !== 'chat') {
+      items.value = items.value.map((it) => (it.type === type ? { ...it, unread: false } : it))
+    }
+    persistCache()
   } catch {
     // ignore
   }
@@ -313,7 +464,9 @@ const setupStream = () => {
         handleIncomingChat(data)
         return
       }
-      items.value = [{ ...data, unread: true }, ...items.value].slice(0, 140)
+      items.value = dedupeSortTrim([{ ...data, unread: true }, ...items.value])
+      syncLatestCursor()
+      persistCache()
     } catch {
       // ignore parse errors
     }
@@ -495,28 +648,38 @@ const switchType = (key) => {
 }
 
 const refreshAll = async () => {
-  await Promise.all([fetchData(), fetchState()])
-  if (activeType.value === 'chat') fetchConversations()
+  await fetchData({ incremental: true, forceFull: false })
+  fetchConversations()
 }
 
-onMounted(() => {
-  fetchData()
-  fetchState()
+const initNotificationData = async () => {
+  if (!auth.user?.id) {
+    es?.close()
+    es = null
+    resetNotificationState()
+    return
+  }
+  const hasCache = hydrateCache()
+  await fetchData({ incremental: true, forceFull: !hasCache })
   setupStream()
-})
+  fetchConversations()
+}
 
 onUnmounted(() => {
   es?.close()
+  es = null
 })
 
 watch(
   () => auth.user?.id,
-  () => {
-    fetchData()
-    fetchState()
-    fetchConversations()
-    setupStream()
-  }
+  (userId, oldUserId) => {
+    if (oldUserId && oldUserId !== userId) {
+      es?.close()
+      es = null
+    }
+    initNotificationData()
+  },
+  { immediate: true }
 )
 
 watch(
@@ -524,6 +687,7 @@ watch(
   (val) => {
     activeType.value = val || 'all'
     if (activeType.value === 'chat') fetchConversations()
+    if (activeType.value !== 'chat') hydrateTypeIfNeeded(activeType.value)
   },
   { immediate: true }
 )
@@ -714,6 +878,13 @@ watch(
   gap: 10px;
 }
 
+.notice.unread {
+  border-color: color-mix(in srgb, #ef4444 55%, var(--panel-border));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, #ef4444 12%, transparent) 0 4px, transparent 4px 100%),
+    color-mix(in srgb, var(--badge) 76%, transparent);
+}
+
 .notice-left {
   display: grid;
   align-content: start;
@@ -722,10 +893,11 @@ watch(
 }
 
 .dot-unread {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #ef4444;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 22%, transparent);
 }
 
 .avatar {
@@ -756,6 +928,20 @@ watch(
   margin-top: 6px;
   color: var(--muted);
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.unread-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  color: #fff;
+  background: #ef4444;
 }
 
 .muted {
