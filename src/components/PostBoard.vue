@@ -124,9 +124,10 @@
             class="card"
             @click="openDetail(card)"
           >
-            <div class="cover" v-if="cardCoverImage(card)">
-              <div v-if="!loadedMap[card.id]" class="img-skeleton" />
+            <div class="cover" v-if="cardCoverImage(card)" :data-card-id="card.id" :ref="observeImageHost">
+              <div v-if="!isImageVisible(card.id) || !loadedMap[card.id]" class="img-skeleton" />
               <CroppedImage
+                v-if="isImageVisible(card.id)"
                 :src="cardCoverImage(card)"
                 :alt="card.title"
                 loading="lazy"
@@ -174,8 +175,16 @@
             class="list-card"
             @click="openDetail(card)"
           >
-            <div class="list-cover" v-if="cardCoverImage(card)">
-              <CroppedImage :src="cardCoverImage(card)" :alt="card.title" class="cover-img" loading="lazy" />
+            <div class="list-cover" v-if="cardCoverImage(card)" :data-card-id="card.id" :ref="observeImageHost">
+              <div v-if="!isImageVisible(card.id) || !loadedMap[card.id]" class="img-skeleton" />
+              <CroppedImage
+                v-if="isImageVisible(card.id)"
+                :src="cardCoverImage(card)"
+                :alt="card.title"
+                class="cover-img"
+                loading="lazy"
+                @load="() => markLoaded(card)"
+              />
             </div>
             <div class="list-body">
               <h3 class="list-title">{{ card.title }}</h3>
@@ -215,7 +224,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import {
@@ -232,6 +241,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from './CroppedImage.vue'
+import { proxiedImageSrc } from '../utils/imageProxy'
 
 const API_BASE = 'http://localhost:3001/api/posts'
 const auth = useAuthStore()
@@ -248,7 +258,8 @@ const loading = ref(false)
 const noMore = ref(false)
 const sentinel = ref(null)
 const observer = ref(null)
-const limit = 20
+const imageObserver = ref(null)
+const limit = 16
 const offset = ref(0)
 const likedIds = ref(new Set())
 const favIds = ref(new Set())
@@ -269,22 +280,32 @@ const markWithReactions = (list) =>
     _fav: favIds.value.has(item.id),
   }))
 
+const syncReactionsToPosts = () => {
+  posts.value = posts.value.map((item) => ({
+    ...item,
+    _liked: likedIds.value.has(item.id),
+    _fav: favIds.value.has(item.id),
+  }))
+}
+
 const loadReactions = async () => {
   if (!auth.user) {
     likedIds.value = new Set()
     favIds.value = new Set()
+    syncReactionsToPosts()
     return
   }
   try {
-    const [likedRes, favRes] = await Promise.all([
-      axios.get(API_BASE, { params: { liked_by: auth.user.id, limit: 500 } }),
-      axios.get(API_BASE, { params: { favorited_by: auth.user.id, limit: 500 } }),
-    ])
-    likedIds.value = new Set((likedRes.data?.data || []).map((p) => p.id))
-    favIds.value = new Set((favRes.data?.data || []).map((p) => p.id))
+    const res = await axios.get(`${API_BASE}/reactions/summary`, {
+      params: { user_id: auth.user.id, limit: 2000 },
+    })
+    likedIds.value = new Set((res.data?.data?.liked_ids || []).map((id) => Number(id)).filter(Boolean))
+    favIds.value = new Set((res.data?.data?.favorited_ids || []).map((id) => Number(id)).filter(Boolean))
+    syncReactionsToPosts()
   } catch {
     likedIds.value = new Set()
     favIds.value = new Set()
+    syncReactionsToPosts()
   }
 }
 
@@ -305,15 +326,18 @@ const fetchPosts = async (reset = false) => {
     if (reset) {
       posts.value = []
       loadedMap.value = {}
+      visibleImageIds.value = new Set()
       offset.value = 0
       noMore.value = false
-      await loadReactions()
+      loadReactions()
     }
     const res = await axios.get(API_BASE, {
       params: {
         limit,
         offset: offset.value,
         sort: sort.value,
+        compact: 1,
+        lite: 1,
         tag: activeTagParam.value || undefined,
         poi_id: poiFilterId.value || undefined,
       },
@@ -322,6 +346,8 @@ const fetchPosts = async (reset = false) => {
     if (list.length < limit) noMore.value = true
     posts.value = reset ? list : [...posts.value, ...list]
     offset.value += list.length
+    await nextTick()
+    refreshImageObservers()
   } catch {
     // ignore
   } finally {
@@ -361,7 +387,16 @@ const openDetail = (card) => {
   router.push(`/posts/postsid=${card.id}`)
 }
 
-const cardCoverImage = (card) => card?.cover_image || card?.images?.[0] || card?.poi?.image_url || ''
+const toFeedImageUrl = (raw) => {
+  const url = String(raw || '').trim()
+  if (!url) return ''
+  const resized = url
+    .replace(/loremflickr\.com\/1280\/864\//i, 'loremflickr.com/480/320/')
+    .replace(/loremflickr\.com\/640\/432\//i, 'loremflickr.com/480/320/')
+  return proxiedImageSrc(resized)
+}
+
+const cardCoverImage = (card) => toFeedImageUrl(card?.cover_image || card?.images?.[0] || card?.poi?.image_url || '')
 
 const openPoiFromFeed = (card) => {
   const poi = card?.poi
@@ -440,7 +475,10 @@ const filteredPosts = computed(() => {
   const kw = search.value.trim().toLowerCase()
   return posts.value.filter((p) => {
     const inPoi = poiFilterId.value ? Number(p.poi_id) === poiFilterId.value : true
-    const inTab = activeTab.value === 'Recommended' ? true : (p.tags || []).includes(activeTab.value)
+    const inTab =
+      activeTab.value === 'Recommended'
+        ? true
+        : (p.tags || []).length === 0 || (p.tags || []).includes(activeTab.value)
     const inKw =
       !kw ||
       p.title?.toLowerCase().includes(kw) ||
@@ -499,6 +537,27 @@ const markLoaded = (card) => {
   loadedMap.value = { ...loadedMap.value, [card.id]: true }
 }
 
+const visibleImageIds = ref(new Set())
+
+const isImageVisible = (cardId) => visibleImageIds.value.has(Number(cardId))
+
+const revealImage = (cardId) => {
+  const id = Number(cardId)
+  if (!Number.isFinite(id) || id <= 0 || visibleImageIds.value.has(id)) return
+  visibleImageIds.value = new Set([...visibleImageIds.value, id])
+}
+
+const observeImageHost = (el) => {
+  if (!el || !imageObserver.value) return
+  imageObserver.value.observe(el)
+}
+
+const refreshImageObservers = () => {
+  if (!imageObserver.value || !contentEl.value) return
+  const hosts = contentEl.value.querySelectorAll('.cover[data-card-id], .list-cover[data-card-id]')
+  hosts.forEach((el) => imageObserver.value.observe(el))
+}
+
 const setupInfiniteScroll = () => {
   if (observer.value) observer.value.disconnect()
   observer.value = new IntersectionObserver(
@@ -509,9 +568,26 @@ const setupInfiniteScroll = () => {
         }
       })
     },
-    { root: null, threshold: 0.1 }
+    { root: contentEl.value || null, threshold: 0.01, rootMargin: '900px 0px' }
   )
   if (sentinel.value) observer.value.observe(sentinel.value)
+}
+
+const setupImageObserver = () => {
+  if (imageObserver.value) imageObserver.value.disconnect()
+  imageObserver.value = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const id = Number(entry.target?.dataset?.cardId)
+        if (entry.isIntersecting) {
+          revealImage(id)
+          imageObserver.value?.unobserve(entry.target)
+        }
+      })
+    },
+    { root: contentEl.value || null, threshold: 0.01, rootMargin: '280px 0px' }
+  )
+  refreshImageObservers()
 }
 
 const resetFilters = () => {
@@ -551,6 +627,7 @@ onMounted(() => {
   fetchTags()
   fetchPosts(true)
   setupInfiniteScroll()
+  setupImageObserver()
   document.addEventListener('scroll', onAnyScroll, { passive: true, capture: true })
   window.addEventListener('scroll', onAnyScroll, { passive: true })
   onAnyScroll()
@@ -560,6 +637,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('scroll', onAnyScroll, true)
   window.removeEventListener('scroll', onAnyScroll)
   if (observer.value) observer.value.disconnect()
+  if (imageObserver.value) imageObserver.value.disconnect()
 })
 </script>
 
@@ -995,8 +1073,10 @@ onBeforeUnmount(() => {
 }
 
 .list-cover {
+  position: relative;
   background: var(--badge);
   min-height: 160px;
+  overflow: hidden;
 }
 
 .list-body {
