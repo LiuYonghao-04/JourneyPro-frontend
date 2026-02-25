@@ -260,6 +260,7 @@ const poiFilterId = computed(() => {
   const num = Number(raw)
   return Number.isFinite(num) && num > 0 ? num : null
 })
+const activeTagParam = computed(() => (activeTab.value === 'Recommended' ? '' : activeTab.value))
 
 const markWithReactions = (list) =>
   list.map((item) => ({
@@ -313,6 +314,7 @@ const fetchPosts = async (reset = false) => {
         limit,
         offset: offset.value,
         sort: sort.value,
+        tag: activeTagParam.value || undefined,
         poi_id: poiFilterId.value || undefined,
       },
     })
@@ -422,6 +424,7 @@ const replacePost = (updated) => {
 }
 
 const setTab = (tab) => {
+  if (activeTab.value === tab) return
   activeTab.value = tab
 }
 
@@ -523,6 +526,7 @@ const openCreator = (id) => {
 }
 
 watch(sort, () => fetchPosts(true))
+watch(activeTagParam, () => fetchPosts(true))
 watch(
   () => route.query.poi_name,
   (name) => {
