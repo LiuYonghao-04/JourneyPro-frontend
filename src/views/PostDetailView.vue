@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page" v-if="post">
     <aside class="sidebar">
       <div class="brand">Community</div>
@@ -22,9 +22,14 @@
         </div>
       </header>
 
-      <div class="layout">
-        <section class="main">
-          <div class="media">
+      <div class="detail-shell">
+        <section class="hero-grid">
+          <article class="hero-media card">
+            <div class="media-top">
+              <div class="media-title">Photo Story</div>
+              <div v-if="postImages.length" class="media-count">{{ mediaIndex + 1 }} / {{ postImages.length }}</div>
+            </div>
+
             <button class="main-image-btn" @click="openPhotoViewer(postImages, mediaIndex)">
               <CroppedImage
                 v-if="postImages[mediaIndex]"
@@ -34,7 +39,8 @@
               />
               <div v-else class="image-empty">No image</div>
             </button>
-            <div v-if="postImages.length > 1" class="thumbs">
+
+            <div v-if="postImages.length > 1" class="thumb-rail">
               <button
                 v-for="(img, idx) in postImages"
                 :key="`${img}-${idx}`"
@@ -45,9 +51,9 @@
                 <CroppedImage :src="img" :alt="`thumb-${idx}`" class="thumb-img" />
               </button>
             </div>
-          </div>
+          </article>
 
-          <article class="post-card">
+          <article class="story-card card">
             <div class="author-row">
               <RouterLink v-if="post.user?.id" :to="profileLink(post.user.id)">
                 <CroppedImage :src="post.user?.avatar_url || defaultAvatar" class="avatar" :aspect-ratio="1" />
@@ -71,14 +77,14 @@
               </el-button>
             </div>
 
-            <h1>{{ post.title }}</h1>
-            <p class="text">{{ post.content }}</p>
+            <h1 class="post-title">{{ post.title }}</h1>
+            <p class="post-text">{{ post.content }}</p>
 
             <div v-if="post.tags?.length" class="tags">
               <span v-for="tag in post.tags" :key="tag" class="tag">#{{ tag }}</span>
             </div>
 
-            <div class="stats">
+            <div class="post-actions">
               <button class="pill" @click="toggleLikePost">
                 <el-icon :class="{ active: post._liked }">
                   <component :is="post._liked ? CircleCheckFilled : CircleCheck" />
@@ -94,35 +100,10 @@
               <span class="time">{{ post.view_count || 0 }} views</span>
             </div>
           </article>
+        </section>
 
-          <section v-if="post.poi_id" class="poi-card">
-            <div class="poi-header">
-              <div>
-                <strong>{{ poiDetail?.name || 'Linked place' }}</strong>
-                <div class="time">{{ poiDetail?.category || 'POI' }}</div>
-              </div>
-              <div class="poi-actions">
-                <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View map</el-button>
-                <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">Add via</el-button>
-              </div>
-            </div>
-
-            <div class="poi-gallery" v-if="poiGallery.length">
-              <button v-for="(img, idx) in poiGallery" :key="`${img}-${idx}`" class="poi-photo" @click="openPhotoViewer(poiGallery, idx)">
-                <CroppedImage :src="img" :alt="`poi-${idx}`" class="poi-photo-img" />
-              </button>
-            </div>
-            <el-alert
-              v-if="alertMessage"
-              :title="alertMessage"
-              :type="alertType"
-              :closable="false"
-              show-icon
-              class="inline-alert"
-            />
-          </section>
-
-          <section class="comments">
+        <section class="content-grid">
+          <section class="comments card">
             <div class="comments-head">
               <h3>Comments ({{ commentTotal }})</h3>
               <div class="comment-tools">
@@ -186,33 +167,60 @@
               <div v-if="filteredComments.length === 0" class="empty">No comments match your filter.</div>
             </div>
           </section>
-        </section>
 
-        <aside class="side">
-          <section class="side-card">
-            <h3>Post insights</h3>
-            <div class="kpi-grid">
-              <div class="kpi"><span>Likes</span><strong>{{ post.like_count || 0 }}</strong></div>
-              <div class="kpi"><span>Favorites</span><strong>{{ post.favorite_count || 0 }}</strong></div>
-              <div class="kpi"><span>Views</span><strong>{{ post.view_count || 0 }}</strong></div>
-              <div class="kpi"><span>Comments</span><strong>{{ commentTotal }}</strong></div>
-            </div>
-          </section>
-
-          <section class="side-card">
-            <h3>More from this place</h3>
-            <div v-if="relatedPosts.length" class="related-list">
-              <button v-for="item in relatedPosts" :key="item.id" class="related-item" @click="openPost(item.id)">
-                <div class="related-top">
-                  <div class="related-title">{{ item.title }}</div>
-                  <span class="related-badge">{{ item.like_count || 0 }} likes</span>
+          <aside class="right-stack">
+            <section v-if="post.poi_id" class="poi-card card">
+              <div class="poi-header">
+                <div>
+                  <strong>{{ poiDetail?.name || 'Linked place' }}</strong>
+                  <div class="time">{{ poiDetail?.category || 'POI' }}</div>
                 </div>
-                <div class="time">{{ item.user?.nickname || 'Traveler' }} · {{ formatTime(item.created_at) }}</div>
-              </button>
-            </div>
-            <div v-else class="empty">No related posts yet.</div>
-          </section>
-        </aside>
+                <div class="poi-actions">
+                  <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View map</el-button>
+                  <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">Add via</el-button>
+                </div>
+              </div>
+
+              <div class="poi-gallery" v-if="poiGallery.length">
+                <button v-for="(img, idx) in poiGallery" :key="`${img}-${idx}`" class="poi-photo" @click="openPhotoViewer(poiGallery, idx)">
+                  <CroppedImage :src="img" :alt="`poi-${idx}`" class="poi-photo-img" />
+                </button>
+              </div>
+              <el-alert
+                v-if="alertMessage"
+                :title="alertMessage"
+                :type="alertType"
+                :closable="false"
+                show-icon
+                class="inline-alert"
+              />
+            </section>
+
+            <section class="side-card card">
+              <h3>Post insights</h3>
+              <div class="kpi-grid">
+                <div class="kpi"><span>Likes</span><strong>{{ post.like_count || 0 }}</strong></div>
+                <div class="kpi"><span>Favorites</span><strong>{{ post.favorite_count || 0 }}</strong></div>
+                <div class="kpi"><span>Views</span><strong>{{ post.view_count || 0 }}</strong></div>
+                <div class="kpi"><span>Comments</span><strong>{{ commentTotal }}</strong></div>
+              </div>
+            </section>
+
+            <section class="side-card card">
+              <h3>More from this place</h3>
+              <div v-if="relatedPosts.length" class="related-list">
+                <button v-for="item in relatedPosts" :key="item.id" class="related-item" @click="openPost(item.id)">
+                  <div class="related-top">
+                    <div class="related-title">{{ item.title }}</div>
+                    <span class="related-badge">{{ item.like_count || 0 }} likes</span>
+                  </div>
+                  <div class="time">{{ item.user?.nickname || 'Traveler' }} · {{ formatTime(item.created_at) }}</div>
+                </button>
+              </div>
+              <div v-else class="empty">No related posts yet.</div>
+            </section>
+          </aside>
+        </section>
       </div>
     </main>
 
@@ -373,7 +381,7 @@ const fetchRelatedPosts = async () => {
     return
   }
   try {
-    const res = await axios.get(API_BASE, { params: { poi_id: post.value.poi_id, limit: 8 } })
+    const res = await axios.get(API_BASE, { params: { poi_id: post.value.poi_id, limit: 4 } })
     const dedup = new Set()
     relatedPosts.value = (res.data?.data || [])
       .filter((item) => Number(item.id) !== postId.value)
@@ -383,7 +391,7 @@ const fetchRelatedPosts = async () => {
         dedup.add(key)
         return true
       })
-      .slice(0, 8)
+      .slice(0, 4)
   } catch {
     relatedPosts.value = []
   }
@@ -586,81 +594,567 @@ watch(
 </script>
 
 <style scoped>
-.page { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 56px); background: var(--bg-main); color: var(--fg); }
-.sidebar { border-right: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 88%, transparent); padding: 16px 12px; display: grid; gap: 8px; align-content: start; }
-.brand { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
-.nav-link { text-decoration: none; color: var(--fg); padding: 9px 11px; border-radius: 12px; }
-.nav-link:hover, .sidebar :global(.router-link-active.nav-link) { background: var(--badge); }
-.nav-link.muted { color: var(--muted); }
-.side-meta { margin-top: 8px; border: 1px solid var(--panel-border); border-radius: 12px; padding: 10px; color: var(--muted); display: grid; gap: 4px; font-size: 12px; }
-.content { overflow-y: auto; padding: 16px 18px 24px; }
-.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.toolbar-actions { display: flex; gap: 8px; }
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; }
-.main { display: grid; gap: 12px; }
-.media, .post-card, .poi-card, .comments, .side-card { border: 1px solid var(--panel-border); border-radius: 16px; background: color-mix(in srgb, var(--panel) 90%, transparent); }
-.media { padding: 12px; }
-.main-image-btn { width: 100%; border: none; background: transparent; padding: 0; cursor: zoom-in; }
-.main-image, .image-empty { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: var(--badge); overflow: hidden; }
-.image-empty { display: grid; place-items: center; color: var(--muted); }
-.thumbs { margin-top: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
-.thumb { border: 1px solid var(--panel-border); border-radius: 8px; padding: 0; overflow: hidden; cursor: pointer; background: transparent; }
-.thumb.active { outline: 2px solid #4f8cff; }
-.thumb-img { width: 100%; height: 52px; }
-.post-card { padding: 14px; }
-.author-row { display: flex; align-items: center; gap: 8px; }
-.avatar { width: 44px; height: 44px; border-radius: 999px; }
-.author-info { flex: 1; min-width: 0; }
-.author-name { text-decoration: none; color: var(--fg); font-weight: 700; }
-h1 { margin: 12px 0 8px; font-size: 30px; letter-spacing: -0.02em; }
-.text { margin: 0; line-height: 1.7; white-space: pre-wrap; }
-.tags { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-.tag { padding: 4px 9px; border: 1px solid var(--panel-border); border-radius: 999px; font-size: 12px; color: var(--muted); }
-.stats { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
-.pill { border: 1px solid var(--panel-border); border-radius: 12px; padding: 6px 10px; background: var(--badge); color: var(--fg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-.pill .active { color: #4f8cff; }
-.time { color: var(--muted); font-size: 12px; }
-.poi-card { padding: 12px; }
-.poi-header { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
-.poi-actions { display: flex; gap: 8px; }
-.poi-gallery { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
-.poi-photo { border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; padding: 0; background: transparent; cursor: zoom-in; }
-.poi-photo-img { width: 100%; height: 62px; }
-.inline-alert { margin-top: 8px; }
-.comments { padding: 12px; }
-.comments-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
-.comment-tools { display: flex; gap: 8px; }
-.comment-editor { margin-top: 10px; display: grid; gap: 8px; }
-.comment-list { margin-top: 10px; display: grid; gap: 10px; }
-.comment-item { border: 1px solid var(--panel-border); border-radius: 12px; padding: 10px; background: var(--badge); }
-.comment-header { display: flex; align-items: center; gap: 8px; }
-.comment-avatar { width: 30px; height: 30px; border-radius: 999px; }
-.comment-avatar.small { width: 24px; height: 24px; }
-.comment-name { font-size: 13px; font-weight: 700; }
-.comment-content { margin: 8px 0 0; line-height: 1.55; white-space: pre-wrap; }
-.comment-actions { margin-top: 8px; display: flex; gap: 8px; }
-.mini-btn { border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--muted); padding: 3px 9px; cursor: pointer; font-size: 12px; }
-.reply-box { margin-top: 8px; display: grid; gap: 8px; }
-.reply-actions { display: flex; gap: 8px; }
-.reply-list { margin-top: 8px; display: grid; gap: 8px; }
-.reply-item { margin-left: calc(8px + (var(--depth, 1) - 1) * 10px); border-left: 2px solid var(--panel-border); padding-left: 8px; }
-.side { display: grid; gap: 12px; align-content: start; position: sticky; top: 12px; max-height: calc(100vh - 90px); }
-.side-card { padding: 12px; }
-.kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.kpi { border: 1px solid var(--panel-border); border-radius: 10px; padding: 8px; background: var(--badge); }
-.kpi span { display: block; color: var(--muted); font-size: 12px; }
-.kpi strong { font-size: 18px; }
-.related-list { display: grid; gap: 8px; }
-.related-item {
+.page {
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  min-height: calc(100vh - 56px);
+  color: var(--fg);
+  background:
+    radial-gradient(circle at 2% -8%, color-mix(in srgb, #8ab4ff 16%, transparent), transparent 38%),
+    radial-gradient(circle at 98% 0%, color-mix(in srgb, #84dcff 14%, transparent), transparent 34%),
+    linear-gradient(165deg, color-mix(in srgb, #4f8cff 5%, transparent), transparent 48%),
+    var(--bg-main);
+}
+
+.sidebar {
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  padding: 20px 14px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.brand {
+  font-size: 24px;
+  font-weight: 900;
+  margin-bottom: 10px;
+  letter-spacing: 0.2px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: var(--fg);
+  padding: 10px 12px;
+  border-radius: 12px;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.nav-link:hover,
+.sidebar :global(.router-link-active.nav-link) {
+  background: color-mix(in srgb, var(--btn-primary) 82%, transparent);
+  color: var(--btn-text);
+}
+
+.nav-link.muted {
+  color: var(--muted);
+}
+
+.side-meta {
+  margin-top: 10px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 14px;
+  padding: 10px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+}
+
+.content {
+  overflow-y: auto;
+  padding: 20px 22px 30px;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 16;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--panel) 88%, transparent),
+      color-mix(in srgb, var(--panel) 95%, transparent)
+    );
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.detail-shell {
+  max-width: 1520px;
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+}
+
+.card {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border-radius: 20px;
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--panel) 88%, transparent),
+      color-mix(in srgb, var(--panel) 96%, transparent)
+    );
+  box-shadow:
+    0 14px 38px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  overflow: hidden;
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    130deg,
+    color-mix(in srgb, #ffffff 16%, transparent),
+    transparent 28%,
+    transparent 70%,
+    color-mix(in srgb, #ffffff 12%, transparent)
+  );
+  pointer-events: none;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(380px, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.hero-media {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background:
+    radial-gradient(circle at 14% 0%, color-mix(in srgb, #8ab4ff 22%, transparent), transparent 42%),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, #84dcff 16%, transparent), transparent 36%),
+    transparent;
+}
+
+.media-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.media-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+}
+
+.media-count {
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 66%, transparent);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: color-mix(in srgb, var(--panel) 76%, transparent);
+}
+
+.main-image-btn {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 66%, transparent);
+  border-radius: 16px;
+  background: transparent;
+  padding: 0;
+  cursor: zoom-in;
+  overflow: hidden;
+  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+}
+
+.main-image-btn:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, #4f8cff 54%, var(--panel-border));
+  box-shadow: 0 18px 40px rgba(26, 73, 165, 0.16);
+}
+
+.main-image,
+.image-empty {
+  width: 100%;
+  height: clamp(340px, 52vh, 600px);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--badge) 88%, transparent);
+  overflow: hidden;
+}
+
+.image-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.thumb-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.thumb {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
   border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.thumb:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #4f8cff 56%, var(--panel-border));
+}
+
+.thumb.active {
+  border-color: #4f8cff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #4f8cff 24%, transparent);
+}
+
+.thumb-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.story-card {
+  padding: 22px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 92%, transparent),
+      color-mix(in srgb, var(--panel) 98%, transparent)
+    );
+}
+
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+}
+
+.author-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.author-name {
+  text-decoration: none;
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.post-title {
+  margin: 4px 0 0;
+  font-size: clamp(30px, 2.65vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.post-text {
+  margin: 0;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: color-mix(in srgb, var(--fg) 88%, #000);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+}
+
+.post-actions {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, transparent);
+  border-radius: 999px;
+  padding: 8px 13px;
   background: color-mix(in srgb, var(--badge) 80%, transparent);
-  padding: 8px;
+  color: var(--fg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.pill:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #4f8cff 52%, var(--panel-border));
+}
+
+.pill .active {
+  color: #4f8cff;
+}
+
+.time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 18px;
+  align-items: start;
+}
+
+.comments {
+  padding: 18px;
+}
+
+.comments-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.comments-head h3 {
+  margin: 0;
+}
+
+.comment-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.comment-editor {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.comment-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.comment-item {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comment-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+}
+
+.comment-avatar.small {
+  width: 24px;
+  height: 24px;
+}
+
+.comment-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.comment-content {
+  margin: 8px 0 0;
+  line-height: 1.58;
+  white-space: pre-wrap;
+}
+
+.comment-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mini-btn {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.reply-box {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.reply-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.reply-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.reply-item {
+  margin-left: calc(8px + (var(--depth, 1) - 1) * 10px);
+  border-left: 2px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
+  padding-left: 8px;
+}
+
+.right-stack {
+  position: sticky;
+  top: 82px;
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 98px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.poi-card,
+.side-card {
+  padding: 16px;
+}
+
+.poi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.poi-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.poi-gallery {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.poi-photo {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 9px;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.poi-photo-img {
+  width: 100%;
+  height: 64px;
+}
+
+.inline-alert {
+  margin-top: 10px;
+}
+
+.side-card h3 {
+  margin: 0 0 10px;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kpi {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  padding: 9px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+}
+
+.kpi span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kpi strong {
+  font-size: 18px;
+}
+
+.related-list {
+  display: grid;
+  gap: 9px;
+}
+
+.related-item {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, transparent);
+  border-radius: 13px;
+  background:
+    linear-gradient(
+      140deg,
+      color-mix(in srgb, var(--badge) 72%, transparent),
+      color-mix(in srgb, var(--badge) 90%, transparent)
+    );
+  padding: 10px;
   display: grid;
   gap: 6px;
   cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
 }
-.related-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.related-item:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, #4f8cff 58%, var(--panel-border));
+  box-shadow: 0 14px 24px rgba(79, 140, 255, 0.14);
+}
+
+.related-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .related-title {
   font-weight: 700;
   font-size: 13px;
@@ -670,6 +1164,7 @@ h1 { margin: 12px 0 8px; font-size: 30px; letter-spacing: -0.02em; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
 .related-badge {
   white-space: nowrap;
   border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
@@ -678,25 +1173,168 @@ h1 { margin: 12px 0 8px; font-size: 30px; letter-spacing: -0.02em; }
   font-size: 11px;
   color: var(--muted);
 }
-.empty { text-align: center; color: var(--muted); padding: 14px; }
-.photo-viewer { position: fixed; inset: 0; background: rgba(5, 8, 13, 0.92); z-index: 3000; display: grid; place-items: center; }
-.viewer-image { max-width: min(94vw, 1400px); max-height: 84vh; border-radius: 12px; object-fit: contain; }
-.viewer-close { position: absolute; top: 20px; right: 24px; width: 34px; height: 34px; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; background: rgba(0,0,0,0.25); color: #fff; font-size: 20px; cursor: pointer; }
-.viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.24); color: #fff; font-size: 22px; cursor: pointer; }
-.viewer-nav.prev { left: 20px; }
-.viewer-nav.next { right: 20px; }
-.viewer-count { position: absolute; bottom: 18px; color: #fff; font-size: 13px; }
-:deep(.el-input__wrapper), :deep(.el-textarea__inner), :deep(.el-select__wrapper) { background: color-mix(in srgb, var(--panel) 88%, transparent) !important; border-color: var(--panel-border) !important; color: var(--fg) !important; }
-:deep(.el-input__inner), :deep(.el-select__placeholder), :deep(.el-select__selected-item), :deep(.el-textarea__inner) { color: var(--fg) !important; }
-@media (max-width: 1180px) {
-  .layout { grid-template-columns: 1fr; }
-  .side { position: static; max-height: none; }
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 14px;
 }
-@media (max-width: 860px) {
-  .page { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
-  .content { padding: 12px; }
-  .comments-head { flex-direction: column; align-items: stretch; }
-  .comment-tools { width: 100%; }
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 13, 0.92);
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+}
+
+.viewer-image {
+  max-width: min(94vw, 1400px);
+  max-height: 84vh;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.viewer-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.24);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.viewer-nav.prev {
+  left: 20px;
+}
+
+.viewer-nav.next {
+  right: 20px;
+}
+
+.viewer-count {
+  position: absolute;
+  bottom: 18px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.thumb-rail::-webkit-scrollbar,
+.right-stack::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.thumb-rail::-webkit-scrollbar-thumb,
+.right-stack::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
+  border-radius: 999px;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner),
+:deep(.el-select__wrapper) {
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  border-color: var(--panel-border) !important;
+  color: var(--fg) !important;
+}
+
+:deep(.el-input__inner),
+:deep(.el-select__placeholder),
+:deep(.el-select__selected-item),
+:deep(.el-textarea__inner) {
+  color: var(--fg) !important;
+}
+
+@media (max-width: 1380px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(340px, 1fr);
+  }
+
+  .content-grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+}
+
+@media (max-width: 1220px) {
+  .hero-grid,
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .right-stack {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 980px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .toolbar {
+    position: static;
+    margin-bottom: 12px;
+  }
+
+  .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .main-image,
+  .image-empty {
+    height: clamp(280px, 42vh, 450px);
+  }
+
+  .post-title {
+    font-size: clamp(24px, 7vw, 32px);
+  }
+}
+
+@media (max-width: 760px) {
+  .comment-tools {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .comments-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>
+
+
+
