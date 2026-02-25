@@ -1,8 +1,18 @@
 <template>
   <div class="page" ref="pageEl" @scroll.passive="onScroll">
-    <nav class="side-nav" aria-label="On this page">
+    <nav
+      class="side-nav"
+      aria-label="On this page"
+      :style="{ '--nav-progress': String(pageProgress), '--active-idx': String(activeNavIndex) }"
+    >
+      <div class="side-nav-top" aria-hidden="true">
+        <span class="side-nav-kicker">JourneyPro</span>
+      </div>
+      <div class="side-nav-track" aria-hidden="true">
+        <span class="side-nav-track-fill"></span>
+      </div>
       <button
-        v-for="item in navItems"
+        v-for="(item, idx) in navItems"
         :key="item.key"
         type="button"
         class="side-nav-item"
@@ -10,8 +20,9 @@
         :aria-current="activeAnchor === item.key ? 'page' : null"
         @click="scrollToAnchor(item.key)"
       >
-        <span class="side-nav-dot" aria-hidden="true"></span>
-        <span class="side-nav-text">{{ item.label }}</span>
+        <span class="side-nav-item-no" aria-hidden="true">{{ String(idx + 1).padStart(2, '0') }}</span>
+        <span class="side-nav-item-label">{{ item.label }}</span>
+        <span class="side-nav-item-chevron" aria-hidden="true">↗</span>
       </button>
     </nav>
 
@@ -74,13 +85,19 @@
 
         <div class="hero-grid">
           <div class="hero-copy">
+            <div class="hero-status-row">
+              <span class="hero-status-pill online">AI Engine Online</span>
+              <span class="hero-status-pill">Realtime Ranking</span>
+              <span class="hero-status-pill">Route-aware</span>
+            </div>
             <p class="eyebrow">JourneyPro</p>
             <h1 class="hero-title">
-              Explore,
-              <span class="accent">personalized</span>.
+              Smart travel,
+              <span class="accent">rendered live</span>.
             </h1>
             <p class="hero-lede">
-              POI recommendations that balance what you love and what's close &mdash; all along your route.
+              Tech-driven POI recommendations that blend preference signals with route proximity, so every stop feels
+              both personal and practical.
             </p>
 
             <div class="hero-actions">
@@ -89,6 +106,11 @@
               <template v-if="!auth.user">
                 <RouterLink class="btn ghost" to="/login">Login</RouterLink>
               </template>
+            </div>
+
+            <div class="hero-command">
+              <span class="cmd-key">/</span>
+              <span class="cmd-text">Set destination, tune weight, and get ranked stops instantly.</span>
             </div>
 
             <div class="hero-metrics">
@@ -108,6 +130,7 @@
           </div>
 
           <div class="hero-media">
+            <div class="hero-orbit" aria-hidden="true"></div>
             <div class="device" role="img" aria-label="Animated route preview">
               <div class="device-screen">
                 <div class="device-top">
@@ -190,11 +213,80 @@
       </div>
     </section>
 
+    <section class="section smart-center jp-reveal" id="intel" ref="intelEl">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">Intelligence center.</h2>
+          <p class="section-sub">A compact command hub for faster planning and clearer system feedback.</p>
+          <div class="section-flair">
+            <span class="flair-chip">Smart ranking</span>
+            <span class="flair-chip">Realtime route context</span>
+            <span class="flair-chip">Low-latency feedback</span>
+          </div>
+        </div>
+
+        <div class="smart-grid">
+          <article class="smart-card card smart-core">
+            <p class="smart-eyebrow">Adaptive model</p>
+            <h3 class="smart-title">Preference x distance balance</h3>
+            <p class="smart-desc">
+              The ranking engine keeps all candidate POIs visible and only adjusts order by your chosen preference
+              ratio.
+            </p>
+            <div class="smart-ring-row">
+              <div class="smart-ring" :style="{ '--ring-p': String(demoInterestPct / 100) }">
+                <div class="smart-ring-inner">
+                  <div class="smart-ring-k">{{ demoInterestPct }}%</div>
+                  <div class="smart-ring-v">Interest</div>
+                </div>
+              </div>
+              <div class="smart-ring-copy">
+                <div class="smart-chip">Distance {{ demoDistancePct }}%</div>
+                <div class="smart-chip">Interest {{ demoInterestPct }}%</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="smart-card card smart-actions">
+            <p class="smart-eyebrow">Quick actions</p>
+            <h3 class="smart-title">Go from idea to route in seconds</h3>
+            <div class="smart-action-list">
+              <RouterLink class="smart-action-btn" to="/map">Open route planner</RouterLink>
+              <RouterLink class="smart-action-btn" to="/posts">Browse community feed</RouterLink>
+              <RouterLink class="smart-action-btn" :to="profileLink">Check profile interests</RouterLink>
+              <RouterLink class="smart-action-btn" to="/notifications">Review notifications</RouterLink>
+            </div>
+          </article>
+
+          <article class="smart-card card smart-metrics">
+            <p class="smart-eyebrow">Live status</p>
+            <h3 class="smart-title">System telemetry</h3>
+            <div class="telemetry-list">
+              <div class="telemetry-item" v-for="item in intelligenceStats" :key="item.k">
+                <div class="telemetry-k">{{ item.k }}</div>
+                <div class="telemetry-v">{{ item.v }}</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="scene scene-props jp-reveal" id="props" ref="propsEl" :style="propsVars">
       <div class="scene-sticky">
         <div class="section-inner">
         <h2 class="section-title">Three things, done beautifully.</h2>
-        <p class="section-sub">Big typography, clean cards, and subtle motion &mdash; inspired by Apple-style product pages.</p>
+        <p class="section-sub">
+          Big typography, clean cards, and
+          <span class="glow-word">subtle motion</span>
+          &mdash; inspired by Apple-style product pages.
+        </p>
+        <div class="section-flair">
+          <span class="flair-chip">Plan</span>
+          <span class="flair-chip">Discover</span>
+          <span class="flair-chip">Share</span>
+          <span class="flair-chip">Personalize</span>
+        </div>
         <div class="props">
           <div class="prop card">
             <div class="prop-ic">01</div>
@@ -226,7 +318,15 @@
         <div class="section-inner">
         <div class="section-head">
           <h2 class="section-title">Made for your journey.</h2>
-          <p class="section-sub">A homepage that feels calm, premium, and alive.</p>
+          <p class="section-sub">
+            A homepage that feels calm, premium, and
+            <span class="glow-word">intelligently alive</span>.
+          </p>
+          <div class="section-flair">
+            <span class="flair-chip">Fast map flow</span>
+            <span class="flair-chip">Adaptive cards</span>
+            <span class="flair-chip">Context actions</span>
+          </div>
         </div>
 
         <div class="tiles-grid">
@@ -353,76 +453,104 @@
         <div class="section-inner">
           <div class="section-head">
             <h2 class="section-title">Scroll-driven details.</h2>
-            <p class="section-sub">Click a card &mdash; it flips to reveal what's underneath.</p>
+            <p class="section-sub">
+              Click a card &mdash; it flips to reveal what's underneath, with
+              <span class="glow-word">micro-interaction feedback</span>.
+            </p>
+            <div class="section-flair">
+              <span class="flair-chip">Click-to-flip</span>
+              <span class="flair-chip">Motion hierarchy</span>
+              <span class="flair-chip">Visual depth</span>
+            </div>
           </div>
 
-          <div class="showcase-grid">
-            <button
-              class="flip-card"
-              :class="{ flipped: showcaseFlip[0] }"
-              type="button"
-              :aria-pressed="showcaseFlip[0] ? 'true' : 'false'"
-              aria-label="Flip card: Recommendation and Signals"
-              @click="toggleShowcaseFlip(0)"
-            >
-              <div class="flip-inner">
-                <div class="flip-face front">
-                  <div class="flip-eyebrow">Recommendation</div>
-                  <div class="flip-title">Ordering, not filtering.</div>
-                  <div class="flip-desc">The slider changes the ranking of POIs &mdash; it won't hide categories.</div>
-                  <div class="flip-pills">
-                    <span class="pill">Distance</span>
-                    <span class="pill">Interest</span>
-                  </div>
+          <div class="showcase-shell card">
+            <div class="showcase-shell-head">
+              <div class="showcase-kpis">
+                <div class="showcase-kpi">
+                  <span class="k">Interaction</span>
+                  <span class="v">Click Flip</span>
                 </div>
-                <div class="flip-face back">
-                  <div class="flip-eyebrow">Signals</div>
-                  <div class="flip-title">Learn what you love.</div>
-                  <div class="flip-desc">Likes, favorites, and views contribute to a personal taste profile.</div>
-                  <div class="flip-pills">
-                    <span class="pill">Like</span>
-                    <span class="pill">Save</span>
-                    <span class="pill">View</span>
-                  </div>
+                <div class="showcase-kpi">
+                  <span class="k">Depth</span>
+                  <span class="v">Front / Back</span>
+                </div>
+                <div class="showcase-kpi">
+                  <span class="k">Feedback</span>
+                  <span class="v">Instant</span>
                 </div>
               </div>
-            </button>
+              <div class="showcase-lab-tag">Interaction Lab</div>
+            </div>
 
-            <button
-              class="flip-card"
-              :class="{ flipped: showcaseFlip[1] }"
-              type="button"
-              :aria-pressed="showcaseFlip[1] ? 'true' : 'false'"
-              aria-label="Flip card: Navigation and Community"
-              @click="toggleShowcaseFlip(1)"
-            >
-              <div class="flip-inner">
-                <div class="flip-face front">
-                  <div class="flip-eyebrow">Navigation</div>
-                  <div class="flip-title">Route-first UI.</div>
-                  <div class="flip-desc">Start / End / Via &mdash; then discover stops along the way.</div>
-                  <div class="flip-pills">
-                    <span class="pill">Start</span>
-                    <span class="pill">Via</span>
-                    <span class="pill">End</span>
+            <div class="showcase-grid">
+              <button
+                class="flip-card"
+                :class="{ flipped: showcaseFlip[0] }"
+                type="button"
+                :aria-pressed="showcaseFlip[0] ? 'true' : 'false'"
+                aria-label="Flip card: Recommendation and Signals"
+                @click="toggleShowcaseFlip(0)"
+              >
+                <div class="flip-inner">
+                  <div class="flip-face front">
+                    <div class="flip-eyebrow">Recommendation</div>
+                    <div class="flip-title">Ordering, not filtering.</div>
+                    <div class="flip-desc">The slider changes the ranking of POIs &mdash; it won't hide categories.</div>
+                    <div class="flip-pills">
+                      <span class="pill">Distance</span>
+                      <span class="pill">Interest</span>
+                    </div>
+                  </div>
+                  <div class="flip-face back">
+                    <div class="flip-eyebrow">Signals</div>
+                    <div class="flip-title">Learn what you love.</div>
+                    <div class="flip-desc">Likes, favorites, and views contribute to a personal taste profile.</div>
+                    <div class="flip-pills">
+                      <span class="pill">Like</span>
+                      <span class="pill">Save</span>
+                      <span class="pill">View</span>
+                    </div>
                   </div>
                 </div>
-                <div class="flip-face back">
-                  <div class="flip-eyebrow">Community</div>
-                  <div class="flip-title">Trips become stories.</div>
-                  <div class="flip-desc">Open a post and jump straight to the map location.</div>
-                  <div class="flip-pills">
-                    <span class="pill">Posts</span>
-                    <span class="pill">Photos</span>
-                    <span class="pill">Places</span>
+              </button>
+
+              <button
+                class="flip-card"
+                :class="{ flipped: showcaseFlip[1] }"
+                type="button"
+                :aria-pressed="showcaseFlip[1] ? 'true' : 'false'"
+                aria-label="Flip card: Navigation and Community"
+                @click="toggleShowcaseFlip(1)"
+              >
+                <div class="flip-inner">
+                  <div class="flip-face front">
+                    <div class="flip-eyebrow">Navigation</div>
+                    <div class="flip-title">Route-first UI.</div>
+                    <div class="flip-desc">Start / End / Via &mdash; then discover stops along the way.</div>
+                    <div class="flip-pills">
+                      <span class="pill">Start</span>
+                      <span class="pill">Via</span>
+                      <span class="pill">End</span>
+                    </div>
+                  </div>
+                  <div class="flip-face back">
+                    <div class="flip-eyebrow">Community</div>
+                    <div class="flip-title">Trips become stories.</div>
+                    <div class="flip-desc">Open a post and jump straight to the map location.</div>
+                    <div class="flip-pills">
+                      <span class="pill">Posts</span>
+                      <span class="pill">Photos</span>
+                      <span class="pill">Places</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </button>
-          </div>
+              </button>
+            </div>
 
-          <div class="showcase-note">
-            Tip: scroll still drives the scene; click drives the flip.
+            <div class="showcase-note">
+              Tip: scroll drives the scene, click drives the flip.
+            </div>
           </div>
         </div>
       </div>
@@ -432,7 +560,16 @@
       <div class="section-inner">
         <div class="section-head">
           <h2 class="section-title">From idea to itinerary.</h2>
-          <p class="section-sub">A simple workflow built into JourneyPro, from discovery to sharing.</p>
+          <p class="section-sub">
+            A simple workflow built into JourneyPro, from discovery to sharing with
+            <span class="glow-word">decision-ready guidance</span>.
+          </p>
+          <div class="section-flair">
+            <span class="flair-chip">Discover</span>
+            <span class="flair-chip">Plan</span>
+            <span class="flair-chip">Tune</span>
+            <span class="flair-chip">Share</span>
+          </div>
         </div>
 
         <div class="flow-grid">
@@ -463,8 +600,16 @@
     <section class="section spotlight jp-reveal" id="spotlight" ref="spotlightEl">
       <div class="section-inner">
         <div class="section-head">
-          <h2 class="section-title">Community spotlight.</h2>
-          <RouterLink class="link-more" to="/posts">Browse all &rarr;</RouterLink>
+          <div>
+            <h2 class="section-title">Community spotlight.</h2>
+            <p class="section-sub spotlight-sub">Curated posts with strong engagement and practical route value.</p>
+          </div>
+          <RouterLink class="link-more spotlight-link-more" to="/posts">Browse all &rarr;</RouterLink>
+        </div>
+        <div class="spotlight-toolbar">
+          <span class="spotlight-chip">Trending now</span>
+          <span class="spotlight-chip">Quality photos</span>
+          <span class="spotlight-chip">Route-linked stories</span>
         </div>
 
         <div v-if="spotlightError" class="spotlight-empty card">
@@ -473,16 +618,18 @@
         </div>
 
         <div v-else class="spotlight-rail" :class="{ loading: spotlightLoading }">
-          <div v-if="spotlightLoading" v-for="n in 6" :key="n" class="spotlight-card skeleton" />
+          <div v-if="spotlightLoading" v-for="n in 3" :key="n" class="spotlight-card skeleton" />
 
           <RouterLink
             v-else
-            v-for="p in spotlightPosts"
+            v-for="(p, idx) in spotlightTopPosts"
             :key="p.id"
             :to="`/posts/postsid=${p.id}`"
             class="spotlight-card link"
           >
             <div class="spotlight-cover" :class="{ empty: !coverOf(p) }">
+              <div class="spotlight-rank">#{{ idx + 1 }}</div>
+              <div class="spotlight-hot-tag">Hot</div>
               <CroppedImage v-if="coverOf(p)" :src="coverOf(p)" :alt="p.title" class="spotlight-img" />
               <div v-else class="spotlight-empty">No cover</div>
             </div>
@@ -506,6 +653,7 @@
                   {{ p.view_count || 0 }}
                 </span>
               </div>
+              <div class="spotlight-cta">Open story &rarr;</div>
             </div>
           </RouterLink>
         </div>
@@ -544,18 +692,53 @@
       <div class="section-inner">
         <div class="cta-card card">
           <div class="cta-copy">
-            <p class="eyebrow">Ready?</p>
+            <p class="eyebrow">Launch</p>
             <h2 class="section-title">Start your next trip.</h2>
-            <p class="section-sub">Map a route, tune recommendations, and collect places you'll love.</p>
-            <div class="hero-actions">
+            <p class="section-sub cta-sub">Map a route, tune recommendations, and collect places you'll love.</p>
+            <div class="cta-actions">
               <RouterLink class="btn primary" to="/map">Open Map</RouterLink>
               <RouterLink class="btn ghost" to="/posts">Community</RouterLink>
             </div>
+            <div class="cta-mini-kpis">
+              <div class="cta-mini-item">
+                <span class="k">Step 01</span>
+                <span class="v">Set route</span>
+              </div>
+              <div class="cta-mini-item">
+                <span class="k">Step 02</span>
+                <span class="v">Tune ranking</span>
+              </div>
+              <div class="cta-mini-item">
+                <span class="k">Step 03</span>
+                <span class="v">Save and share</span>
+              </div>
+            </div>
           </div>
           <div class="cta-media">
-            <div class="cta-chip">Live routing</div>
-            <div class="cta-chip">POI discovery</div>
-            <div class="cta-chip">Interest profile</div>
+            <div class="cta-panel">
+              <div class="cta-panel-head">Launch checklist</div>
+              <div class="cta-step">
+                <span class="dot"></span>
+                <span>Choose destination and route</span>
+              </div>
+              <div class="cta-step">
+                <span class="dot"></span>
+                <span>Adjust interest vs distance</span>
+              </div>
+              <div class="cta-step">
+                <span class="dot"></span>
+                <span>Review recommended stops</span>
+              </div>
+              <div class="cta-step">
+                <span class="dot"></span>
+                <span>Publish highlights to community</span>
+              </div>
+            </div>
+            <div class="cta-chip-row">
+              <div class="cta-chip">Live routing</div>
+              <div class="cta-chip">POI discovery</div>
+              <div class="cta-chip">Interest profile</div>
+            </div>
           </div>
         </div>
       </div>
@@ -595,6 +778,7 @@ const propsEl = ref(null)
 const tilesEl = ref(null)
 const showcaseEl = ref(null)
 const flowEl = ref(null)
+const intelEl = ref(null)
 const spotlightEl = ref(null)
 const faqEl = ref(null)
 const ctaEl = ref(null)
@@ -603,6 +787,7 @@ const heroProgress = ref(0)
 const propsProgress = ref(0)
 const tilesProgress = ref(0)
 const showcaseProgress = ref(0)
+const pageProgress = ref(0)
 
 let rafId = 0
 
@@ -610,6 +795,7 @@ const clamp = (n, min, max) => Math.min(Math.max(n, min), max)
 
 const navItems = [
   { key: 'hero', label: 'Overview' },
+  { key: 'intel', label: 'Intelligence' },
   { key: 'props', label: 'Pillars' },
   { key: 'explore', label: 'Explore' },
   { key: 'showcase', label: 'Showcase' },
@@ -619,6 +805,10 @@ const navItems = [
   { key: 'start', label: 'Start' },
 ]
 const activeAnchor = ref('hero')
+const activeNavIndex = computed(() => {
+  const idx = navItems.findIndex((item) => item.key === activeAnchor.value)
+  return idx < 0 ? 0 : idx
+})
 
 const heroVars = computed(() => ({
   '--hero-p': String(heroProgress.value),
@@ -652,6 +842,7 @@ const anchorElByKey = (key) => {
     explore: tilesEl,
     showcase: showcaseEl,
     flow: flowEl,
+    intel: intelEl,
     spotlight: spotlightEl,
     faq: faqEl,
     start: ctaEl,
@@ -673,18 +864,28 @@ const updateScrollProgress = () => {
   if (!page) return
 
   updateHeaderState(page.scrollTop)
+  const maxScroll = Math.max(1, page.scrollHeight - page.clientHeight)
+  pageProgress.value = clamp(page.scrollTop / maxScroll, 0, 1)
   heroProgress.value = progressFor(page, heroEl.value)
   propsProgress.value = progressFor(page, propsEl.value)
   tilesProgress.value = progressFor(page, tilesEl.value)
   showcaseProgress.value = progressFor(page, showcaseEl.value)
 
-  const cursor = page.scrollTop + page.clientHeight * 0.35
-  let current = 'hero'
-  for (const item of navItems) {
-    const el = anchorElByKey(item.key)
-    if (!el) continue
-    const top = topInPage(page, el)
-    if (cursor >= top) current = item.key
+  const cursor = page.scrollTop + page.clientHeight * 0.38
+  const anchors = navItems
+    .map((item) => {
+      const el = anchorElByKey(item.key)
+      return el ? { key: item.key, top: topInPage(page, el) } : null
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.top - b.top)
+
+  let current = anchors[0]?.key || 'hero'
+  for (let i = anchors.length - 1; i >= 0; i -= 1) {
+    if (cursor >= anchors[i].top - 14) {
+      current = anchors[i].key
+      break
+    }
   }
   activeAnchor.value = current
 }
@@ -705,6 +906,7 @@ const scrollToAnchor = (key) => {
   const page = pageEl.value
   const el = anchorElByKey(key)
   if (!page || !el) return
+  activeAnchor.value = key
   const top = topInPage(page, el)
   page.scrollTo({ top: Math.max(0, top - 12), behavior: 'smooth' })
 }
@@ -748,6 +950,14 @@ const toggleShowcaseFlip = (index) => {
 const spotlightLoading = ref(true)
 const spotlightError = ref('')
 const spotlightPosts = ref([])
+const spotlightTopPosts = computed(() => (Array.isArray(spotlightPosts.value) ? spotlightPosts.value.slice(0, 3) : []))
+
+const intelligenceStats = computed(() => [
+  { k: 'Ranking strategy', v: `Interest ${demoInterestPct.value}% / Distance ${demoDistancePct.value}%` },
+  { k: 'Community status', v: spotlightLoading.value ? 'Syncing posts...' : `${spotlightPosts.value.length} spotlight cards` },
+  { k: 'Profile mode', v: auth.user?.id ? 'Signed in & synced' : 'Guest (local fallback)' },
+  { k: 'Engine target', v: 'Low latency, route-first ranking' },
+])
 
 const coverOf = (post) => post?.cover_image || (Array.isArray(post?.images) ? post.images[0] : '')
 
@@ -823,30 +1033,36 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
 :global(body[data-theme='dark']) {
-  --jp-home-bg: radial-gradient(1200px 900px at 20% -10%, rgba(0, 113, 227, 0.24), transparent 60%),
-    radial-gradient(900px 700px at 90% 10%, rgba(255, 59, 48, 0.14), transparent 55%),
-    #050506;
+  --jp-home-bg: radial-gradient(1200px 900px at 14% -10%, rgba(0, 133, 255, 0.30), transparent 60%),
+    radial-gradient(900px 700px at 95% 8%, rgba(15, 216, 186, 0.18), transparent 56%),
+    linear-gradient(180deg, #04070d 0%, #05090f 45%, #04060a 100%);
   --jp-home-fg: #f5f5f7;
-  --jp-home-muted: rgba(245, 245, 247, 0.72);
-  --jp-surface: rgba(255, 255, 255, 0.06);
-  --jp-border: rgba(255, 255, 255, 0.12);
-  --jp-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
-  --jp-accent: #4da3ff;
-  --jp-accent-2: #a78bfa;
+  --jp-home-muted: rgba(230, 236, 247, 0.74);
+  --jp-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.05));
+  --jp-border: rgba(168, 204, 255, 0.24);
+  --jp-shadow: 0 30px 96px rgba(0, 0, 0, 0.58);
+  --jp-accent: #3ea7ff;
+  --jp-accent-2: #11d6b8;
+  --jp-grid-line: rgba(141, 177, 230, 0.14);
+  --jp-grid-glow: rgba(62, 167, 255, 0.24);
 }
 
 :global(body[data-theme='light']) {
-  --jp-home-bg: radial-gradient(1200px 900px at 18% -10%, rgba(0, 113, 227, 0.14), transparent 60%),
-    radial-gradient(900px 700px at 90% 8%, rgba(255, 45, 85, 0.08), transparent 55%),
-    #f5f5f7;
-  --jp-home-fg: #1d1d1f;
-  --jp-home-muted: rgba(29, 29, 31, 0.7);
-  --jp-surface: rgba(255, 255, 255, 0.72);
-  --jp-border: rgba(29, 29, 31, 0.10);
-  --jp-shadow: 0 24px 60px rgba(0, 0, 0, 0.14);
-  --jp-accent: #1677ff;
-  --jp-accent-2: #7c3aed;
+  --jp-home-bg: radial-gradient(1200px 900px at 16% -14%, rgba(60, 145, 255, 0.20), transparent 60%),
+    radial-gradient(900px 700px at 88% 4%, rgba(17, 214, 184, 0.14), transparent 54%),
+    linear-gradient(180deg, #eef4ff 0%, #f5f8ff 44%, #f4f7fb 100%);
+  --jp-home-fg: #141b2a;
+  --jp-home-muted: rgba(20, 27, 42, 0.70);
+  --jp-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.66));
+  --jp-border: rgba(49, 100, 170, 0.18);
+  --jp-shadow: 0 26px 64px rgba(36, 63, 99, 0.18);
+  --jp-accent: #0076ff;
+  --jp-accent-2: #09c8ad;
+  --jp-grid-line: rgba(26, 73, 139, 0.10);
+  --jp-grid-glow: rgba(9, 200, 173, 0.18);
 }
 
 .page {
@@ -855,85 +1071,219 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   background: var(--jp-home-bg);
   color: var(--jp-home-fg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  position: relative;
+}
+
+.page::before,
+.page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page::before {
+  background:
+    repeating-linear-gradient(90deg, var(--jp-grid-line) 0 1px, transparent 1px 86px),
+    repeating-linear-gradient(0deg, var(--jp-grid-line) 0 1px, transparent 1px 86px);
+  opacity: 0.30;
+}
+
+.page::after {
+  background:
+    radial-gradient(900px 340px at 20% 0%, var(--jp-grid-glow), transparent 70%),
+    radial-gradient(840px 280px at 88% 100%, rgba(17, 214, 184, 0.16), transparent 72%);
+  animation: jp-grid-drift 14s ease-in-out infinite alternate;
+}
+
+.page > * {
+  position: relative;
+  z-index: 1;
 }
 
 .side-nav {
   position: fixed;
-  left: 18px;
+  left: 10px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 90;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 10px 8px;
+  gap: 6px;
+  width: 178px;
+  padding: 10px 8px 10px 11px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 86%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--jp-surface) 94%, transparent), color-mix(in srgb, var(--jp-surface) 78%, transparent));
+  box-shadow: 0 20px 52px rgba(6, 18, 40, 0.34);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
   pointer-events: auto;
+  overflow: hidden;
+}
+
+.side-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(400px 130px at 10% -12%, color-mix(in srgb, var(--jp-accent) 26%, transparent), transparent 70%),
+    radial-gradient(320px 120px at 110% 120%, color-mix(in srgb, var(--jp-accent-2) 22%, transparent), transparent 74%);
+  opacity: 0.84;
+}
+
+.side-nav-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0 2px 7px 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--jp-border) 82%, transparent);
+}
+
+.side-nav-kicker {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--jp-home-muted) 88%, transparent);
+}
+
+.side-nav-track {
+  position: absolute;
+  left: 20px;
+  top: 52px;
+  bottom: 16px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--jp-border) 72%, transparent);
+  z-index: 0;
+}
+
+.side-nav-track-fill {
+  display: block;
+  width: 100%;
+  height: calc(var(--nav-progress, 0) * 100% + 8px);
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--jp-accent), var(--jp-accent-2));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--jp-accent) 48%, transparent);
+  transition: height 0.18s linear;
 }
 
 .side-nav-item {
   appearance: none;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
-  padding: 0;
-  display: flex;
+  padding: 8px 8px 8px 7px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
   cursor: pointer;
   text-align: left;
+  position: relative;
+  border-radius: 14px;
+  color: var(--jp-home-muted);
+  min-height: 36px;
+  z-index: 1;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
-.side-nav-dot {
-  width: 9px;
-  height: 9px;
+.side-nav-item::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 4px;
+  height: 0;
+  transform: translateY(-50%);
   border-radius: 999px;
-  background: rgba(127, 127, 127, 0.35);
-  border: 1px solid rgba(127, 127, 127, 0.22);
-  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  background: linear-gradient(180deg, var(--jp-accent), var(--jp-accent-2));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--jp-accent) 42%, transparent);
+  transition: height 0.2s ease;
 }
 
-.side-nav-text {
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 0.18s ease, transform 0.18s ease, color 0.18s ease, background 0.18s ease;
-  font-size: 12px;
+.side-nav-item-no {
+  width: 26px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 82%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 82%, transparent);
+  font-size: 10px;
   font-weight: 900;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--jp-home-muted) 84%, transparent);
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.side-nav-item-label {
+  font-size: 12px;
+  font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--jp-home-muted);
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
-  white-space: nowrap;
+  transition: color 0.18s ease;
 }
 
-.side-nav-item:hover .side-nav-text,
-.side-nav-item.active .side-nav-text {
+.side-nav-item-chevron {
+  font-size: 12px;
+  font-weight: 900;
+  color: color-mix(in srgb, var(--jp-home-muted) 80%, transparent);
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.18s ease, transform 0.18s ease, color 0.18s ease;
+}
+
+.side-nav-item:hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--jp-border) 90%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 78%, transparent);
+  box-shadow: 0 8px 18px rgba(7, 19, 42, 0.18);
+}
+
+.side-nav-item:hover .side-nav-item-label {
+  color: var(--jp-home-fg);
+}
+.side-nav-item:hover .side-nav-item-chevron {
   opacity: 1;
   transform: translateX(0);
 }
-.side-nav-item:hover .side-nav-text {
-  color: var(--jp-home-fg);
-  background: rgba(127, 127, 127, 0.12);
-  border-color: rgba(127, 127, 127, 0.18);
+
+.side-nav-item.active {
+  border-color: color-mix(in srgb, var(--jp-accent) 34%, var(--jp-border));
+  background: linear-gradient(135deg, rgba(62, 167, 255, 0.18), rgba(9, 200, 173, 0.12));
+  box-shadow: 0 10px 22px rgba(10, 35, 74, 0.26);
 }
-.side-nav-item.active .side-nav-text {
-  color: var(--jp-home-fg);
-  background: rgba(127, 127, 127, 0.14);
-  border-color: rgba(127, 127, 127, 0.22);
+.side-nav-item.active::before {
+  height: 24px;
 }
-.side-nav-item.active .side-nav-dot {
-  background: var(--jp-accent);
-  border-color: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 0 0 6px rgba(77, 163, 255, 0.14);
-  transform: scale(1.08);
+.side-nav-item.active .side-nav-item-no {
+  color: var(--jp-home-fg);
+  border-color: color-mix(in srgb, var(--jp-accent) 46%, transparent);
+  background: linear-gradient(135deg, rgba(62, 167, 255, 0.26), rgba(9, 200, 173, 0.18));
+}
+.side-nav-item.active .side-nav-item-label {
+  color: var(--jp-home-fg);
+}
+.side-nav-item.active .side-nav-item-chevron {
+  opacity: 1;
+  transform: translateX(0);
+  color: color-mix(in srgb, var(--jp-home-fg) 92%, transparent);
 }
 .side-nav-item:focus-visible {
   outline: 2px solid var(--jp-accent);
   outline-offset: 3px;
-  border-radius: 999px;
+  border-radius: 14px;
 }
 
 .page::-webkit-scrollbar {
@@ -966,10 +1316,11 @@ onBeforeUnmount(() => {
 .eyebrow {
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-weight: 700;
+  font-weight: 800;
   font-size: 12px;
   color: var(--jp-home-muted);
   margin: 0 0 12px;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
 }
 
 .hero {
@@ -1040,7 +1391,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
-  gap: 22px;
+  gap: 26px;
   align-items: center;
 }
 
@@ -1050,18 +1401,51 @@ onBeforeUnmount(() => {
   transition: transform 0.12s linear, opacity 0.12s linear;
 }
 
+.hero-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.hero-status-pill {
+  border-radius: 999px;
+  border: 1px solid var(--jp-border);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+  background: rgba(127, 127, 127, 0.12);
+  backdrop-filter: blur(12px) saturate(170%);
+}
+
+.hero-status-pill.online {
+  color: #e4fff9;
+  background: linear-gradient(135deg, rgba(0, 118, 255, 0.40), rgba(9, 200, 173, 0.30));
+  border-color: rgba(62, 167, 255, 0.54);
+  box-shadow: 0 0 0 4px rgba(0, 118, 255, 0.12);
+}
+:global(body[data-theme='light']) .hero-status-pill.online {
+  color: #104364;
+}
+
 .hero-title {
   font-size: clamp(44px, 6vw, 72px);
   line-height: 1.04;
   letter-spacing: -0.02em;
   margin: 0;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  text-wrap: balance;
 }
 .accent {
   color: var(--jp-accent);
+  text-shadow: 0 0 26px rgba(0, 118, 255, 0.30);
 }
 .hero-lede {
   margin: 14px 0 0;
-  max-width: 520px;
+  max-width: 560px;
   font-size: 16px;
   line-height: 1.65;
   color: var(--jp-home-muted);
@@ -1076,29 +1460,64 @@ onBeforeUnmount(() => {
 
 .btn {
   border-radius: 999px;
-  padding: 12px 16px;
-  font-weight: 700;
+  padding: 12px 17px;
+  font-weight: 800;
   font-size: 14px;
   text-decoration: none;
   border: 1px solid var(--jp-border);
   color: var(--jp-home-fg);
-  background: transparent;
-  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+  background: rgba(127, 127, 127, 0.08);
+  transition: transform 0.18s ease, background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  backdrop-filter: blur(12px) saturate(170%);
 }
 .btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 .btn.primary {
-  background: var(--jp-accent);
+  background: linear-gradient(135deg, var(--jp-accent), var(--jp-accent-2));
   border-color: transparent;
-  color: #fff;
+  color: #f5ffff;
 }
 :global(body[data-theme='dark']) .btn.primary {
-  color: #081018;
-  background: linear-gradient(135deg, var(--jp-accent), var(--jp-accent-2));
+  color: #0a1416;
 }
 .btn.ghost:hover {
-  background: rgba(127, 127, 127, 0.12);
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.hero-command {
+  margin-top: 14px;
+  width: fit-content;
+  max-width: min(580px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--jp-border);
+  border-radius: 14px;
+  padding: 9px 11px;
+  background: rgba(127, 127, 127, 0.10);
+  color: var(--jp-home-muted);
+  backdrop-filter: blur(12px) saturate(180%);
+}
+
+.cmd-key {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(62, 167, 255, 0.32), rgba(9, 200, 173, 0.26));
+  color: var(--jp-home-fg);
+  font-size: 13px;
+  font-weight: 900;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+}
+
+.cmd-text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .hero-metrics {
@@ -1109,13 +1528,14 @@ onBeforeUnmount(() => {
 }
 .metric {
   border-radius: 18px;
-  background: rgba(127, 127, 127, 0.08);
-  border: 1px solid rgba(127, 127, 127, 0.14);
+  background: linear-gradient(180deg, rgba(127, 127, 127, 0.16), rgba(127, 127, 127, 0.08));
+  border: 1px solid rgba(127, 127, 127, 0.22);
   padding: 12px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 :global(body[data-theme='light']) .metric {
-  background: rgba(255, 255, 255, 0.58);
-  border-color: rgba(29, 29, 31, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.68));
+  border-color: rgba(26, 73, 139, 0.14);
 }
 .metric .k {
   font-weight: 800;
@@ -1129,11 +1549,29 @@ onBeforeUnmount(() => {
 }
 
 .hero-media {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 16px;
   transform: translateY(calc(var(--p) * -24px)) scale(calc(0.94 + var(--p) * 0.06));
   transition: transform 0.12s linear;
+}
+
+.hero-orbit {
+  position: absolute;
+  top: 8px;
+  right: 20px;
+  width: 190px;
+  height: 190px;
+  border-radius: 999px;
+  border: 1px solid rgba(62, 167, 255, 0.28);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(62, 167, 255, 0.24), transparent 62%),
+    conic-gradient(from 180deg, rgba(62, 167, 255, 0.0), rgba(62, 167, 255, 0.56), rgba(9, 200, 173, 0.24), rgba(62, 167, 255, 0.0));
+  filter: blur(0.2px);
+  opacity: 0.8;
+  animation: jp-orbit 12s linear infinite;
+  pointer-events: none;
 }
 
 .device {
@@ -1352,6 +1790,34 @@ onBeforeUnmount(() => {
   }
 }
 
+@keyframes jp-grid-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, -22px, 0);
+  }
+}
+
+@keyframes jp-orbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes jp-chip-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
 .scene {
   position: relative;
   --p: var(--p, 0);
@@ -1426,7 +1892,7 @@ onBeforeUnmount(() => {
 }
 
 .section {
-  padding: 64px 22px;
+  padding: 72px 22px;
 }
 .section-inner {
   width: min(1160px, 100%);
@@ -1443,12 +1909,50 @@ onBeforeUnmount(() => {
   font-size: clamp(28px, 3.5vw, 44px);
   letter-spacing: -0.02em;
   margin: 0;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
 }
 .section-sub {
   margin: 10px 0 0;
   max-width: 720px;
   color: var(--jp-home-muted);
   line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 84%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 78%, transparent);
+  backdrop-filter: blur(10px) saturate(160%);
+}
+
+.section-flair {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flair-chip {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 92%, transparent);
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+  background: color-mix(in srgb, var(--jp-surface) 84%, transparent);
+  animation: jp-chip-float 3.4s ease-in-out infinite;
+}
+.flair-chip:nth-child(2n) {
+  animation-delay: 0.35s;
+}
+.flair-chip:nth-child(3n) {
+  animation-delay: 0.7s;
+}
+
+.glow-word {
+  color: var(--jp-home-fg);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--jp-accent) 38%, transparent);
+  font-weight: 800;
 }
 
 .props {
@@ -1462,7 +1966,24 @@ onBeforeUnmount(() => {
   background: var(--jp-surface);
   border: 1px solid var(--jp-border);
   backdrop-filter: blur(18px) saturate(180%);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.13);
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(500px 200px at -8% -4%, rgba(62, 167, 255, 0.26), transparent 70%),
+    radial-gradient(430px 190px at 108% 6%, rgba(9, 200, 173, 0.20), transparent 72%);
+  opacity: 0.68;
+}
+.card > * {
+  position: relative;
+  z-index: 1;
 }
 .prop {
   padding: 22px;
@@ -1510,8 +2031,8 @@ onBeforeUnmount(() => {
   border-radius: 32px;
   background: var(--jp-surface);
   border: 1px solid var(--jp-border);
-  backdrop-filter: blur(18px) saturate(180%);
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  backdrop-filter: blur(20px) saturate(190%);
+  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
 }
 .tile::before {
   content: '';
@@ -1525,9 +2046,9 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 .tile:hover {
-  transform: translateY(-3px);
-  border-color: rgba(127, 127, 127, 0.22);
-  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.14);
+  transform: translateY(-4px);
+  border-color: rgba(62, 167, 255, 0.34);
+  box-shadow: 0 24px 64px rgba(12, 44, 84, 0.22);
 }
 .tile:hover::before {
   opacity: 1;
@@ -1637,10 +2158,61 @@ onBeforeUnmount(() => {
 }
 
 .showcase-grid {
-  margin-top: 26px;
+  margin-top: 14px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+.showcase-shell {
+  margin-top: 18px;
+  padding: 14px;
+}
+.showcase-shell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.showcase-kpis {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.showcase-kpi {
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 88%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 84%, transparent);
+  padding: 8px 10px;
+  display: grid;
+  gap: 3px;
+  min-width: 110px;
+}
+.showcase-kpi .k {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+}
+.showcase-kpi .v {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+.showcase-lab-tag {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #eafcff;
+  background: linear-gradient(135deg, rgba(62, 167, 255, 0.6), rgba(9, 200, 173, 0.42));
+  border: 1px solid rgba(62, 167, 255, 0.4);
+}
+:global(body[data-theme='light']) .showcase-lab-tag {
+  color: #0f3f5f;
 }
 .flip-card {
   width: 100%;
@@ -1654,15 +2226,15 @@ onBeforeUnmount(() => {
   border-radius: 32px;
   background: var(--jp-surface);
   border: 1px solid var(--jp-border);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.16);
   perspective: 1200px;
   min-height: 280px;
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 .flip-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(127, 127, 127, 0.22);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.16);
+  border-color: rgba(62, 167, 255, 0.34);
+  box-shadow: 0 26px 66px rgba(12, 44, 84, 0.24);
 }
 .flip-card:active {
   transform: translateY(0);
@@ -1745,9 +2317,14 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .showcase-note {
-  margin-top: 18px;
+  margin-top: 14px;
   color: var(--jp-home-muted);
   font-size: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 84%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 78%, transparent);
+  padding: 10px 12px;
+  width: fit-content;
 }
 
 .link-more {
@@ -1756,43 +2333,112 @@ onBeforeUnmount(() => {
   font-weight: 900;
 }
 
+.spotlight-sub {
+  margin-top: 8px;
+}
+.spotlight {
+  --spotlight-gap: 14px;
+}
+.spotlight .section-inner {
+  width: min(1160px, 100%);
+}
+.spotlight-link-more {
+  align-self: center;
+}
+.spotlight-toolbar {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.spotlight-chip {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 88%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 82%, transparent);
+  color: var(--jp-home-muted);
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .spotlight-rail {
   margin-top: 18px;
-  display: flex;
-  gap: 14px;
-  overflow-x: auto;
-  padding-bottom: 10px;
-  scroll-snap-type: x mandatory;
-}
-.spotlight-rail::-webkit-scrollbar {
-  height: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spotlight-gap);
+  overflow: visible;
+  padding: 0;
 }
 .spotlight-card {
-  width: min(310px, 78vw);
-  flex: 0 0 auto;
-  scroll-snap-align: start;
+  width: auto;
+  min-width: 0;
   border-radius: 26px;
   background: var(--jp-surface);
   border: 1px solid var(--jp-border);
   overflow: hidden;
   text-decoration: none;
   color: inherit;
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 .spotlight-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.14);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.18);
+  border-color: rgba(62, 167, 255, 0.36);
 }
 .spotlight-cover {
+  position: relative;
   height: 168px;
   background: rgba(127, 127, 127, 0.12);
   display: grid;
   place-items: center;
+  overflow: hidden;
+}
+.spotlight-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.42));
+  pointer-events: none;
+}
+.spotlight-rank {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  background: rgba(8, 12, 20, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #f4f8ff;
+}
+.spotlight-hot-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #092e25;
+  background: linear-gradient(135deg, rgba(21, 228, 192, 0.92), rgba(114, 255, 227, 0.84));
+  border: 1px solid rgba(17, 214, 184, 0.68);
 }
 .spotlight-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: scale(1.01);
+  transition: transform 0.28s ease;
+}
+.spotlight-card:hover .spotlight-img {
+  transform: scale(1.05);
 }
 .spotlight-body {
   padding: 14px 14px 16px;
@@ -1822,9 +2468,20 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 80%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 80%, transparent);
+  padding: 5px 8px;
 }
 .stat-ic {
   font-size: 14px;
+}
+.spotlight-cta {
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--jp-accent);
+  letter-spacing: 0.02em;
 }
 .spotlight-empty {
   color: var(--jp-home-muted);
@@ -1862,6 +2519,140 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.smart-center {
+  padding-top: 76px;
+  padding-bottom: 76px;
+}
+.smart-grid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr 1fr;
+  gap: 12px;
+}
+.smart-card {
+  padding: 20px;
+  min-height: 280px;
+}
+.smart-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+}
+.smart-title {
+  margin: 10px 0 0;
+  font-size: clamp(18px, 2vw, 24px);
+  letter-spacing: -0.02em;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+}
+.smart-desc {
+  margin-top: 10px;
+  color: var(--jp-home-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.smart-ring-row {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.smart-ring {
+  --ring-p: 0.5;
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  padding: 10px;
+  background:
+    conic-gradient(from -90deg, var(--jp-accent) 0 calc(var(--ring-p) * 1turn), rgba(127, 127, 127, 0.22) calc(var(--ring-p) * 1turn) 1turn);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+.smart-ring-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background: color-mix(in srgb, var(--jp-home-bg) 64%, transparent);
+  border: 1px solid var(--jp-border);
+}
+.smart-ring-k {
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+.smart-ring-v {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--jp-home-muted);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.smart-ring-copy {
+  display: grid;
+  gap: 10px;
+}
+.smart-chip {
+  border-radius: 999px;
+  border: 1px solid var(--jp-border);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--jp-home-muted);
+  background: rgba(127, 127, 127, 0.10);
+}
+.smart-action-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+.smart-action-btn {
+  text-decoration: none;
+  color: var(--jp-home-fg);
+  border-radius: 14px;
+  border: 1px solid var(--jp-border);
+  padding: 12px 13px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: rgba(127, 127, 127, 0.10);
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.smart-action-btn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(62, 167, 255, 0.38);
+  background: linear-gradient(135deg, rgba(62, 167, 255, 0.16), rgba(9, 200, 173, 0.14));
+}
+.telemetry-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+.telemetry-item {
+  border-radius: 14px;
+  border: 1px solid var(--jp-border);
+  padding: 10px 11px;
+  background: rgba(127, 127, 127, 0.09);
+}
+.telemetry-k {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+}
+.telemetry-v {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
 .flow-card {
   padding: 18px;
   display: grid;
@@ -1931,16 +2722,83 @@ onBeforeUnmount(() => {
 }
 
 .cta-card {
-  padding: 28px;
+  padding: 30px;
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  gap: 16px;
+  gap: 22px;
   align-items: center;
 }
+.cta-sub {
+  margin-top: 10px;
+}
+.cta-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.cta-mini-kpis {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.cta-mini-item {
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 84%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 80%, transparent);
+  padding: 9px 10px;
+  min-width: 116px;
+  display: grid;
+  gap: 4px;
+}
+.cta-mini-item .k {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+}
+.cta-mini-item .v {
+  font-size: 12px;
+  font-weight: 900;
+}
 .cta-media {
+  display: grid;
+  gap: 12px;
+}
+.cta-panel {
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 90%, transparent);
+  background: color-mix(in srgb, var(--jp-surface) 84%, transparent);
+  padding: 12px 12px 10px;
+}
+.cta-panel-head {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--jp-home-muted);
+}
+.cta-step {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--jp-home-fg);
+}
+.cta-step .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--jp-accent), var(--jp-accent-2));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--jp-accent) 22%, transparent);
+}
+.cta-chip-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 10px;
 }
 .cta-chip {
@@ -1995,15 +2853,41 @@ onBeforeUnmount(() => {
   color: var(--jp-home-fg);
 }
 
+@media (max-width: 1240px) {
+  .smart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .smart-core {
+    grid-column: span 2;
+  }
+  .spotlight-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 980px) {
   .side-nav {
     display: none;
   }
+  .page::before,
+  .page::after {
+    opacity: 0.16;
+  }
   .hero-grid {
     grid-template-columns: 1fr;
   }
+  .hero-orbit {
+    display: none;
+  }
   .hero-copy {
     opacity: 1;
+  }
+  .hero-command {
+    width: 100%;
+  }
+  .section-sub {
+    padding: 8px 10px;
+    border-radius: 10px;
   }
   .hero-metrics {
     grid-template-columns: 1fr;
@@ -2032,14 +2916,40 @@ onBeforeUnmount(() => {
   .showcase-grid {
     grid-template-columns: 1fr;
   }
+  .showcase-shell {
+    padding: 12px;
+  }
+  .showcase-shell-head {
+    align-items: flex-start;
+  }
+  .showcase-kpis {
+    width: 100%;
+  }
+  .showcase-kpi {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
   .flow-grid {
+    grid-template-columns: 1fr;
+  }
+  .smart-grid {
     grid-template-columns: 1fr;
   }
   .cta-card {
     grid-template-columns: 1fr;
   }
   .cta-media {
-    justify-content: flex-start;
+    width: 100%;
+  }
+  .cta-mini-kpis {
+    width: 100%;
+  }
+  .cta-mini-item {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
+  .spotlight-rail {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2047,9 +2957,15 @@ onBeforeUnmount(() => {
   .jp-reveal {
     transition: none;
   }
+  .page::after,
+  .hero-orbit {
+    animation: none !important;
+  }
   .hero-bg-svg,
   .hero-copy,
   .hero-media,
+  .flair-chip,
+  .spotlight-img,
   .route,
   .mini-route,
   .scene-props .props,
