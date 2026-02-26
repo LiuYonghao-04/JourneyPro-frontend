@@ -211,7 +211,7 @@ const messageContainer = ref(null)
 const emojiVisible = ref(false)
 const searchKey = ref('')
 const searchResults = ref([])
-const latestCreatedAt = ref('')
+const latestCursor = ref({ ts: '', id: 0 })
 let es = null
 
 const NOTIFICATION_CACHE_PREFIX = 'jp_notifications_cache_v1_'
@@ -277,7 +277,14 @@ const toTime = (v) => {
 }
 
 const makeNotificationKey = (item = {}) =>
-  [item.type || 'unknown', item.actor_id || 0, item.post_id || 0, item.created_at || '', item.content || ''].join('::')
+  [
+    item.type || 'unknown',
+    item.source_id || 0,
+    item.actor_id || 0,
+    item.post_id || 0,
+    item.created_at || '',
+    item.content || '',
+  ].join('::')
 
 const getCacheKey = (userId) => `${NOTIFICATION_CACHE_PREFIX}${userId}`
 
@@ -321,8 +328,29 @@ const applyUnreadState = (list, stateRow) => {
   }))
 }
 
+const cursorFromTop = () => {
+  const top = items.value?.[0] || null
+  const id = Number(top?.source_id || 0)
+  return {
+    ts: top?.created_at || '',
+    id: Number.isFinite(id) && id > 0 ? id : 0,
+  }
+}
+
+const normalizeCursor = (raw) => {
+  const ts = String(raw?.ts || raw?.created_at || '').trim()
+  const id = Number(raw?.id || raw?.source_id || 0)
+  return {
+    ts,
+    id: Number.isFinite(id) && id > 0 ? id : 0,
+  }
+}
+
 const syncLatestCursor = () => {
-  latestCreatedAt.value = items.value[0]?.created_at || latestCreatedAt.value || ''
+  const top = cursorFromTop()
+  if (top.ts) {
+    latestCursor.value = top
+  }
 }
 
 const persistCache = () => {
@@ -335,7 +363,7 @@ const persistCache = () => {
       JSON.stringify({
         items: items.value.slice(0, MAX_ITEMS),
         state: state.value || null,
-        latest_created_at: latestCreatedAt.value || '',
+        latest_cursor: latestCursor.value || { ts: '', id: 0 },
         updated_at: new Date().toISOString(),
       })
     )
@@ -358,7 +386,8 @@ const hydrateCache = () => {
     }
     const cached = dedupeSortTrim(parsed.items)
     items.value = state.value ? applyUnreadState(cached, state.value) : cached
-    latestCreatedAt.value = parsed.latest_created_at || items.value[0]?.created_at || ''
+    const cachedCursor = normalizeCursor(parsed?.latest_cursor || {})
+    latestCursor.value = cachedCursor.ts ? cachedCursor : cursorFromTop()
     return items.value.length > 0
   } catch {
     return false
@@ -368,7 +397,7 @@ const hydrateCache = () => {
 const resetNotificationState = () => {
   items.value = []
   state.value = null
-  latestCreatedAt.value = ''
+  latestCursor.value = { ts: '', id: 0 }
   conversations.value = []
   chatMessages.value = []
   activePeerId.value = null
@@ -376,13 +405,14 @@ const resetNotificationState = () => {
 
 const fetchData = async ({ incremental = true, forceFull = false } = {}) => {
   if (!auth.user?.id) return
-  const useDelta = incremental && !forceFull && !!latestCreatedAt.value
+  const useDelta = incremental && !forceFull && !!latestCursor.value?.ts
   const params = {
     user_id: auth.user.id,
     limit: useDelta ? DELTA_LIMIT : BASE_LIMIT,
   }
   if (useDelta) {
-    params.since = latestCreatedAt.value
+    params.since_ts = latestCursor.value.ts
+    params.since_id = latestCursor.value.id || 0
   }
   try {
     const res = await axios.get(API_BASE, { params })
@@ -392,7 +422,12 @@ const fetchData = async ({ incremental = true, forceFull = false } = {}) => {
     if (state.value) {
       items.value = applyUnreadState(items.value, state.value)
     }
-    latestCreatedAt.value = res.data?.cursor || items.value[0]?.created_at || latestCreatedAt.value || ''
+    const responseCursor = normalizeCursor(res.data?.latest_cursor || {})
+    if (responseCursor.ts) {
+      latestCursor.value = responseCursor
+    } else {
+      syncLatestCursor()
+    }
     persistCache()
   } catch {
     // keep cache/in-memory data on request failures
@@ -438,7 +473,9 @@ const markRead = async (type = 'all') => {
     if (type === 'chat' || type === 'all') {
       conversations.value = (conversations.value || []).map((c) => ({ ...c, unreadCount: 0 }))
     }
-    if (type === 'all') {
+    if (state.value) {
+      items.value = applyUnreadState(items.value, state.value)
+    } else if (type === 'all') {
       items.value = items.value.map((it) => ({ ...it, unread: false }))
     } else if (type !== 'chat') {
       items.value = items.value.map((it) => (it.type === type ? { ...it, unread: false } : it))
@@ -465,7 +502,8 @@ const setupStream = () => {
         handleIncomingChat(data)
         return
       }
-      items.value = dedupeSortTrim([{ ...data, unread: true }, ...items.value])
+      const unread = state.value ? isUnreadByState(data, state.value) : true
+      items.value = dedupeSortTrim([{ ...data, unread }, ...items.value])
       syncLatestCursor()
       persistCache()
     } catch {

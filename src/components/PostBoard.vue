@@ -260,7 +260,7 @@ const noMore = ref(false)
 const sentinel = ref(null)
 const observer = ref(null)
 const imageObserver = ref(null)
-const limit = 16
+const limit = 12
 const offset = ref(0)
 const cursor = ref(null)
 const onlyPoi = ref(false)
@@ -308,6 +308,7 @@ const fetchPosts = async (reset = false) => {
       sort: sort.value,
       compact: 1,
       lite: 1,
+      feed_lite: 1,
       tag: activeTagParam.value || undefined,
       poi_id: poiFilterId.value || undefined,
       viewer_id: auth.user?.id || undefined,

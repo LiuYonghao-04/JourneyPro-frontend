@@ -1011,7 +1011,7 @@ const fetchSpotlight = async () => {
   }
   try {
     const res = await axios.get(API_POSTS, {
-      params: { limit: 6, offset: 0, sort: 'hot', compact: 1, lite: 1 },
+      params: { limit: 6, offset: 0, sort: 'hot', compact: 1, lite: 1, feed_lite: 1 },
     })
     spotlightPosts.value = res.data?.data || []
     writeSpotlightCache(spotlightPosts.value)

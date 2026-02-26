@@ -392,6 +392,7 @@ const listParams = (extra = {}) => ({
   limit: PERSON_POST_LIMIT,
   compact: 1,
   lite: 1,
+  feed_lite: 1,
   viewer_id: auth.user?.id || undefined,
   ...extra,
 })
