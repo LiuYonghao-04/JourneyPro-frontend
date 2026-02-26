@@ -220,11 +220,12 @@ import ImageCropperDialog from '../components/ImageCropperDialog.vue'
 import CroppedImage from '../components/CroppedImage.vue'
 import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
 import { proxiedImageSrc } from '../utils/imageProxy'
+import { apiUrl } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
-const TAG_API = 'http://localhost:3001/api/posts/tags/list'
-const POI_API = 'http://localhost:3001/api/poi/search'
-const UPLOAD_API = 'http://localhost:3001/api/upload/image'
+const API_BASE = apiUrl('/api/posts')
+const TAG_API = apiUrl('/api/posts/tags/list')
+const POI_API = apiUrl('/api/poi/search')
+const UPLOAD_API = apiUrl('/api/upload/image')
 const STORAGE_KEY = 'jp_publish_draft_v2'
 
 const auth = useAuthStore()

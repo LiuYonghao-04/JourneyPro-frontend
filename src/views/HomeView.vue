@@ -767,10 +767,11 @@ import axios from 'axios'
 import { CircleCheck, Star, View } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from '../components/CroppedImage.vue'
+import { apiUrl } from '../config/api'
 
 const auth = useAuthStore()
 
-const API_POSTS = 'http://localhost:3001/api/posts'
+const API_POSTS = apiUrl('/api/posts')
 const SPOTLIGHT_CACHE_KEY = 'jp_home_spotlight_v1'
 const SPOTLIGHT_CACHE_TTL_MS = 3 * 60 * 1000
 

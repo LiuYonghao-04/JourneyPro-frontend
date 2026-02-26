@@ -284,6 +284,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRouteStore } from '../store/routeStore'
+import { apiUrl } from '../config/api'
 
 const router = useRouter()
 const routeStore = useRouteStore()
@@ -299,9 +300,9 @@ const panelStyle = computed(() => ({
 }))
 let themeObserver = null
 
-const POI_NEARBY_API = 'http://localhost:3001/api/poi/nearby'
-const POSTS_API = 'http://localhost:3001/api/posts'
-const ROUTE_WITH_POI_API = 'http://localhost:3001/api/route/with-poi'
+const POI_NEARBY_API = apiUrl('/api/poi/nearby')
+const POSTS_API = apiUrl('/api/posts')
+const ROUTE_WITH_POI_API = apiUrl('/api/route/with-poi')
 
 const shareMessage = ref('')
 let shareTimer = null

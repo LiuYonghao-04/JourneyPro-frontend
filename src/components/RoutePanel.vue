@@ -6,6 +6,7 @@ import { geocode } from '../utils/geocode'
 import axios from 'axios'
 import logoLight from '../assets/logo.png'
 import logoDark from '../assets/logo_dark.png'
+import { apiUrl } from '../config/api'
 
 const routeStore = useRouteStore()
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
@@ -17,7 +18,7 @@ const isCollapsed = computed(() => panelMode.value === 'collapsed')
 const viewportHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
-const POI_API = 'http://localhost:3001/api/poi/search'
+const POI_API = apiUrl('/api/poi/search')
 const VIA_STORAGE_KEY = 'jp_via_points'
 const EDGE_OFFSET = 10
 const COLLAPSED_HEIGHT = 56

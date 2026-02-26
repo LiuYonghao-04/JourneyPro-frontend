@@ -189,9 +189,10 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from '../components/CroppedImage.vue'
+import { apiUrl } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/notifications'
-const CHAT_BASE = 'http://localhost:3001/api/chat'
+const API_BASE = apiUrl('/api/notifications')
+const CHAT_BASE = apiUrl('/api/chat')
 
 const auth = useAuthStore()
 const route = useRoute()

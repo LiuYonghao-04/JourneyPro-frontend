@@ -242,8 +242,9 @@ import {
 import { useAuthStore } from '../store/authStore'
 import CroppedImage from './CroppedImage.vue'
 import { proxiedImageSrc } from '../utils/imageProxy'
+import { apiUrl } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
+const API_BASE = apiUrl('/api/posts')
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()

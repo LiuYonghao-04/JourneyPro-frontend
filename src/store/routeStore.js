@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import L from 'leaflet'
 import { useAuthStore } from './authStore'
+import { apiUrl } from '../config/api'
 
 const STORAGE_KEY = 'jp_via_points'
 const RECO_WEIGHT_KEY = 'jp_reco_interest_weight'
@@ -8,7 +9,7 @@ const RECO_EXPLORE_WEIGHT_KEY = 'jp_reco_explore_weight'
 const RECO_MODE_KEY = 'jp_reco_mode'
 const RECO_DEBUG_KEY = 'jp_reco_debug'
 const RECO_SESSION_KEY = 'jp_reco_session_id'
-const POI_API_BASE = 'http://localhost:3001/api/poi'
+const POI_API_BASE = apiUrl('/api/poi')
 const SAVED_POI_KEY = 'jp_saved_pois'
 const RECENT_POI_KEY = 'jp_recent_pois'
 const MAX_RECENT_POIS = 12
@@ -423,7 +424,7 @@ export const useRouteStore = defineStore('route', {
       if (!Number.isFinite(uid) || !uid) return
 
       try {
-        const url = `http://localhost:3001/api/recommendation/settings?user_id=${uid}`
+        const url = `${apiUrl('/api/recommendation/settings')}?user_id=${uid}`
         const res = await fetch(url)
         const data = await res.json()
         if (!res.ok || !data?.success) return
@@ -454,7 +455,7 @@ export const useRouteStore = defineStore('route', {
       if (!auth.user?.id || Number(auth.user.id) !== uid) return
 
       try {
-        await fetch('http://localhost:3001/api/recommendation/settings', {
+        await fetch(apiUrl('/api/recommendation/settings'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -585,7 +586,7 @@ export const useRouteStore = defineStore('route', {
       const payload = this.buildRecoEventPayload(eventType, poi, extras)
       if (!payload.poi_id) return
       try {
-        await fetch('http://localhost:3001/api/recommendation/events', {
+        await fetch(apiUrl('/api/recommendation/events'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -607,7 +608,7 @@ export const useRouteStore = defineStore('route', {
         .filter((event) => !!event.poi_id)
       if (!events.length) return
       try {
-        await fetch('http://localhost:3001/api/recommendation/events', {
+        await fetch(apiUrl('/api/recommendation/events'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -630,7 +631,7 @@ export const useRouteStore = defineStore('route', {
 
       this.interestProfileLoading = true
       try {
-        const url = `http://localhost:3001/api/recommendation/profile?user_id=${uid}`
+        const url = `${apiUrl('/api/recommendation/profile')}?user_id=${uid}`
         const res = await fetch(url)
         const data = await res.json()
         if (!res.ok || !data?.success) {
@@ -665,7 +666,7 @@ export const useRouteStore = defineStore('route', {
         params.set('debug', this.recoDebugEnabled ? '1' : '0')
         params.set('session_id', this.recoSessionId)
         params.set('force_v2', '1')
-        const url = `http://localhost:3001/api/route/recommend?${params.toString()}`
+        const url = `${apiUrl('/api/route/recommend')}?${params.toString()}`
 
         const res = await fetch(url)
         const data = await res.json()

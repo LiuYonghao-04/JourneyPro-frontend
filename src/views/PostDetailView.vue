@@ -242,10 +242,11 @@ import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import CroppedImage from '../components/CroppedImage.vue'
+import { apiUrl } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
-const FOLLOW_API = 'http://localhost:3001/api/follow'
-const POI_API = 'http://localhost:3001/api/poi'
+const API_BASE = apiUrl('/api/posts')
+const FOLLOW_API = apiUrl('/api/follow')
+const POI_API = apiUrl('/api/poi')
 
 const route = useRoute()
 const router = useRouter()

@@ -1,4 +1,6 @@
-const UPLOAD_HOST = 'http://localhost:3001'
+import { API_ORIGIN } from '../config/api'
+
+const UPLOAD_HOST = API_ORIGIN
 const PROXY_ENDPOINT = `${UPLOAD_HOST}/api/upload/proxy`
 
 export const proxiedImageSrc = (rawUrl) => {

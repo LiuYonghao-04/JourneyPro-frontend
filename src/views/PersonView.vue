@@ -228,10 +228,11 @@ import ImageCropperDialog from '../components/ImageCropperDialog.vue'
 import CroppedImage from '../components/CroppedImage.vue'
 import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
 import { proxiedImageSrc } from '../utils/imageProxy'
+import { apiUrl } from '../config/api'
 
-const API_BASE = 'http://localhost:3001/api/posts'
-const FOLLOW_API = 'http://localhost:3001/api/follow'
-const AUTH_API = 'http://localhost:3001/api/auth'
+const API_BASE = apiUrl('/api/posts')
+const FOLLOW_API = apiUrl('/api/follow')
+const AUTH_API = apiUrl('/api/auth')
 const PERSON_POST_LIMIT = 80
 const PERSON_REACTION_TAB_LIMIT = 40
 const PERSON_CACHE_PREFIX = 'jp_person_cache_v3_'
