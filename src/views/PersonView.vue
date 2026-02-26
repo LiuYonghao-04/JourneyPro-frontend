@@ -29,11 +29,11 @@
             </div>
             <div class="kpi-card">
               <span>Favorites</span>
-              <strong>{{ isSelf ? favs.length : 0 }}</strong>
+              <strong>{{ isSelf ? favTotal : 0 }}</strong>
             </div>
             <div class="kpi-card">
               <span>Likes</span>
-              <strong>{{ isSelf ? likes.length : 0 }}</strong>
+              <strong>{{ isSelf ? likeTotal : 0 }}</strong>
             </div>
             <div class="kpi-card">
               <span>Visible</span>
@@ -63,44 +63,65 @@
         </article>
 
         <article class="panel">
-          <h3>Interest Profile</h3>
+          <div class="panel-head">
+            <h3>Interest Profile</h3>
+            <button
+              v-if="interestProfile?.personalized"
+              class="collapse-btn"
+              type="button"
+              @click="interestCollapsed = !interestCollapsed"
+            >
+              {{ interestCollapsed ? 'Expand' : 'Collapse' }}
+            </button>
+          </div>
           <div v-if="interestLoading" class="muted">Loading profile...</div>
           <template v-else-if="!interestProfile?.personalized">
             <div class="muted">Interact with posts to generate preference profile.</div>
           </template>
           <template v-else>
-            <div class="bar-grid">
-              <div class="bar-block" v-for="item in interestTags" :key="`tag-${item.name}`">
+            <div v-if="interestCollapsed" class="bar-grid">
+              <div class="bar-block" v-for="item in collapsedInterestItems" :key="item.key">
                 <div class="bar-head">
-                  <span>#{{ item.name }}</span>
+                  <span>{{ item.label }}</span>
                   <span>{{ item.percent }}%</span>
                 </div>
                 <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
               </div>
-              <div class="bar-block" v-if="otherTagPercent > 0">
-                <div class="bar-head">
-                  <span>Other tags</span>
-                  <span>{{ otherTagPercent }}%</span>
-                </div>
-                <el-progress :percentage="otherTagPercent" :stroke-width="8" :show-text="false" />
-              </div>
             </div>
-            <div class="bar-grid">
-              <div class="bar-block" v-for="item in interestCategories" :key="`cat-${item.name}`">
-                <div class="bar-head">
-                  <span>{{ item.name }}</span>
-                  <span>{{ item.percent }}%</span>
+            <template v-else>
+              <div class="bar-grid">
+                <div class="bar-block" v-for="item in interestTags" :key="`tag-${item.name}`">
+                  <div class="bar-head">
+                    <span>#{{ item.name }}</span>
+                    <span>{{ item.percent }}%</span>
+                  </div>
+                  <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
                 </div>
-                <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
-              </div>
-              <div class="bar-block" v-if="otherCategoryPercent > 0">
-                <div class="bar-head">
-                  <span>Other categories</span>
-                  <span>{{ otherCategoryPercent }}%</span>
+                <div class="bar-block" v-if="otherTagPercent > 0">
+                  <div class="bar-head">
+                    <span>Other tags</span>
+                    <span>{{ otherTagPercent }}%</span>
+                  </div>
+                  <el-progress :percentage="otherTagPercent" :stroke-width="8" :show-text="false" />
                 </div>
-                <el-progress :percentage="otherCategoryPercent" :stroke-width="8" :show-text="false" />
               </div>
-            </div>
+              <div class="bar-grid">
+                <div class="bar-block" v-for="item in interestCategories" :key="`cat-${item.name}`">
+                  <div class="bar-head">
+                    <span>{{ item.name }}</span>
+                    <span>{{ item.percent }}%</span>
+                  </div>
+                  <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
+                </div>
+                <div class="bar-block" v-if="otherCategoryPercent > 0">
+                  <div class="bar-head">
+                    <span>Other categories</span>
+                    <span>{{ otherCategoryPercent }}%</span>
+                  </div>
+                  <el-progress :percentage="otherCategoryPercent" :stroke-width="8" :show-text="false" />
+                </div>
+              </div>
+            </template>
           </template>
         </article>
       </section>
@@ -211,6 +232,10 @@ import { proxiedImageSrc } from '../utils/imageProxy'
 const API_BASE = 'http://localhost:3001/api/posts'
 const FOLLOW_API = 'http://localhost:3001/api/follow'
 const AUTH_API = 'http://localhost:3001/api/auth'
+const PERSON_POST_LIMIT = 80
+const PERSON_REACTION_TAB_LIMIT = 40
+const PERSON_CACHE_PREFIX = 'jp_person_cache_v3_'
+const PERSON_INTEREST_COLLAPSE_PREFIX = 'jp_person_interest_collapsed_v1_'
 
 const route = useRoute()
 const router = useRouter()
@@ -224,7 +249,13 @@ const posts = ref([])
 const favs = ref([])
 const likes = ref([])
 const followers = ref([])
+const followerCountValue = ref(0)
 const profile = ref(null)
+const reactionSummary = ref({ liked_ids: [], favorited_ids: [] })
+const favsLoaded = ref(false)
+const likesLoaded = ref(false)
+const requestSeq = ref(0)
+
 const tab = ref('posts')
 const sort = ref('new')
 const search = ref('')
@@ -237,39 +268,228 @@ const avatarCropOpen = ref(false)
 const avatarCropSrc = ref('')
 const avatarCropInitial = ref(null)
 const avatarCropBaseUrl = ref('')
+const interestCollapsed = ref(true)
 
-const fetchData = async () => {
-  const uid = userId.value
-  if (!uid) return
-  const [p, f, l] = await Promise.all([
-    axios.get(API_BASE, { params: { user_id: uid, limit: 150 } }).then((r) => r.data?.data || []),
-    axios.get(API_BASE, { params: { favorited_by: uid, limit: 150 } }).then((r) => r.data?.data || []),
-    axios.get(API_BASE, { params: { liked_by: uid, limit: 150 } }).then((r) => r.data?.data || []),
-  ])
-  const likedSet = new Set(l.map((i) => i.id))
-  const favSet = new Set(f.map((i) => i.id))
-  posts.value = p.map((item) => ({ ...item, _fav: favSet.has(item.id), _liked: likedSet.has(item.id) }))
-  favs.value = f.map((item) => ({ ...item, _fav: true }))
-  likes.value = l.map((item) => ({ ...item, _liked: true }))
-  await fetchFollowers()
+const toUid = (raw) => {
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? n : 0
 }
 
-const fetchFollowers = async () => {
-  const uid = userId.value
+const currentUid = () => toUid(userId.value)
+const cacheKey = (uid) => `${PERSON_CACHE_PREFIX}${uid}`
+const interestCollapseKey = (uid) => `${PERSON_INTEREST_COLLAPSE_PREFIX}${uid || 'guest'}`
+
+const hydrateInterestCollapsed = (uid) => {
+  if (typeof window === 'undefined') return
+  interestCollapsed.value = true
+  try {
+    const raw = localStorage.getItem(interestCollapseKey(uid))
+    if (raw === null) return
+    interestCollapsed.value = raw === '1'
+  } catch {
+    interestCollapsed.value = true
+  }
+}
+
+const persistInterestCollapsed = (uid, collapsed) => {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(interestCollapseKey(uid), collapsed ? '1' : '0')
+  } catch {
+    // ignore storage failures
+  }
+}
+
+const normalizeList = (list) => {
+  const map = new Map()
+  ;(list || []).forEach((item) => {
+    const id = toUid(item?.id)
+    if (!id) return
+    map.set(id, { ...item, id })
+  })
+  return Array.from(map.values()).slice(0, PERSON_POST_LIMIT)
+}
+
+const applyReactionFlags = (list) => {
+  const likedSet = new Set((reactionSummary.value?.liked_ids || []).map((v) => Number(v)))
+  const favSet = new Set((reactionSummary.value?.favorited_ids || []).map((v) => Number(v)))
+  return (list || []).map((item) => ({
+    ...item,
+    _liked: !!item?._liked || likedSet.has(Number(item.id)),
+    _fav: !!item?._fav || favSet.has(Number(item.id)),
+  }))
+}
+
+const persistCache = () => {
+  if (typeof window === 'undefined') return
+  const uid = currentUid()
+  if (!uid) return
+  try {
+    localStorage.setItem(
+      cacheKey(uid),
+      JSON.stringify({
+        profile: profile.value || null,
+        posts: normalizeList(posts.value),
+        favs: favsLoaded.value ? normalizeList(favs.value) : [],
+        likes: likesLoaded.value ? normalizeList(likes.value) : [],
+        follower_count: Number(followerCountValue.value || 0),
+        reaction_summary: {
+          liked_ids: (reactionSummary.value?.liked_ids || []).slice(0, 4000),
+          favorited_ids: (reactionSummary.value?.favorited_ids || []).slice(0, 4000),
+        },
+        favs_loaded: !!favsLoaded.value,
+        likes_loaded: !!likesLoaded.value,
+        updated_at: Date.now(),
+      })
+    )
+  } catch {
+    // ignore cache failures
+  }
+}
+
+const hydrateCache = (uid) => {
+  if (typeof window === 'undefined' || !uid) return false
+  try {
+    const raw = localStorage.getItem(cacheKey(uid))
+    if (!raw) return false
+    const parsed = JSON.parse(raw)
+    if (parsed?.profile) profile.value = parsed.profile
+    posts.value = normalizeList(parsed?.posts || [])
+    favs.value = normalizeList(parsed?.favs || [])
+    likes.value = normalizeList(parsed?.likes || [])
+    followerCountValue.value = Number(parsed?.follower_count || 0)
+    reactionSummary.value = {
+      liked_ids: Array.isArray(parsed?.reaction_summary?.liked_ids) ? parsed.reaction_summary.liked_ids : [],
+      favorited_ids: Array.isArray(parsed?.reaction_summary?.favorited_ids)
+        ? parsed.reaction_summary.favorited_ids
+        : [],
+    }
+    favsLoaded.value = !!parsed?.favs_loaded
+    likesLoaded.value = !!parsed?.likes_loaded
+    posts.value = applyReactionFlags(posts.value)
+    favs.value = applyReactionFlags(favs.value)
+    likes.value = applyReactionFlags(likes.value)
+    return posts.value.length > 0 || !!profile.value
+  } catch {
+    return false
+  }
+}
+
+const resetState = () => {
+  posts.value = []
+  favs.value = []
+  likes.value = []
+  followers.value = []
+  followerCountValue.value = 0
+  profile.value = null
+  reactionSummary.value = { liked_ids: [], favorited_ids: [] }
+  favsLoaded.value = false
+  likesLoaded.value = false
+}
+
+const listParams = (extra = {}) => ({
+  limit: PERSON_POST_LIMIT,
+  compact: 1,
+  lite: 1,
+  viewer_id: auth.user?.id || undefined,
+  ...extra,
+})
+
+const fetchPostList = async (extra = {}) => {
+  const res = await axios.get(API_BASE, { params: listParams(extra) })
+  return normalizeList(res.data?.data || [])
+}
+
+const fetchOwnPosts = async (uid) => {
+  try {
+    const list = await fetchPostList({ user_id: uid })
+    posts.value = applyReactionFlags(list)
+  } catch {
+    posts.value = []
+  }
+  persistCache()
+}
+
+const ensureFavsLoaded = async (uid, force = false) => {
+  if (!isSelf.value || !uid) return
+  if (favsLoaded.value && !force) return
+  try {
+    const list = await fetchPostList({ favorited_by: uid, limit: PERSON_REACTION_TAB_LIMIT })
+    favs.value = list.map((item) => ({ ...item, _fav: true }))
+    favsLoaded.value = true
+  } catch {
+    favs.value = []
+  }
+  favs.value = applyReactionFlags(favs.value)
+  persistCache()
+}
+
+const ensureLikesLoaded = async (uid, force = false) => {
+  if (!isSelf.value || !uid) return
+  if (likesLoaded.value && !force) return
+  try {
+    const list = await fetchPostList({ liked_by: uid, limit: PERSON_REACTION_TAB_LIMIT })
+    likes.value = list.map((item) => ({ ...item, _liked: true }))
+    likesLoaded.value = true
+  } catch {
+    likes.value = []
+  }
+  likes.value = applyReactionFlags(likes.value)
+  persistCache()
+}
+
+const fetchReactionSummary = async (uid) => {
+  if (!isSelf.value || !uid) return
+  try {
+    const res = await axios.get(`${API_BASE}/reactions/summary`, { params: { user_id: uid, limit: 4000 } })
+    reactionSummary.value = {
+      liked_ids: Array.isArray(res.data?.data?.liked_ids) ? res.data.data.liked_ids : [],
+      favorited_ids: Array.isArray(res.data?.data?.favorited_ids) ? res.data.data.favorited_ids : [],
+    }
+    posts.value = applyReactionFlags(posts.value)
+    favs.value = applyReactionFlags(favs.value)
+    likes.value = applyReactionFlags(likes.value)
+  } catch {
+    reactionSummary.value = { liked_ids: [], favorited_ids: [] }
+  }
+  persistCache()
+}
+
+const fetchFollowerCount = async (uid) => {
   if (!uid) {
-    followers.value = []
+    followerCountValue.value = 0
     return
   }
   try {
-    const res = await axios.get(`${FOLLOW_API}/followers`, { params: { target_id: uid } })
+    const res = await axios.get(`${FOLLOW_API}/followers`, {
+      params: { target_id: uid, count_only: 1 },
+    })
+    followerCountValue.value = Number(res.data?.count || 0)
+  } catch {
+    followerCountValue.value = followers.value.length || 0
+  }
+  persistCache()
+}
+
+const fetchFollowers = async (uid, force = false) => {
+  if (!uid) {
+    followers.value = []
+    followerCountValue.value = 0
+    return
+  }
+  if (followers.value.length && !force) return
+  try {
+    const res = await axios.get(`${FOLLOW_API}/followers`, {
+      params: { target_id: uid, limit: 200 },
+    })
     followers.value = res.data?.data || []
+    followerCountValue.value = Number(res.data?.count || followers.value.length || 0)
   } catch {
     followers.value = []
   }
 }
 
-const fetchProfile = async () => {
-  const uid = userId.value
+const fetchProfile = async (uid) => {
   if (!uid) {
     profile.value = null
     return
@@ -278,8 +498,34 @@ const fetchProfile = async () => {
     const res = await axios.get(`${AUTH_API}/user`, { params: { id: uid } })
     profile.value = res.data?.user || null
   } catch {
-    profile.value = null
+    if (!profile.value) profile.value = null
   }
+  persistCache()
+}
+
+const refreshPage = async ({ useCache = true } = {}) => {
+  const uid = currentUid()
+  if (!uid) return
+  const reqId = ++requestSeq.value
+  if (useCache) hydrateCache(uid)
+
+  await Promise.all([fetchProfile(uid), fetchFollowerCount(uid), fetchOwnPosts(uid)])
+  if (reqId !== requestSeq.value) return
+
+  if (!isSelf.value) {
+    tab.value = 'posts'
+    favs.value = []
+    likes.value = []
+    reactionSummary.value = { liked_ids: [], favorited_ids: [] }
+    favsLoaded.value = false
+    likesLoaded.value = false
+    return
+  }
+
+  fetchReactionSummary(uid)
+  if (tab.value === 'favs') ensureFavsLoaded(uid)
+  if (tab.value === 'likes') ensureLikesLoaded(uid)
+  if (auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
 }
 
 const currentList = computed(() => {
@@ -301,7 +547,17 @@ const filteredList = computed(() => {
   return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 })
 
-const followerCount = computed(() => followers.value.length)
+const followerCount = computed(() => Number(followerCountValue.value || followers.value.length || 0))
+const likeTotal = computed(() => {
+  if (!isSelf.value) return 0
+  const summaryCount = Number(reactionSummary.value?.liked_ids?.length || 0)
+  return summaryCount || likes.value.length
+})
+const favTotal = computed(() => {
+  if (!isSelf.value) return 0
+  const summaryCount = Number(reactionSummary.value?.favorited_ids?.length || 0)
+  return summaryCount || favs.value.length
+})
 const displayUserName = computed(() => profile.value?.nickname || auth.user?.nickname || 'Traveler')
 const displayAvatar = computed(() => profile.value?.avatar_url || auth.user?.avatar_url || 'https://placehold.co/120x120')
 
@@ -334,9 +590,28 @@ const interestTags = computed(() => interestProfile.value?.tags?.items || [])
 const otherTagPercent = computed(() => Number(interestProfile.value?.tags?.other_percent) || 0)
 const interestCategories = computed(() => interestProfile.value?.categories?.items || [])
 const otherCategoryPercent = computed(() => Number(interestProfile.value?.categories?.other_percent) || 0)
+const collapsedInterestItems = computed(() => {
+  const tagItems = (interestTags.value || []).map((item) => ({
+    key: `tag-${item.name}`,
+    label: `#${item.name}`,
+    percent: Number(item.percent) || 0,
+  }))
+  const categoryItems = (interestCategories.value || []).map((item) => ({
+    key: `cat-${item.name}`,
+    label: String(item.name || ''),
+    percent: Number(item.percent) || 0,
+  }))
+  return [...tagItems, ...categoryItems]
+    .sort((a, b) => b.percent - a.percent)
+    .slice(0, 3)
+})
 
 const goDetail = (id) => router.push(`/posts/postsid=${id}`)
-const openFollowers = () => (followerDialog.value = true)
+const openFollowers = async () => {
+  if (!isSelf.value) return
+  followerDialog.value = true
+  await fetchFollowers(currentUid())
+}
 
 const openAvatarDialog = () => {
   if (!isSelf.value) return
@@ -367,6 +642,7 @@ const persistAvatarUrl = async (finalUrl) => {
     if (updated) {
       profile.value = updated
       auth.setUser(updated)
+      persistCache()
       return true
     }
   } catch {
@@ -388,17 +664,33 @@ const onAvatarCropConfirm = async (crop) => {
 }
 
 onMounted(() => {
-  fetchData()
-  fetchProfile()
-  if (auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
+  const uid = currentUid()
+  hydrateInterestCollapsed(uid)
+  if (uid) {
+    hydrateCache(uid)
+    refreshPage({ useCache: false })
+  }
 })
 
 watch(
-  () => route.query.userid,
-  () => {
-    fetchData()
-    fetchProfile()
-    if (isSelf.value && auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
+  () => userId.value,
+  (next, prev) => {
+    if (String(next || '') !== String(prev || '')) resetState()
+    const uid = currentUid()
+    hydrateInterestCollapsed(uid)
+    if (!uid) return
+    hydrateCache(uid)
+    refreshPage({ useCache: false })
+  }
+)
+
+watch(
+  () => tab.value,
+  (next) => {
+    const uid = currentUid()
+    if (!uid || !isSelf.value) return
+    if (next === 'favs') ensureFavsLoaded(uid)
+    if (next === 'likes') ensureLikesLoaded(uid)
   }
 )
 
@@ -414,6 +706,13 @@ watch(
   () => viewMode.value,
   (mode) => {
     localStorage.setItem('jp_person_view_mode', mode)
+  }
+)
+
+watch(
+  () => interestCollapsed.value,
+  (collapsed) => {
+    persistInterestCollapsed(currentUid(), collapsed)
   }
 )
 
@@ -583,6 +882,32 @@ watch(
 
 .panel h3 {
   margin: 0 0 8px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-head h3 {
+  margin: 0;
+}
+
+.collapse-btn {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+  color: var(--fg);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.collapse-btn:hover {
+  border-color: #4f8cff;
 }
 
 .slider-wrap {

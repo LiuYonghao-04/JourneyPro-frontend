@@ -261,8 +261,7 @@ const observer = ref(null)
 const imageObserver = ref(null)
 const limit = 16
 const offset = ref(0)
-const likedIds = ref(new Set())
-const favIds = ref(new Set())
+const cursor = ref(null)
 const onlyPoi = ref(false)
 const minLikes = ref(0)
 const viewMode = ref(localStorage.getItem('jp_post_view_mode') || 'masonry')
@@ -272,42 +271,14 @@ const poiFilterId = computed(() => {
   return Number.isFinite(num) && num > 0 ? num : null
 })
 const activeTagParam = computed(() => (activeTab.value === 'Recommended' ? '' : activeTab.value))
+const isCursorSort = computed(() => sort.value === 'latest')
 
 const markWithReactions = (list) =>
   list.map((item) => ({
     ...item,
-    _liked: likedIds.value.has(item.id),
-    _fav: favIds.value.has(item.id),
+    _liked: !!item?._liked,
+    _fav: !!item?._fav,
   }))
-
-const syncReactionsToPosts = () => {
-  posts.value = posts.value.map((item) => ({
-    ...item,
-    _liked: likedIds.value.has(item.id),
-    _fav: favIds.value.has(item.id),
-  }))
-}
-
-const loadReactions = async () => {
-  if (!auth.user) {
-    likedIds.value = new Set()
-    favIds.value = new Set()
-    syncReactionsToPosts()
-    return
-  }
-  try {
-    const res = await axios.get(`${API_BASE}/reactions/summary`, {
-      params: { user_id: auth.user.id, limit: 2000 },
-    })
-    likedIds.value = new Set((res.data?.data?.liked_ids || []).map((id) => Number(id)).filter(Boolean))
-    favIds.value = new Set((res.data?.data?.favorited_ids || []).map((id) => Number(id)).filter(Boolean))
-    syncReactionsToPosts()
-  } catch {
-    likedIds.value = new Set()
-    favIds.value = new Set()
-    syncReactionsToPosts()
-  }
-}
 
 const fetchTags = async () => {
   try {
@@ -328,24 +299,39 @@ const fetchPosts = async (reset = false) => {
       loadedMap.value = {}
       visibleImageIds.value = new Set()
       offset.value = 0
+      cursor.value = null
       noMore.value = false
-      loadReactions()
     }
-    const res = await axios.get(API_BASE, {
-      params: {
-        limit,
-        offset: offset.value,
-        sort: sort.value,
-        compact: 1,
-        lite: 1,
-        tag: activeTagParam.value || undefined,
-        poi_id: poiFilterId.value || undefined,
-      },
-    })
+    const params = {
+      limit,
+      sort: sort.value,
+      compact: 1,
+      lite: 1,
+      tag: activeTagParam.value || undefined,
+      poi_id: poiFilterId.value || undefined,
+      viewer_id: auth.user?.id || undefined,
+    }
+    if (isCursorSort.value) {
+      if (cursor.value?.created_at && cursor.value?.id) {
+        params.cursor_created_at = cursor.value.created_at
+        params.cursor_id = cursor.value.id
+      }
+    } else {
+      params.offset = offset.value
+    }
+    const res = await axios.get(API_BASE, { params })
     const list = markWithReactions(res.data?.data || [])
     if (list.length < limit) noMore.value = true
     posts.value = reset ? list : [...posts.value, ...list]
-    offset.value += list.length
+    if (isCursorSort.value) {
+      cursor.value = res.data?.next_cursor || null
+      if (!cursor.value && list.length >= limit) {
+        const last = list[list.length - 1]
+        cursor.value = last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
+      }
+    } else {
+      offset.value += list.length
+    }
     await nextTick()
     refreshImageObservers()
   } catch {
@@ -361,8 +347,6 @@ const toggleLike = async (card) => {
     const updated = res.data?.data
     if (!updated) return
     const liked = !!res.data?.liked
-    if (liked) likedIds.value.add(card.id)
-    else likedIds.value.delete(card.id)
     replacePost({ ...updated, _liked: liked, _fav: card._fav })
   } catch {
     // ignore
@@ -375,8 +359,6 @@ const toggleFav = async (card) => {
     const updated = res.data?.data
     const favored = !!res.data?.favorited
     if (!updated) return
-    if (favored) favIds.value.add(card.id)
-    else favIds.value.delete(card.id)
     replacePost({ ...updated, _fav: favored, _liked: card._liked })
   } catch {
     // ignore
@@ -391,8 +373,8 @@ const toFeedImageUrl = (raw) => {
   const url = String(raw || '').trim()
   if (!url) return ''
   const resized = url
-    .replace(/loremflickr\.com\/1280\/864\//i, 'loremflickr.com/480/320/')
-    .replace(/loremflickr\.com\/640\/432\//i, 'loremflickr.com/480/320/')
+    .replace(/loremflickr\.com\/1280\/864\//i, 'loremflickr.com/360/240/')
+    .replace(/loremflickr\.com\/640\/432\//i, 'loremflickr.com/360/240/')
   return proxiedImageSrc(resized)
 }
 
@@ -568,7 +550,7 @@ const setupInfiniteScroll = () => {
         }
       })
     },
-    { root: contentEl.value || null, threshold: 0.01, rootMargin: '900px 0px' }
+    { root: contentEl.value || null, threshold: 0.01, rootMargin: '280px 0px' }
   )
   if (sentinel.value) observer.value.observe(sentinel.value)
 }
@@ -585,7 +567,7 @@ const setupImageObserver = () => {
         }
       })
     },
-    { root: contentEl.value || null, threshold: 0.01, rootMargin: '280px 0px' }
+    { root: contentEl.value || null, threshold: 0.01, rootMargin: '100px 0px' }
   )
   refreshImageObservers()
 }
@@ -620,6 +602,12 @@ watch(
   () => viewMode.value,
   (mode) => {
     localStorage.setItem('jp_post_view_mode', mode)
+  }
+)
+watch(
+  () => auth.user?.id,
+  () => {
+    fetchPosts(true)
   }
 )
 

@@ -771,6 +771,8 @@ import CroppedImage from '../components/CroppedImage.vue'
 const auth = useAuthStore()
 
 const API_POSTS = 'http://localhost:3001/api/posts'
+const SPOTLIGHT_CACHE_KEY = 'jp_home_spotlight_v1'
+const SPOTLIGHT_CACHE_TTL_MS = 3 * 60 * 1000
 
 const pageEl = ref(null)
 const heroEl = ref(null)
@@ -961,6 +963,34 @@ const intelligenceStats = computed(() => [
 
 const coverOf = (post) => post?.cover_image || (Array.isArray(post?.images) ? post.images[0] : '')
 
+const readSpotlightCache = () => {
+  try {
+    const raw = sessionStorage.getItem(SPOTLIGHT_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const ts = Number(parsed?.ts || 0)
+    if (!Number.isFinite(ts) || Date.now() - ts > SPOTLIGHT_CACHE_TTL_MS) return null
+    if (!Array.isArray(parsed?.data)) return null
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+const writeSpotlightCache = (list) => {
+  try {
+    sessionStorage.setItem(
+      SPOTLIGHT_CACHE_KEY,
+      JSON.stringify({
+        ts: Date.now(),
+        data: Array.isArray(list) ? list : [],
+      })
+    )
+  } catch {
+    // ignore cache failures
+  }
+}
+
 const formatShortDate = (ts) => {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ''
@@ -973,11 +1003,19 @@ const formatShortDate = (ts) => {
 const fetchSpotlight = async () => {
   spotlightLoading.value = true
   spotlightError.value = ''
+  const cached = readSpotlightCache()
+  if (cached && cached.length) {
+    spotlightPosts.value = cached
+    spotlightLoading.value = false
+  }
   try {
-    const res = await axios.get(API_POSTS, { params: { limit: 6, offset: 0, sort: 'hot' } })
+    const res = await axios.get(API_POSTS, {
+      params: { limit: 6, offset: 0, sort: 'hot', compact: 1, lite: 1 },
+    })
     spotlightPosts.value = res.data?.data || []
+    writeSpotlightCache(spotlightPosts.value)
   } catch (e) {
-    spotlightError.value = 'offline'
+    if (!cached || !cached.length) spotlightError.value = 'offline'
   } finally {
     spotlightLoading.value = false
   }
