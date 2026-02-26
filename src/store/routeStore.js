@@ -9,6 +9,8 @@ const RECO_EXPLORE_WEIGHT_KEY = 'jp_reco_explore_weight'
 const RECO_MODE_KEY = 'jp_reco_mode'
 const RECO_DEBUG_KEY = 'jp_reco_debug'
 const RECO_SESSION_KEY = 'jp_reco_session_id'
+const INTEREST_PROFILE_CACHE_PREFIX = 'jp_interest_profile_v1_'
+const INTEREST_PROFILE_TTL_MS = 30 * 60 * 1000
 const POI_API_BASE = apiUrl('/api/poi')
 const SAVED_POI_KEY = 'jp_saved_pois'
 const RECENT_POI_KEY = 'jp_recent_pois'
@@ -175,6 +177,44 @@ function saveRecentPois(list) {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(RECENT_POI_KEY, JSON.stringify(list))
+  } catch (e) {
+    // ignore
+  }
+}
+
+function interestProfileCacheKey(userId) {
+  return `${INTEREST_PROFILE_CACHE_PREFIX}${userId}`
+}
+
+function loadInterestProfileCache(userId) {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(interestProfileCacheKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || !parsed.data) return null
+    const updatedAt = Number(parsed.updated_at || 0)
+    const ageMs = Date.now() - updatedAt
+    return {
+      data: parsed.data,
+      stale: !Number.isFinite(updatedAt) || ageMs > INTEREST_PROFILE_TTL_MS,
+      ageMs: Number.isFinite(ageMs) ? ageMs : Number.MAX_SAFE_INTEGER,
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+function saveInterestProfileCache(userId, data) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(
+      interestProfileCacheKey(userId),
+      JSON.stringify({
+        updated_at: Date.now(),
+        data,
+      })
+    )
   } catch (e) {
     // ignore
   }
@@ -629,18 +669,27 @@ export const useRouteStore = defineStore('route', {
         return
       }
 
+      const cached = loadInterestProfileCache(uid)
+      if (cached?.data) {
+        this.userInterestProfile = cached.data
+      }
+      if (cached?.data && !cached.stale) {
+        return
+      }
+
       this.interestProfileLoading = true
       try {
         const url = `${apiUrl('/api/recommendation/profile')}?user_id=${uid}`
         const res = await fetch(url)
         const data = await res.json()
         if (!res.ok || !data?.success) {
-          this.userInterestProfile = null
+          if (!cached?.data) this.userInterestProfile = null
           return
         }
         this.userInterestProfile = data
+        saveInterestProfileCache(uid, data)
       } catch (e) {
-        this.userInterestProfile = null
+        if (!cached?.data) this.userInterestProfile = null
       } finally {
         this.interestProfileLoading = false
       }

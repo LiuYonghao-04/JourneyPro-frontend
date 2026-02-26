@@ -88,6 +88,11 @@
             </div>
           </article>
           <div v-if="filteredItems.length === 0" class="empty">No notifications in this category.</div>
+          <div v-if="filteredItems.length > 0" class="load-more-row">
+            <el-button size="small" plain :loading="loadingOlder" :disabled="loadingOlder || !hasMoreOlder" @click="loadOlder">
+              {{ hasMoreOlder ? 'Load older' : 'No more notifications' }}
+            </el-button>
+          </div>
         </section>
 
         <section v-else class="chat">
@@ -212,6 +217,9 @@ const emojiVisible = ref(false)
 const searchKey = ref('')
 const searchResults = ref([])
 const latestCursor = ref({ ts: '', id: 0 })
+const olderCursor = ref({ ts: '', id: 0 })
+const loadingOlder = ref(false)
+const hasMoreOlder = ref(true)
 let es = null
 
 const NOTIFICATION_CACHE_PREFIX = 'jp_notifications_cache_v1_'
@@ -337,6 +345,16 @@ const cursorFromTop = () => {
   }
 }
 
+const cursorFromBottom = (list = null) => {
+  const source = Array.isArray(list) ? list : items.value
+  const bottom = source?.[source.length - 1] || null
+  const id = Number(bottom?.source_id || 0)
+  return {
+    ts: bottom?.created_at || '',
+    id: Number.isFinite(id) && id > 0 ? id : 0,
+  }
+}
+
 const normalizeCursor = (raw) => {
   const ts = String(raw?.ts || raw?.created_at || '').trim()
   const id = Number(raw?.id || raw?.source_id || 0)
@@ -364,6 +382,8 @@ const persistCache = () => {
         items: items.value.slice(0, MAX_ITEMS),
         state: state.value || null,
         latest_cursor: latestCursor.value || { ts: '', id: 0 },
+        older_cursor: olderCursor.value || { ts: '', id: 0 },
+        has_more_older: hasMoreOlder.value,
         updated_at: new Date().toISOString(),
       })
     )
@@ -388,6 +408,9 @@ const hydrateCache = () => {
     items.value = state.value ? applyUnreadState(cached, state.value) : cached
     const cachedCursor = normalizeCursor(parsed?.latest_cursor || {})
     latestCursor.value = cachedCursor.ts ? cachedCursor : cursorFromTop()
+    const cachedOlder = normalizeCursor(parsed?.older_cursor || {})
+    olderCursor.value = cachedOlder.ts ? cachedOlder : { ...latestCursor.value }
+    hasMoreOlder.value = Boolean(parsed?.has_more_older ?? true)
     return items.value.length > 0
   } catch {
     return false
@@ -398,6 +421,9 @@ const resetNotificationState = () => {
   items.value = []
   state.value = null
   latestCursor.value = { ts: '', id: 0 }
+  olderCursor.value = { ts: '', id: 0 }
+  loadingOlder.value = false
+  hasMoreOlder.value = true
   conversations.value = []
   chatMessages.value = []
   activePeerId.value = null
@@ -428,9 +454,44 @@ const fetchData = async ({ incremental = true, forceFull = false } = {}) => {
     } else {
       syncLatestCursor()
     }
+    const next = normalizeCursor(res.data?.next_cursor || {})
+    olderCursor.value = next.ts ? next : cursorFromBottom()
+    hasMoreOlder.value = Boolean(res.data?.has_more ?? false)
     persistCache()
   } catch {
     // keep cache/in-memory data on request failures
+  }
+}
+
+const loadOlder = async () => {
+  if (!auth.user?.id || loadingOlder.value || !hasMoreOlder.value || !olderCursor.value?.ts) return
+  loadingOlder.value = true
+  try {
+    const params = {
+      user_id: auth.user.id,
+      limit: BASE_LIMIT,
+      before_ts: olderCursor.value.ts,
+      before_id: olderCursor.value.id || 0,
+    }
+    if (activeType.value !== 'all' && activeType.value !== 'chat') {
+      params.type = activeType.value
+    }
+    const res = await axios.get(API_BASE, { params })
+    const incoming = Array.isArray(res.data?.data) ? res.data.data : []
+    if (incoming.length) {
+      items.value = dedupeSortTrim([...items.value, ...incoming])
+      if (state.value) {
+        items.value = applyUnreadState(items.value, state.value)
+      }
+    }
+    const next = normalizeCursor(res.data?.next_cursor || {})
+    olderCursor.value = next.ts ? next : olderCursor.value
+    hasMoreOlder.value = Boolean(res.data?.has_more ?? false)
+    persistCache()
+  } catch {
+    // ignore
+  } finally {
+    loadingOlder.value = false
   }
 }
 
@@ -726,7 +787,12 @@ watch(
   (val) => {
     activeType.value = val || 'all'
     if (activeType.value === 'chat') fetchConversations()
-    if (activeType.value !== 'chat') hydrateTypeIfNeeded(activeType.value)
+    if (activeType.value !== 'chat') {
+      hydrateTypeIfNeeded(activeType.value)
+      const visible = activeType.value === 'all' ? items.value : items.value.filter((it) => it.type === activeType.value)
+      olderCursor.value = cursorFromBottom(visible)
+      hasMoreOlder.value = true
+    }
   },
   { immediate: true }
 )
@@ -992,6 +1058,12 @@ watch(
   text-align: center;
   color: var(--muted);
   padding: 14px;
+}
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
 }
 
 .chat {
