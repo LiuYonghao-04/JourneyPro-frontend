@@ -213,6 +213,35 @@
       </div>
     </section>
 
+    <section class="section home-video jp-reveal" id="video" ref="videoEl">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">JourneyPro in motion.</h2>
+          <p class="section-sub">A quick product reel for the route-first recommendation experience.</p>
+          <div class="section-flair">
+            <span class="flair-chip">MP4 showreel</span>
+            <span class="flair-chip">Route + POI flow</span>
+            <span class="flair-chip">Homepage feature</span>
+          </div>
+        </div>
+
+        <div class="video-shell card">
+          <video
+            ref="videoPlayerEl"
+            class="video-player"
+            src="/mv.mp4"
+            controls
+            playsinline
+            preload="metadata"
+            @loadedmetadata="onVideoLoadedMeta"
+            loop
+          >
+            Sorry, your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+    </section>
+
     <section class="section smart-center jp-reveal" id="intel" ref="intelEl">
       <div class="section-inner">
         <div class="section-head">
@@ -777,6 +806,8 @@ const SPOTLIGHT_CACHE_TTL_MS = 3 * 60 * 1000
 
 const pageEl = ref(null)
 const heroEl = ref(null)
+const videoEl = ref(null)
+const videoPlayerEl = ref(null)
 const propsEl = ref(null)
 const tilesEl = ref(null)
 const showcaseEl = ref(null)
@@ -798,6 +829,7 @@ const clamp = (n, min, max) => Math.min(Math.max(n, min), max)
 
 const navItems = [
   { key: 'hero', label: 'Overview' },
+  { key: 'video', label: 'Motion' },
   { key: 'intel', label: 'Intelligence' },
   { key: 'props', label: 'Pillars' },
   { key: 'explore', label: 'Explore' },
@@ -841,6 +873,7 @@ const topInPage = (page, el) => {
 const anchorElByKey = (key) => {
   const map = {
     hero: heroEl,
+    video: videoEl,
     props: propsEl,
     explore: tilesEl,
     showcase: showcaseEl,
@@ -964,6 +997,38 @@ const intelligenceStats = computed(() => [
 
 const coverOf = (post) => post?.cover_image || (Array.isArray(post?.images) ? post.images[0] : '')
 
+const applyVideoDefaults = () => {
+  const video = videoPlayerEl.value
+  if (!video) return
+  video.volume = 0.3
+  video.muted = false
+}
+
+const syncVideoPlayback = (shouldPlay) => {
+  const video = videoPlayerEl.value
+  if (!video) return
+  if (shouldPlay) {
+    video.volume = 0.3
+    video.muted = false
+    const playPromise = video.play?.()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        // Fallback for autoplay policies: play muted when sound autoplay is blocked.
+        video.muted = true
+        const mutedPlay = video.play?.()
+        if (mutedPlay && typeof mutedPlay.catch === 'function') mutedPlay.catch(() => {})
+      })
+    }
+    return
+  }
+  if (!video.paused) video.pause()
+}
+
+const onVideoLoadedMeta = () => {
+  applyVideoDefaults()
+  syncVideoPlayback(activeAnchor.value === 'video')
+}
+
 const readSpotlightCache = () => {
   try {
     const raw = sessionStorage.getItem(SPOTLIGHT_CACHE_KEY)
@@ -1023,6 +1088,7 @@ const fetchSpotlight = async () => {
 }
 
 let sectionObserver = null
+let videoSectionObserver = null
 let motionQuery = null
 let motionListener = null
 const reduceMotion = ref(false)
@@ -1050,6 +1116,21 @@ onMounted(() => {
   )
   revealEls.forEach((el) => sectionObserver.observe(el))
 
+  applyVideoDefaults()
+  if (pageEl.value && videoEl.value) {
+    videoSectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          syncVideoPlayback(entry.isIntersecting)
+        })
+      },
+      { root: pageEl.value, threshold: 0.2 }
+    )
+    videoSectionObserver.observe(videoEl.value)
+  } else {
+    syncVideoPlayback(activeAnchor.value === 'video')
+  }
+
   fetchSpotlight()
   scheduleUpdate()
   window.addEventListener('resize', scheduleUpdate)
@@ -1060,6 +1141,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleUpdate)
   sectionObserver?.disconnect()
   sectionObserver = null
+  videoSectionObserver?.disconnect()
+  videoSectionObserver = null
   if (motionQuery && motionListener) {
     motionQuery.removeEventListener?.('change', motionListener)
     motionQuery.removeListener?.(motionListener)
@@ -2558,6 +2641,24 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.home-video {
+  padding-top: 76px;
+  padding-bottom: 64px;
+}
+.video-shell {
+  margin-top: 22px;
+  padding: 12px;
+  border-radius: 32px;
+}
+.video-player {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 22px;
+  background: #05070b;
+  border: 1px solid color-mix(in srgb, var(--jp-border) 88%, transparent);
+}
 .smart-center {
   padding-top: 76px;
   padding-bottom: 76px;
@@ -2954,6 +3055,13 @@ onBeforeUnmount(() => {
   }
   .showcase-grid {
     grid-template-columns: 1fr;
+  }
+  .video-shell {
+    padding: 10px;
+    border-radius: 24px;
+  }
+  .video-player {
+    border-radius: 16px;
   }
   .showcase-shell {
     padding: 12px;
