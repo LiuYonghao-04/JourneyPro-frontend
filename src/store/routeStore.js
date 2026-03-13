@@ -413,6 +413,32 @@ export const useRouteStore = defineStore('route', {
       saveViaPoints(this.viaPoints)
     },
 
+    replaceViaPoints(list) {
+      const source = Array.isArray(list) ? list : []
+      const dedupe = new Set()
+      const next = []
+      source.forEach((poi) => {
+        if (!poi || typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+        const key =
+          poi.id !== undefined && poi.id !== null && poi.id !== ''
+            ? `id:${poi.id}`
+            : `ll:${poi.lat.toFixed(6)},${poi.lng.toFixed(6)}`
+        if (dedupe.has(key)) return
+        dedupe.add(key)
+        next.push({
+          id: poi.id ?? null,
+          name: poi.name || 'POI',
+          lat: Number(poi.lat),
+          lng: Number(poi.lng),
+          category: poi.category || '',
+          image_url: poi.image_url || '',
+        })
+      })
+      this.viaPoints = next
+      saveViaPoints(this.viaPoints)
+      this.applyWaypointsToControl()
+    },
+
     setRecoInterestWeight(weight) {
       const num = Number(weight)
       if (!Number.isFinite(num)) return

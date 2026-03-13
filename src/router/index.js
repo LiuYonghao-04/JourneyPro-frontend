@@ -11,6 +11,7 @@ const LoginView = () => import('../views/LoginView.vue')
 const NotificationView = () => import('../views/NotificationView.vue')
 const PrivacyView = () => import('../views/PrivacyView.vue')
 const FastUxView = () => import('../views/FastUxView.vue')
+const AIPlannerView = () => import('../views/AIPlannerView.vue')
 
 const routes = [
     {
@@ -26,6 +27,11 @@ const routes = [
         path: '/map',
         name: 'map',
         component: MapView,
+    },
+    {
+        path: '/ai-planner',
+        name: 'ai-planner',
+        component: AIPlannerView,
     },
     {
         path: '/posts',

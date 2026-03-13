@@ -7,6 +7,7 @@
       <nav class="jp-nav">
         <RouterLink to="/home" class="jp-nav-link">Home</RouterLink>
         <RouterLink to="/map" class="jp-nav-link">Map</RouterLink>
+        <RouterLink to="/ai-planner" class="jp-nav-link">AI Planner</RouterLink>
         <RouterLink
           to="/posts"
           :class="['jp-nav-link', { 'jp-active': isPostsActive, 'router-link-active': isPostsActive }]"
