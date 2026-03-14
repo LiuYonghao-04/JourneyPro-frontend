@@ -9,7 +9,6 @@
         </div>
         <div class="head-meta">
           <span class="meta-badge">{{ latestStageLabel }}</span>
-          <span class="meta-sub">Req {{ requestIdShort }}</span>
           <button class="btn ghost small clear-chat-btn" type="button" :disabled="isStreaming" @click="clearPlannerHistory">
             Clear History
           </button>
@@ -30,39 +29,48 @@
         <p v-if="engineHintText" class="engine-hint">{{ engineHintText }}</p>
       </section>
 
-      <div class="tuning-card">
-        <div class="tuning-row">
-          <span>Distance {{ distancePct }}%</span>
-          <span>Interest {{ interestPct }}%</span>
-        </div>
-        <input
-          v-model.number="interestWeightPct"
-          class="pref-slider"
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          :disabled="isStreaming"
-        />
+      <section class="tuning-card fold-card">
+        <button class="fold-head" type="button" @click="togglePanel('controls')">
+          <div class="fold-copy">
+            <span class="fold-kicker">Controls</span>
+            <span class="fold-title">Ranking Controls</span>
+          </div>
+          <span class="fold-meta">I {{ interestPct }} / D {{ distancePct }} · E {{ explorePct }} · {{ panelOpen.controls ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div v-if="panelOpen.controls" class="fold-body">
+          <div class="tuning-row">
+            <span>Distance {{ distancePct }}%</span>
+            <span>Interest {{ interestPct }}%</span>
+          </div>
+          <input
+            v-model.number="interestWeightPct"
+            class="pref-slider"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            :disabled="isStreaming"
+          />
 
-        <div class="tuning-row second">
-          <span>Safe {{ safePct }}%</span>
-          <span>Explore {{ explorePct }}%</span>
-        </div>
-        <input
-          v-model.number="exploreWeightPct"
-          class="pref-slider"
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          :disabled="isStreaming"
-        />
+          <div class="tuning-row second">
+            <span>Safe {{ safePct }}%</span>
+            <span>Explore {{ explorePct }}%</span>
+          </div>
+          <input
+            v-model.number="exploreWeightPct"
+            class="pref-slider"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            :disabled="isStreaming"
+          />
 
-        <div class="tuning-hint">
-          Sliders only reorder the same recommendation pool; categories are not hidden.
+          <div class="tuning-hint">
+            Sliders only reorder the same recommendation pool; categories are not hidden.
+          </div>
         </div>
-      </div>
+      </section>
 
       <section v-if="intentChips.length" class="intent-card fold-card">
         <button class="fold-head" type="button" @click="togglePanel('intent')">
@@ -80,13 +88,13 @@
       </section>
 
       <div ref="messageListEl" class="message-list">
-        <article v-for="msg in messages" :key="msg.id" class="msg" :class="msg.role === 'user' ? 'user' : 'assistant'">
+        <article v-for="msg in visibleMessages" :key="msg.id" class="msg" :class="msg.role === 'user' ? 'user' : 'assistant'">
           <div class="msg-role">{{ msg.role === 'user' ? 'You' : 'AI Planner' }}</div>
-          <div class="msg-content">{{ msg.content }}</div>
+          <div class="msg-content rich" v-html="formatMessageHtml(msg)" />
         </article>
         <article v-if="isStreaming && typingHint" class="msg assistant typing">
           <div class="msg-role">AI Planner</div>
-          <div class="msg-content">{{ typingHint }}</div>
+          <div class="msg-content rich" v-html="formatTypingHintHtml(typingHint)" />
         </article>
       </div>
 
@@ -125,168 +133,170 @@
         </div>
       </header>
 
-      <div class="result-topline">
-        <span class="mini-stat">Route {{ formatKm(routeMeta?.distance_m) }}</span>
-        <span class="mini-stat">Duration {{ formatMin(routeMeta?.duration_s) }}</span>
-        <span class="mini-stat">Explore {{ explorePct }}%</span>
-        <span class="mini-stat">{{ llmBadgeText }}</span>
-        <span v-if="retrievalBadgeText" class="mini-stat">{{ retrievalBadgeText }}</span>
-      </div>
-
-      <section v-if="!scopeSupported" class="scope-warning-card">
-        <div class="scope-warning-title">London-only planner boundary</div>
-        <p>{{ scopeNoticeText }}</p>
-      </section>
-
-      <section v-if="scopeSupported && itinerarySegments.length" class="itinerary-card fold-block">
-        <button class="fold-head" type="button" @click="togglePanel('itinerary')">
-          <div class="fold-copy">
-            <span class="fold-kicker">Planner</span>
-            <span class="fold-title">Segmented Itinerary</span>
-          </div>
-          <span class="fold-meta">{{ itinerarySegments.length }} blocks · {{ panelOpen.itinerary ? 'Hide' : 'Show' }}</span>
-        </button>
-        <div v-if="panelOpen.itinerary" class="fold-body">
-          <div class="itinerary-board">
-            <article v-for="segment in itinerarySegments" :key="segment.period" class="segment-card">
-              <div class="segment-head">
-                <span class="segment-label">{{ segment.label }}</span>
-                <h4>{{ segment.title }}</h4>
-              </div>
-              <p class="segment-summary">{{ segment.summary }}</p>
-              <ul class="segment-stops">
-                <li v-for="stop in segment.stops" :key="`${segment.period}_${stop.order}_${stop.id || stop.name}`">
-                  <button type="button" class="segment-stop-btn" @click="openOnMap(stop, false)">
-                    <span class="order">#{{ stop.order }}</span>
-                    <span class="name">{{ stop.name }}</span>
-                    <span class="meta">{{ formatMin(stop.detour_duration_s) }}</span>
-                  </button>
-                </li>
-              </ul>
-            </article>
-          </div>
+      <div class="result-scroll">
+        <div class="result-topline">
+          <span class="mini-stat">Route {{ formatKm(routeMeta?.distance_m) }}</span>
+          <span class="mini-stat">Duration {{ formatMin(routeMeta?.duration_s) }}</span>
+          <span class="mini-stat">Explore {{ explorePct }}%</span>
+          <span class="mini-stat">{{ llmBadgeText }}</span>
+          <span v-if="retrievalBadgeText" class="mini-stat">{{ retrievalBadgeText }}</span>
         </div>
-      </section>
 
-      <section v-if="plannerInsights.length" class="insight-card fold-block">
-        <button class="fold-head" type="button" @click="togglePanel('insights')">
-          <div class="fold-copy">
-            <span class="fold-kicker">Evidence</span>
-            <span class="fold-title">Community Signals</span>
+        <section v-if="!scopeSupported" class="scope-warning-card">
+          <div class="scope-warning-title">London-only planner boundary</div>
+          <p>{{ scopeNoticeText }}</p>
+        </section>
+
+        <section v-if="scopeSupported && itinerarySegments.length" class="itinerary-card fold-block">
+          <button class="fold-head" type="button" @click="togglePanel('itinerary')">
+            <div class="fold-copy">
+              <span class="fold-kicker">Planner</span>
+              <span class="fold-title">Segmented Itinerary</span>
+            </div>
+            <span class="fold-meta">{{ itinerarySegments.length }} blocks · {{ panelOpen.itinerary ? 'Hide' : 'Show' }}</span>
+          </button>
+          <div v-if="panelOpen.itinerary" class="fold-body">
+            <div class="itinerary-board">
+              <article v-for="segment in itinerarySegments" :key="segment.period" class="segment-card">
+                <div class="segment-head">
+                  <span class="segment-label">{{ segment.label }}</span>
+                  <h4>{{ segment.title }}</h4>
+                </div>
+                <p class="segment-summary">{{ segment.summary }}</p>
+                <ul class="segment-stops">
+                  <li v-for="stop in segment.stops" :key="`${segment.period}_${stop.order}_${stop.id || stop.name}`">
+                    <button type="button" class="segment-stop-btn" @click="openOnMap(stop, false)">
+                      <span class="order">#{{ stop.order }}</span>
+                      <span class="name">{{ stop.name }}</span>
+                      <span class="meta">{{ formatMin(stop.detour_duration_s) }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </article>
+            </div>
           </div>
-          <span class="fold-meta">{{ plannerInsights.length }} lines · {{ panelOpen.insights ? 'Hide' : 'Show' }}</span>
-        </button>
-        <div v-if="panelOpen.insights" class="fold-body">
-          <ul class="insight-list">
-            <li v-for="(line, idx) in plannerInsights" :key="`insight_${idx}`">{{ line }}</li>
-          </ul>
+        </section>
+
+        <section v-if="plannerInsights.length" class="insight-card fold-block">
+          <button class="fold-head" type="button" @click="togglePanel('insights')">
+            <div class="fold-copy">
+              <span class="fold-kicker">Evidence</span>
+              <span class="fold-title">Community Signals</span>
+            </div>
+            <span class="fold-meta">{{ plannerInsights.length }} lines · {{ panelOpen.insights ? 'Hide' : 'Show' }}</span>
+          </button>
+          <div v-if="panelOpen.insights" class="fold-body">
+            <ul class="insight-list">
+              <li v-for="(line, idx) in plannerInsights" :key="`insight_${idx}`">{{ line }}</li>
+            </ul>
+          </div>
+        </section>
+
+        <section v-if="sourceCards.length" class="sources-card fold-block">
+          <button class="fold-head" type="button" @click="togglePanel('sources')">
+            <div class="fold-copy">
+              <span class="fold-kicker">Evidence</span>
+              <span class="fold-title">Source Cards</span>
+            </div>
+            <span class="fold-meta">{{ sourceCards.length }} sources · {{ panelOpen.sources ? 'Hide' : 'Show' }}</span>
+          </button>
+          <div v-if="panelOpen.sources" class="fold-body">
+            <div class="sources-head">
+              <p>Posts, comments and POI evidence retrieved from your own JourneyPro content.</p>
+            </div>
+            <div class="sources-grid">
+              <article
+                v-for="source in sourceCards"
+                :key="source.source_id || `${source.type}_${source.rank}`"
+                class="source-item"
+                :class="`source-${source.type}`"
+                role="button"
+                tabindex="0"
+                @click="openSourceCard(source)"
+                @keydown.enter.prevent="openSourceCard(source)"
+                @keydown.space.prevent="openSourceCard(source)"
+              >
+                <div class="source-topline">
+                  <span class="source-type">{{ source.type }}</span>
+                  <span class="source-rank">S{{ source.rank }}</span>
+                </div>
+                <h4>{{ source.title }}</h4>
+                <p>{{ source.snippet }}</p>
+                <div class="source-foot">
+                  <span>{{ source.author || source.poi_name || 'JourneyPro' }}</span>
+                  <span>{{ formatSourceMetrics(source) }}</span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <div v-if="scopeSupported && !recommendationList.length" class="empty">
+          Send your travel request to generate recommendation cards and map-ready waypoints.
         </div>
-      </section>
 
-      <section v-if="sourceCards.length" class="sources-card fold-block">
-        <button class="fold-head" type="button" @click="togglePanel('sources')">
-          <div class="fold-copy">
-            <span class="fold-kicker">Evidence</span>
-            <span class="fold-title">Source Cards</span>
-          </div>
-          <span class="fold-meta">{{ sourceCards.length }} sources · {{ panelOpen.sources ? 'Hide' : 'Show' }}</span>
-        </button>
-        <div v-if="panelOpen.sources" class="fold-body">
-          <div class="sources-head">
-            <p>Posts, comments and POI evidence retrieved from your own JourneyPro content.</p>
-          </div>
-          <div class="sources-grid">
-            <article
-              v-for="source in sourceCards"
-              :key="source.source_id || `${source.type}_${source.rank}`"
-              class="source-item"
-              :class="`source-${source.type}`"
-              role="button"
-              tabindex="0"
-              @click="openSourceCard(source)"
-              @keydown.enter.prevent="openSourceCard(source)"
-              @keydown.space.prevent="openSourceCard(source)"
-            >
-              <div class="source-topline">
-                <span class="source-type">{{ source.type }}</span>
-                <span class="source-rank">S{{ source.rank }}</span>
+        <div v-else-if="scopeSupported" class="reco-grid">
+          <article
+            v-for="(poi, idx) in recommendationList"
+            :key="poiCardKey(poi, idx)"
+            class="reco-card"
+            role="button"
+            tabindex="0"
+            :aria-label="`Open details for ${poi.name || 'POI'}`"
+            @click="openPoiDetail(poi)"
+            @keydown.enter.prevent="openPoiDetail(poi)"
+            @keydown.space.prevent="openPoiDetail(poi)"
+          >
+            <div class="reco-cover" :class="{ empty: !poi.image_url }">
+              <CroppedImage v-if="poi.image_url" :src="poi.image_url" :alt="poi.name || 'POI cover'" class="cover-img" />
+              <div v-else class="cover-empty">No image</div>
+              <div class="rank-badge">#{{ idx + 1 }}</div>
+            </div>
+
+            <div class="reco-body">
+              <div class="title-row">
+                <h3>{{ poi.name || 'POI' }}</h3>
+                <span class="category">{{ poi.category || 'poi' }}</span>
               </div>
-              <h4>{{ source.title }}</h4>
-              <p>{{ source.snippet }}</p>
-              <div class="source-foot">
-                <span>{{ source.author || source.poi_name || 'JourneyPro' }}</span>
-                <span>{{ formatSourceMetrics(source) }}</span>
+              <div class="reason">{{ poi.reason || 'Matched by route, profile and realtime intent parsing.' }}</div>
+
+              <div v-if="poi.explanations?.length" class="exp-chips">
+                <span v-for="(exp, expIdx) in poi.explanations.slice(0, 3)" :key="`${poi.id || idx}_exp_${expIdx}`" class="exp-chip">
+                  {{ formatExplanation(exp) }}
+                </span>
               </div>
-            </article>
-          </div>
+
+              <div class="metrics">
+                <span>Route {{ formatKm(poi.distance_m) }}</span>
+                <span>Detour {{ formatMin(poi.detour_duration_s) }}</span>
+              </div>
+
+              <div class="score-bars">
+                <div class="bar-row">
+                  <span>Distance</span>
+                  <div class="bar-track"><span class="bar-fill distance" :style="{ width: pct(poi.scores?.distance) }" /></div>
+                </div>
+                <div class="bar-row">
+                  <span>Interest</span>
+                  <div class="bar-track"><span class="bar-fill interest" :style="{ width: pct(poi.scores?.interest) }" /></div>
+                </div>
+                <div class="bar-row">
+                  <span>Quality</span>
+                  <div class="bar-track"><span class="bar-fill quality" :style="{ width: pct(poi.scores?.quality) }" /></div>
+                </div>
+                <div class="bar-row">
+                  <span>Novelty</span>
+                  <div class="bar-track"><span class="bar-fill novelty" :style="{ width: pct(poi.scores?.novelty) }" /></div>
+                </div>
+              </div>
+
+              <div class="card-actions">
+                <button class="btn ghost small" type="button" @click.stop="openOnMap(poi, false)">Preview on Map</button>
+                <button class="btn primary small" type="button" @click.stop="openOnMap(poi, true)">Add as Waypoint</button>
+              </div>
+            </div>
+          </article>
         </div>
-      </section>
-
-      <div v-if="scopeSupported && !recommendationList.length" class="empty">
-        Send your travel request to generate recommendation cards and map-ready waypoints.
-      </div>
-
-      <div v-else-if="scopeSupported" class="reco-grid">
-        <article
-          v-for="(poi, idx) in recommendationList"
-          :key="poiCardKey(poi, idx)"
-          class="reco-card"
-          role="button"
-          tabindex="0"
-          :aria-label="`Open details for ${poi.name || 'POI'}`"
-          @click="openPoiDetail(poi)"
-          @keydown.enter.prevent="openPoiDetail(poi)"
-          @keydown.space.prevent="openPoiDetail(poi)"
-        >
-          <div class="reco-cover" :class="{ empty: !poi.image_url }">
-            <CroppedImage v-if="poi.image_url" :src="poi.image_url" :alt="poi.name || 'POI cover'" class="cover-img" />
-            <div v-else class="cover-empty">No image</div>
-            <div class="rank-badge">#{{ idx + 1 }}</div>
-          </div>
-
-          <div class="reco-body">
-            <div class="title-row">
-              <h3>{{ poi.name || 'POI' }}</h3>
-              <span class="category">{{ poi.category || 'poi' }}</span>
-            </div>
-            <div class="reason">{{ poi.reason || 'Matched by route, profile and realtime intent parsing.' }}</div>
-
-            <div v-if="poi.explanations?.length" class="exp-chips">
-              <span v-for="(exp, expIdx) in poi.explanations.slice(0, 3)" :key="`${poi.id || idx}_exp_${expIdx}`" class="exp-chip">
-                {{ formatExplanation(exp) }}
-              </span>
-            </div>
-
-            <div class="metrics">
-              <span>Route {{ formatKm(poi.distance_m) }}</span>
-              <span>Detour {{ formatMin(poi.detour_duration_s) }}</span>
-            </div>
-
-            <div class="score-bars">
-              <div class="bar-row">
-                <span>Distance</span>
-                <div class="bar-track"><span class="bar-fill distance" :style="{ width: pct(poi.scores?.distance) }" /></div>
-              </div>
-              <div class="bar-row">
-                <span>Interest</span>
-                <div class="bar-track"><span class="bar-fill interest" :style="{ width: pct(poi.scores?.interest) }" /></div>
-              </div>
-              <div class="bar-row">
-                <span>Quality</span>
-                <div class="bar-track"><span class="bar-fill quality" :style="{ width: pct(poi.scores?.quality) }" /></div>
-              </div>
-              <div class="bar-row">
-                <span>Novelty</span>
-                <div class="bar-track"><span class="bar-fill novelty" :style="{ width: pct(poi.scores?.novelty) }" /></div>
-              </div>
-            </div>
-
-            <div class="card-actions">
-              <button class="btn ghost small" type="button" @click.stop="openOnMap(poi, false)">Preview on Map</button>
-              <button class="btn primary small" type="button" @click.stop="openOnMap(poi, true)">Add as Waypoint</button>
-            </div>
-          </div>
-        </article>
       </div>
     </section>
 
@@ -373,8 +383,9 @@ const detailPoi = ref(null)
 const messageListEl = ref(null)
 const messages = ref([buildSeedMessage()])
 const panelOpen = ref({
+  controls: false,
   intent: false,
-  itinerary: true,
+  itinerary: false,
   insights: false,
   sources: false,
 })
@@ -404,6 +415,10 @@ const detailPhotos = computed(() => {
   if (detailPoi.value?.image_url) return [detailPoi.value.image_url]
   return []
 })
+
+const visibleMessages = computed(() =>
+  (messages.value || []).filter((msg) => msg?.role === 'user' || String(msg?.content || '').trim().length > 0)
+)
 
 const latestStageLabel = computed(() => {
   const stage = String(latestStage.value || '').toLowerCase()
@@ -694,6 +709,50 @@ const togglePanel = (key) => {
   }
 }
 
+const escapeHtml = (value) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const highlightInline = (text) =>
+  String(text || '')
+    .replace(/\b(\d+(?:\.\d+)?%)\b/g, '<span class="msg-token msg-token-pct">$1</span>')
+    .replace(/\b(\d+(?:\.\d+)?\s?(?:km|min|mins|stops?))\b/gi, '<span class="msg-token msg-token-metric">$1</span>')
+    .replace(/\b(London|coffee|museum|museums|hidden gems|route|detour|explore|safe)\b/gi, '<span class="msg-token msg-token-key">$1</span>')
+
+const renderMessageLine = (line) => {
+  const raw = String(line || '').trimEnd()
+  if (!raw) return '<div class="msg-gap"></div>'
+
+  if (/^(Morning|Afternoon|Evening)\b/i.test(raw)) {
+    return `<div class="msg-line msg-line-strong">${highlightInline(escapeHtml(raw))}</div>`
+  }
+
+  if (/^-\s*/.test(raw)) {
+    const text = raw.replace(/^-\s*/, '')
+    return `<div class="msg-line msg-line-bullet"><span class="msg-bullet-dot"></span><span>${highlightInline(escapeHtml(text))}</span></div>`
+  }
+
+  const labelMatch = raw.match(/^([^:]{3,42}:)\s*(.*)$/)
+  if (labelMatch) {
+    return `<div class="msg-line"><span class="msg-label">${escapeHtml(labelMatch[1])}</span>${labelMatch[2] ? ` <span>${highlightInline(escapeHtml(labelMatch[2]))}</span>` : ''}</div>`
+  }
+
+  return `<div class="msg-line">${highlightInline(escapeHtml(raw))}</div>`
+}
+
+const formatMessageHtml = (msg) => {
+  const content = String(msg?.content || '')
+  if (!content.trim()) return ''
+  const lines = content.split(/\r?\n/)
+  return lines.map(renderMessageLine).join('')
+}
+
+const formatTypingHintHtml = (value) => `<div class="msg-line">${highlightInline(escapeHtml(value || ''))}</div>`
+
 const scheduleScrollToBottom = () => {
   if (scrollRaf) return
   scrollRaf = requestAnimationFrame(() => {
@@ -713,6 +772,20 @@ const appendMessage = (role, content = '') => {
   messages.value.push(msg)
   scheduleScrollToBottom()
   return msg
+}
+
+const patchMessage = (messageId, updater) => {
+  const id = String(messageId || '')
+  if (!id) return
+  const index = messages.value.findIndex((msg) => String(msg?.id || '') === id)
+  if (index < 0) return
+  const current = messages.value[index] || {}
+  const nextPatch = typeof updater === 'function' ? updater(current) : updater
+  if (!nextPatch || typeof nextPatch !== 'object') return
+  messages.value.splice(index, 1, {
+    ...current,
+    ...nextPatch,
+  })
 }
 
 const parseSseBlock = (block) => {
@@ -781,6 +854,7 @@ const submitPrompt = async () => {
 
   appendMessage('user', prompt)
   const assistantMsg = appendMessage('assistant', '')
+  const assistantMessageId = assistantMsg.id
   promptInput.value = ''
   rawRecommendations.value = []
   routeMeta.value = null
@@ -823,14 +897,17 @@ const submitPrompt = async () => {
     const decoder = new TextDecoder('utf-8')
     let buffer = ''
 
-    while (true) {
+      while (true) {
       // eslint-disable-next-line no-await-in-loop
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       buffer = consumeSseBuffer(buffer, ({ event, data }) => {
         if (event === 'delta') {
-          assistantMsg.content += String(data?.text || '')
+          const token = String(data?.text || '')
+          patchMessage(assistantMessageId, (current) => ({
+            content: `${String(current?.content || '')}${token}`,
+          }))
           typingHint.value = 'Generating itinerary...'
           scheduleScrollToBottom()
           return
@@ -867,7 +944,9 @@ const submitPrompt = async () => {
         }
         if (event === 'error') {
           streamError.value = String(data?.message || 'Failed to generate plan.')
-          if (!assistantMsg.content) assistantMsg.content = streamError.value
+          patchMessage(assistantMessageId, (current) => ({
+            content: String(current?.content || '').trim() ? String(current?.content || '') : streamError.value,
+          }))
           latestStage.value = 'error'
           typingHint.value = ''
           return
@@ -875,9 +954,9 @@ const submitPrompt = async () => {
         if (event === 'done') {
           latestStage.value = 'ready'
           typingHint.value = ''
-          if (!assistantMsg.content.trim()) {
-            assistantMsg.content = 'Plan generated. Check the recommendation cards on the right.'
-          }
+          patchMessage(assistantMessageId, (current) => ({
+            content: String(current?.content || '').trim() ? String(current?.content || '') : 'Plan generated. Check the recommendation cards on the right.',
+          }))
           savePlannerStateNow()
         }
       })
@@ -887,12 +966,9 @@ const submitPrompt = async () => {
       streamError.value = err?.message || 'Streaming failed.'
       latestStage.value = 'error'
       typingHint.value = ''
-      if (messages.value.length) {
-        const last = messages.value[messages.value.length - 1]
-        if (last?.role === 'assistant' && !last.content) {
-          last.content = streamError.value
-        }
-      }
+      patchMessage(assistantMessageId, (current) => ({
+        content: String(current?.content || '').trim() ? String(current?.content || '') : streamError.value,
+      }))
     }
   } finally {
     isStreaming.value = false
@@ -1109,7 +1185,7 @@ onBeforeUnmount(() => {
 .planner-page {
   height: calc(100vh - 56px);
   display: grid;
-  grid-template-columns: minmax(380px, 0.92fr) minmax(560px, 1.08fr);
+  grid-template-columns: minmax(470px, 1.12fr) minmax(540px, 0.88fr);
   gap: 14px;
   padding: 14px;
   box-sizing: border-box;
@@ -1129,7 +1205,7 @@ onBeforeUnmount(() => {
 
 .chat-panel {
   padding: 14px;
-  gap: 10px;
+  gap: 12px;
 }
 
 .panel-head {
@@ -1142,7 +1218,7 @@ onBeforeUnmount(() => {
 .panel-head h1,
 .panel-head h2 {
   margin: 0;
-  font-size: 34px;
+  font-size: 32px;
   letter-spacing: -0.03em;
   line-height: 1.02;
 }
@@ -1263,13 +1339,13 @@ onBeforeUnmount(() => {
 
 .head-meta {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
   gap: 6px;
 }
 
 .clear-chat-btn {
-  min-width: 112px;
+  min-width: 108px;
 }
 
 .head-meta.right {
@@ -1463,6 +1539,75 @@ onBeforeUnmount(() => {
   line-height: 1.55;
 }
 
+.msg-content.rich {
+  white-space: normal;
+}
+
+.msg-line {
+  line-height: 1.62;
+}
+
+.msg-line + .msg-line {
+  margin-top: 4px;
+}
+
+.msg-line-strong {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--fg) 96%, transparent);
+}
+
+.msg-line-bullet {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.msg-bullet-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #5a8cff;
+  flex: 0 0 auto;
+}
+
+.msg-gap {
+  height: 8px;
+}
+
+.msg-label {
+  display: inline-block;
+  margin-right: 4px;
+  color: #5a8cff;
+  font-weight: 800;
+}
+
+.msg-token {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.94em;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0 1px;
+}
+
+.msg-token-pct {
+  background: color-mix(in srgb, #5a8cff 16%, transparent);
+  color: #356fe0;
+}
+
+.msg-token-metric {
+  background: color-mix(in srgb, #10b981 14%, transparent);
+  color: #0f9f74;
+}
+
+.msg-token-key {
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  color: #c77b03;
+}
+
 .stream-error {
   color: #ef4444;
   font-size: 12px;
@@ -1523,10 +1668,19 @@ onBeforeUnmount(() => {
 }
 
 .result-topline {
-  margin: 10px 14px 4px;
+  margin: 0 0 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.result-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 .map-sync-btn {
@@ -1545,7 +1699,7 @@ onBeforeUnmount(() => {
 .itinerary-card,
 .insight-card,
 .sources-card {
-  margin: 8px 14px 4px;
+  margin: 0 0 10px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
   background: color-mix(in srgb, var(--surface) 84%, transparent);
@@ -1561,7 +1715,7 @@ onBeforeUnmount(() => {
 
 .scope-warning-card,
 .scope-warning-card {
-  margin: 8px 14px 4px;
+  margin: 0 0 10px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
   background: color-mix(in srgb, var(--surface) 84%, transparent);
@@ -1740,19 +1894,15 @@ onBeforeUnmount(() => {
 }
 
 .empty {
-  margin: 18px 14px;
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 14px;
 }
 
 .reco-grid {
-  margin: 8px 14px 14px;
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1;
+  margin: 0;
   display: grid;
   gap: 10px;
-  padding-right: 2px;
 }
 
 .reco-card {
@@ -2041,6 +2191,10 @@ onBeforeUnmount(() => {
   }
 
   .result-head-actions {
+    align-items: flex-start;
+  }
+
+  .head-meta {
     align-items: flex-start;
   }
 
