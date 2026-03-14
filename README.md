@@ -1,56 +1,101 @@
 # JourneyPro Frontend
 
-<p align="center">
-  <img src="src/assets/logo_dark.png" width="160" alt="JourneyPro logo" />
-</p>
+JourneyPro Frontend is the Vue 3 client for the JourneyPro graduation project. It combines a route-first map workflow, a community-driven discovery feed, and an AI planner that can turn a travel prompt into a route-aware itinerary grounded in local posts and POI data.
 
-<p align="center">
-  Route-first map UI · Community · Personalized POI recommendation (interest vs distance)
-</p>
+## Highlights
 
-JourneyPro Frontend is the Vue 3 web client for the JourneyPro graduation project. It focuses on a premium, Apple-inspired homepage experience, a route-first map workflow, and community-driven signals (likes / favorites / views) to personalize POI ranking.
+- Premium landing page with scroll-led storytelling and map-first product framing
+- Map workflow with start/end/via points, along-route POI recommendation, details panels, and parking discovery after arrival
+- Community module with large post volume, detail pages, notifications, profile views, and admin entry points
+- AI planner:
+  - token-streamed itinerary responses
+  - route-aware recommended stops
+  - community signals and source cards
+  - `Write to Map` handoff into via points
+  - London-only scope guard for unsupported cities
 
-## Table of contents
+## Tech stack
 
-- [Features](#features)
-- [Tech stack](#tech-stack)
-- [Project structure](#project-structure)
-- [Getting started](#getting-started)
-- [Configuration](#configuration)
-- [Scripts](#scripts)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
+- Vue 3
+- Vite
+- Vue Router
+- Pinia
+- Element Plus
+- Leaflet / Leaflet Routing Machine
 
-## Features
+## Project structure
 
-This is a [Leaflet Routing Machine plugin](https://github.com/perliedman/leaflet-routing-machine) extension for [vue-leaflet package](https://github.com/vue-leaflet/vue-leaflet) (at the time of publication, it works with version 0.10.1).
+```text
+src/
+  components/        shared UI, map panels, community cards
+  router/            app routes
+  store/             auth, route, and page state
+  views/             page-level screens
+  utils/             HTTP helpers and formatting helpers
+public/
+  mv.mp4             homepage media asset
+```
 
-You can see an example at [Codesandbox.io](https://codesandbox.io/p/github/Recly/vue3-leaflet-routing-machine/main/), or [Github Pages](https://recly.github.io/vue3-leaflet-routing-machine/)
+## Getting started
 
-## Customize configuration
+### Prerequisites
 
-See [Vite Configuration Reference](https://vitejs.dev/config/).
+- Node.js 18+
+- JourneyPro API running on `http://localhost:3001`
 
-## Project Setup
+### Install
 
-```sh
+```bash
+cd JourneyPro-frontend
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+### Development
 
-```sh
+```bash
 npm run dev
 ```
 
-### Compile and Minify for Production
+### Production build
 
-```sh
+```bash
 npm run build
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+## Runtime notes
 
-```sh
-npm run lint
-```
+### AI planner
+
+The AI planner UI is in `src/views/AIPlannerView.vue`.
+
+It renders three layers of output from the backend:
+
+1. Streamed itinerary narrative
+2. Ranked stops and segmented itinerary
+3. Community evidence:
+   - `Community Signals`
+   - `Source Cards`
+
+The page persists planner history in local storage, so conversations and recommendations survive route changes and refreshes until the user clears them.
+
+### Map writeback
+
+`Write to Map` converts AI itinerary stops into map via points through the route store. This allows the AI page to act as a planning surface while the map remains the execution surface.
+
+### Scope guard
+
+The current product scope is London-only. If a user asks for another city, the frontend displays a scoped warning state instead of pretending London results match the request.
+
+## Related backend endpoints
+
+- `POST /api/ai/planner/stream`
+- `GET /api/route/recommend`
+- `GET /api/poi/:id`
+- `GET /api/recommendation/settings`
+- `POST /api/recommendation/settings`
+
+## Deployment notes
+
+- Ensure the frontend build points to the correct API origin.
+- Keep the API image proxy enabled for third-party image sources used in posts and POI cards.
+- If external LLM support is enabled on the backend, no frontend changes are required; the page already handles both live-LLM and fallback modes.

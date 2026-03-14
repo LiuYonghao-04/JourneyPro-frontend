@@ -5,6 +5,7 @@
         <div>
           <h1>AI Trip Planner</h1>
           <p>Describe your trip and get a streaming, route-aware itinerary that maps directly to waypoints.</p>
+          <div class="scope-pill">London-only beta · community-grounded answers</div>
         </div>
         <div class="head-meta">
           <span class="meta-badge">{{ latestStageLabel }}</span>
@@ -14,6 +15,20 @@
           </button>
         </div>
       </header>
+
+      <section class="engine-card" :class="`engine-${engineTone}`">
+        <div class="engine-top">
+          <div class="engine-main">
+            <span class="engine-dot" :class="`engine-${engineTone}`" />
+            <div>
+              <div class="engine-title">{{ engineTitle }}</div>
+              <div class="engine-sub">{{ engineSubline }}</div>
+            </div>
+          </div>
+          <span class="engine-badge" :class="`engine-${engineTone}`">{{ engineBadge }}</span>
+        </div>
+        <p v-if="engineHintText" class="engine-hint">{{ engineHintText }}</p>
+      </section>
 
       <div class="tuning-card">
         <div class="tuning-row">
@@ -49,12 +64,20 @@
         </div>
       </div>
 
-      <div v-if="intentChips.length" class="intent-card">
-        <div class="intent-title">Detected Intent</div>
-        <div class="chip-wrap">
-          <span v-for="chip in intentChips" :key="chip" class="intent-chip">{{ chip }}</span>
+      <section v-if="intentChips.length" class="intent-card fold-card">
+        <button class="fold-head" type="button" @click="togglePanel('intent')">
+          <div class="fold-copy">
+            <span class="fold-kicker">Signals</span>
+            <span class="fold-title">Detected Intent</span>
+          </div>
+          <span class="fold-meta">{{ intentChips.length }} chips · {{ panelOpen.intent ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div v-if="panelOpen.intent" class="fold-body">
+          <div class="chip-wrap">
+            <span v-for="chip in intentChips" :key="chip" class="intent-chip">{{ chip }}</span>
+          </div>
         </div>
-      </div>
+      </section>
 
       <div ref="messageListEl" class="message-list">
         <article v-for="msg in messages" :key="msg.id" class="msg" :class="msg.role === 'user' ? 'user' : 'assistant'">
@@ -106,32 +129,104 @@
         <span class="mini-stat">Route {{ formatKm(routeMeta?.distance_m) }}</span>
         <span class="mini-stat">Duration {{ formatMin(routeMeta?.duration_s) }}</span>
         <span class="mini-stat">Explore {{ explorePct }}%</span>
+        <span class="mini-stat">{{ llmBadgeText }}</span>
+        <span v-if="retrievalBadgeText" class="mini-stat">{{ retrievalBadgeText }}</span>
       </div>
 
-      <section v-if="itinerarySegments.length" class="itinerary-board">
-        <article v-for="segment in itinerarySegments" :key="segment.period" class="segment-card">
-          <div class="segment-head">
-            <span class="segment-label">{{ segment.label }}</span>
-            <h4>{{ segment.title }}</h4>
-          </div>
-          <p class="segment-summary">{{ segment.summary }}</p>
-          <ul class="segment-stops">
-            <li v-for="stop in segment.stops" :key="`${segment.period}_${stop.order}_${stop.id || stop.name}`">
-              <button type="button" class="segment-stop-btn" @click="openOnMap(stop, false)">
-                <span class="order">#{{ stop.order }}</span>
-                <span class="name">{{ stop.name }}</span>
-                <span class="meta">{{ formatMin(stop.detour_duration_s) }}</span>
-              </button>
-            </li>
-          </ul>
-        </article>
+      <section v-if="!scopeSupported" class="scope-warning-card">
+        <div class="scope-warning-title">London-only planner boundary</div>
+        <p>{{ scopeNoticeText }}</p>
       </section>
 
-      <div v-if="!recommendationList.length" class="empty">
+      <section v-if="scopeSupported && itinerarySegments.length" class="itinerary-card fold-block">
+        <button class="fold-head" type="button" @click="togglePanel('itinerary')">
+          <div class="fold-copy">
+            <span class="fold-kicker">Planner</span>
+            <span class="fold-title">Segmented Itinerary</span>
+          </div>
+          <span class="fold-meta">{{ itinerarySegments.length }} blocks · {{ panelOpen.itinerary ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div v-if="panelOpen.itinerary" class="fold-body">
+          <div class="itinerary-board">
+            <article v-for="segment in itinerarySegments" :key="segment.period" class="segment-card">
+              <div class="segment-head">
+                <span class="segment-label">{{ segment.label }}</span>
+                <h4>{{ segment.title }}</h4>
+              </div>
+              <p class="segment-summary">{{ segment.summary }}</p>
+              <ul class="segment-stops">
+                <li v-for="stop in segment.stops" :key="`${segment.period}_${stop.order}_${stop.id || stop.name}`">
+                  <button type="button" class="segment-stop-btn" @click="openOnMap(stop, false)">
+                    <span class="order">#{{ stop.order }}</span>
+                    <span class="name">{{ stop.name }}</span>
+                    <span class="meta">{{ formatMin(stop.detour_duration_s) }}</span>
+                  </button>
+                </li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="plannerInsights.length" class="insight-card fold-block">
+        <button class="fold-head" type="button" @click="togglePanel('insights')">
+          <div class="fold-copy">
+            <span class="fold-kicker">Evidence</span>
+            <span class="fold-title">Community Signals</span>
+          </div>
+          <span class="fold-meta">{{ plannerInsights.length }} lines · {{ panelOpen.insights ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div v-if="panelOpen.insights" class="fold-body">
+          <ul class="insight-list">
+            <li v-for="(line, idx) in plannerInsights" :key="`insight_${idx}`">{{ line }}</li>
+          </ul>
+        </div>
+      </section>
+
+      <section v-if="sourceCards.length" class="sources-card fold-block">
+        <button class="fold-head" type="button" @click="togglePanel('sources')">
+          <div class="fold-copy">
+            <span class="fold-kicker">Evidence</span>
+            <span class="fold-title">Source Cards</span>
+          </div>
+          <span class="fold-meta">{{ sourceCards.length }} sources · {{ panelOpen.sources ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div v-if="panelOpen.sources" class="fold-body">
+          <div class="sources-head">
+            <p>Posts, comments and POI evidence retrieved from your own JourneyPro content.</p>
+          </div>
+          <div class="sources-grid">
+            <article
+              v-for="source in sourceCards"
+              :key="source.source_id || `${source.type}_${source.rank}`"
+              class="source-item"
+              :class="`source-${source.type}`"
+              role="button"
+              tabindex="0"
+              @click="openSourceCard(source)"
+              @keydown.enter.prevent="openSourceCard(source)"
+              @keydown.space.prevent="openSourceCard(source)"
+            >
+              <div class="source-topline">
+                <span class="source-type">{{ source.type }}</span>
+                <span class="source-rank">S{{ source.rank }}</span>
+              </div>
+              <h4>{{ source.title }}</h4>
+              <p>{{ source.snippet }}</p>
+              <div class="source-foot">
+                <span>{{ source.author || source.poi_name || 'JourneyPro' }}</span>
+                <span>{{ formatSourceMetrics(source) }}</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <div v-if="scopeSupported && !recommendationList.length" class="empty">
         Send your travel request to generate recommendation cards and map-ready waypoints.
       </div>
 
-      <div v-else class="reco-grid">
+      <div v-else-if="scopeSupported" class="reco-grid">
         <article
           v-for="(poi, idx) in recommendationList"
           :key="poiCardKey(poi, idx)"
@@ -244,7 +339,7 @@ import { useRouteStore } from '../store/routeStore'
 const router = useRouter()
 const auth = useAuthStore()
 const routeStore = useRouteStore()
-const AI_PLANNER_CACHE_VERSION = 1
+const AI_PLANNER_CACHE_VERSION = 2
 const AI_PLANNER_CACHE_PREFIX = `jp_ai_planner_v${AI_PLANNER_CACHE_VERSION}_`
 const HISTORY_LIMIT = 120
 const DETAIL_PHOTO_LIMIT = 6
@@ -266,12 +361,23 @@ const plannerMeta = ref(null)
 const plannerIntent = ref(null)
 const itineraryData = ref(null)
 const rawRecommendations = ref([])
+const plannerSources = ref([])
+const plannerInsights = ref([])
+const plannerLlm = ref(null)
+const plannerRetrieval = ref(null)
+const plannerScope = ref({ supported: true, supported_city: 'London' })
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
 const detailPoi = ref(null)
 const messageListEl = ref(null)
 const messages = ref([buildSeedMessage()])
+const panelOpen = ref({
+  intent: false,
+  itinerary: true,
+  insights: false,
+  sources: false,
+})
 
 const interestWeightPct = ref(Math.round((Number(routeStore.recoInterestWeight || 0.5) * 100)))
 const exploreWeightPct = ref(Math.round((Number(routeStore.recoExploreWeight || 0.15) * 100)))
@@ -303,7 +409,10 @@ const latestStageLabel = computed(() => {
   const stage = String(latestStage.value || '').toLowerCase()
   if (!stage || stage === 'idle') return 'Ready'
   if (stage === 'analyzing') return 'Analyzing'
+  if (stage === 'retrieval') return 'Retrieving'
   if (stage === 'streaming') return 'Streaming'
+  if (stage === 'scope_guard') return 'London Only'
+  if (stage === 'fallback') return 'Fallback'
   return stage
 })
 
@@ -331,6 +440,11 @@ const buildPersistPayload = () => ({
   planner_intent: plannerIntent.value || null,
   itinerary: itineraryData.value || null,
   recommendations: Array.isArray(rawRecommendations.value) ? rawRecommendations.value : [],
+  sources: Array.isArray(plannerSources.value) ? plannerSources.value : [],
+  insights: Array.isArray(plannerInsights.value) ? plannerInsights.value : [],
+  llm: plannerLlm.value || null,
+  retrieval: plannerRetrieval.value || null,
+  scope: plannerScope.value || null,
   messages: sanitizeMessages(messages.value),
 })
 
@@ -367,6 +481,11 @@ const restorePlannerState = () => {
     plannerIntent.value = parsed.planner_intent || null
     itineraryData.value = parsed.itinerary || null
     rawRecommendations.value = Array.isArray(parsed.recommendations) ? parsed.recommendations : []
+    plannerSources.value = Array.isArray(parsed.sources) ? parsed.sources : []
+    plannerInsights.value = Array.isArray(parsed.insights) ? parsed.insights : []
+    plannerLlm.value = parsed.llm || null
+    plannerRetrieval.value = parsed.retrieval || null
+    plannerScope.value = parsed.scope || { supported: true, supported_city: 'London' }
     latestStage.value = 'idle'
     typingHint.value = ''
   } catch (err) {
@@ -398,6 +517,11 @@ watch(
     plannerIntent.value,
     itineraryData.value,
     rawRecommendations.value,
+    plannerSources.value,
+    plannerInsights.value,
+    plannerLlm.value,
+    plannerRetrieval.value,
+    plannerScope.value,
   ],
   () => {
     schedulePersistPlannerState(isStreaming.value ? 900 : 180)
@@ -445,6 +569,76 @@ const recommendationList = computed(() =>
   [...(rawRecommendations.value || [])].sort((a, b) => rankScore(b) - rankScore(a))
 )
 
+const sourceCards = computed(() => (Array.isArray(plannerSources.value) ? plannerSources.value : []))
+
+const scopeSupported = computed(() => plannerScope.value?.supported !== false)
+
+const scopeNoticeText = computed(() => {
+  if (scopeSupported.value) return ''
+  const requested = String(plannerScope.value?.resolved_location || plannerScope.value?.requested_location || 'that city').trim()
+  return `JourneyPro AI currently supports London only. Your request points to ${requested}, so the planner will not fabricate non-London routes or POIs.`
+})
+
+const engineTone = computed(() => {
+  const cfg = plannerLlm.value || null
+  if (!cfg) return 'idle'
+  if (cfg.mode === 'external') return 'live'
+  return 'fallback'
+})
+
+const engineTitle = computed(() => {
+  const cfg = plannerLlm.value || null
+  if (!cfg) return 'Planner engine waiting for first run'
+  if (cfg.mode === 'external') return 'Live external AI is generating the narrative'
+  return 'Local fallback planner is generating the narrative'
+})
+
+const engineSubline = computed(() => {
+  const cfg = plannerLlm.value || null
+  if (!cfg) return 'Send a prompt to inspect the active planner engine.'
+  if (cfg.mode === 'external') {
+    const provider = String(cfg.provider || 'external').trim()
+    const model = String(cfg.model || '').trim()
+    return model ? `${provider} · ${model}` : provider
+  }
+  return 'Route ranking + JourneyPro retrieval are active. No external model is currently being used.'
+})
+
+const engineBadge = computed(() => {
+  const cfg = plannerLlm.value || null
+  if (!cfg) return 'Idle'
+  if (cfg.mode === 'external') return 'Live AI'
+  return 'Fallback'
+})
+
+const engineHintText = computed(() => {
+  const cfg = plannerLlm.value || null
+  if (!cfg) return 'The first completed request will show whether the narrative came from an external model or from the built-in fallback.'
+  if (cfg.mode === 'external') {
+    return 'Narrative text is coming from the external LLM. Ranking, route constraints, and retrieved JourneyPro evidence still stay in control.'
+  }
+  if (cfg.reason === 'missing_llm_config') {
+    return 'No external LLM configuration is loaded in JourneyPro-api, so the planner is using the local fallback narrative.'
+  }
+  return 'The planner fell back to the local narrative path for this request.'
+})
+
+const llmBadgeText = computed(() => {
+  const cfg = plannerLlm.value || null
+  if (!cfg) return 'Route Engine'
+  if (cfg.mode === 'external') return `External LLM${cfg.model ? ` · ${cfg.model}` : ''}`
+  return 'Route Engine Fallback'
+})
+
+const retrievalBadgeText = computed(() => {
+  const stats = plannerRetrieval.value || null
+  if (!stats) return ''
+  const cards = Number(stats.card_count || 0)
+  const posts = Number(stats.selected_post_count || 0)
+  const comments = Number(stats.selected_comment_count || 0)
+  return `Evidence ${cards} · Posts ${posts} · Comments ${comments}`
+})
+
 const requestIdShort = computed(() => {
   const raw = String(requestId.value || '')
   if (!raw) return '-'
@@ -491,6 +685,14 @@ const intentChips = computed(() => {
 
   return [...new Set(chips)].slice(0, 6)
 })
+
+const togglePanel = (key) => {
+  if (!key || typeof key !== 'string') return
+  panelOpen.value = {
+    ...panelOpen.value,
+    [key]: !panelOpen.value[key],
+  }
+}
 
 const scheduleScrollToBottom = () => {
   if (scrollRaf) return
@@ -585,6 +787,11 @@ const submitPrompt = async () => {
   plannerIntent.value = null
   plannerMeta.value = null
   itineraryData.value = null
+  plannerSources.value = []
+  plannerInsights.value = []
+  plannerLlm.value = null
+  plannerRetrieval.value = null
+  plannerScope.value = { supported: true, supported_city: 'London' }
   closePoiDetail()
 
   isStreaming.value = true
@@ -637,6 +844,7 @@ const submitPrompt = async () => {
           requestId.value = String(data?.request_id || '')
           plannerMeta.value = data || null
           if (data?.intent) plannerIntent.value = { ...(plannerIntent.value || {}), ...data.intent }
+          if (data?.scope) plannerScope.value = data.scope
           return
         }
         if (event === 'itinerary') {
@@ -648,6 +856,11 @@ const submitPrompt = async () => {
           rawRecommendations.value = Array.isArray(data?.items) ? data.items : []
           if (data?.intent) plannerIntent.value = data.intent
           if (data?.itinerary) itineraryData.value = data.itinerary
+          plannerSources.value = Array.isArray(data?.sources) ? data.sources : []
+          plannerInsights.value = Array.isArray(data?.insights) ? data.insights : []
+          plannerLlm.value = data?.llm || null
+          plannerRetrieval.value = data?.retrieval || null
+          if (data?.scope) plannerScope.value = data.scope
           latestStage.value = 'ready'
           typingHint.value = ''
           return
@@ -746,6 +959,11 @@ const clearPlannerHistory = () => {
   plannerIntent.value = null
   itineraryData.value = null
   rawRecommendations.value = []
+  plannerSources.value = []
+  plannerInsights.value = []
+  plannerLlm.value = null
+  plannerRetrieval.value = null
+  plannerScope.value = { supported: true, supported_city: 'London' }
   closePoiDetail()
   if (typeof window !== 'undefined') {
     try {
@@ -831,6 +1049,41 @@ const openOnMap = (poi, addVia) => {
   router.push({ path: '/map', query })
 }
 
+const openSourceCard = (source) => {
+  if (!source || typeof source !== 'object') return
+  if ((source.type === 'post' || source.type === 'comment') && source.post_id) {
+    savePlannerStateNow()
+    router.push({ path: `/posts/postsid=${source.post_id}` })
+    return
+  }
+  if (source.type === 'poi' && source.poi_id) {
+    const matched = recommendationList.value.find((poi) => Number(poi?.id) === Number(source.poi_id))
+    if (matched) {
+      openPoiDetail(matched)
+    }
+  }
+}
+
+const formatSourceMetrics = (source) => {
+  if (!source || typeof source !== 'object') return ''
+  if (source.type === 'post') {
+    const likes = Number(source.metrics?.likes || 0)
+    const favorites = Number(source.metrics?.favorites || 0)
+    return `${likes} likes · ${favorites} saves`
+  }
+  if (source.type === 'comment') {
+    const likes = Number(source.metrics?.likes || 0)
+    const replies = Number(source.metrics?.replies || 0)
+    return `${likes} likes · ${replies} replies`
+  }
+  if (source.type === 'poi') {
+    const reviews = Number(source.metrics?.reviews || 0)
+    const stay = Number(source.metrics?.stay_minutes || 0)
+    return `${reviews} reviews${stay ? ` · ${stay} min stay` : ''}`
+  }
+  return ''
+}
+
 onMounted(() => {
   restorePlannerState()
   window.addEventListener('beforeunload', onWindowBeforeUnload)
@@ -900,6 +1153,104 @@ onBeforeUnmount(() => {
   line-height: 1.55;
 }
 
+.scope-pill {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #4d8cff 42%, transparent);
+  background: color-mix(in srgb, #4d8cff 12%, transparent);
+  color: color-mix(in srgb, var(--fg) 90%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.engine-card {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  padding: 10px 12px;
+}
+
+.engine-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.engine-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.engine-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 5px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--panel-border) 90%, transparent);
+}
+
+.engine-title {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: color-mix(in srgb, var(--fg) 92%, transparent);
+}
+
+.engine-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.engine-badge {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.engine-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.engine-live .engine-dot,
+.engine-badge.engine-live {
+  background: color-mix(in srgb, #10b981 18%, transparent);
+  border-color: color-mix(in srgb, #10b981 44%, transparent);
+  color: #0f9f74;
+}
+
+.engine-fallback .engine-dot,
+.engine-badge.engine-fallback {
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 42%, transparent);
+  color: #c77b03;
+}
+
+.engine-idle .engine-dot,
+.engine-badge.engine-idle {
+  background: color-mix(in srgb, #4d8cff 14%, transparent);
+  border-color: color-mix(in srgb, #4d8cff 42%, transparent);
+  color: #356fe0;
+}
+
 .panel-head.compact {
   padding: 14px 14px 0;
 }
@@ -955,6 +1306,54 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   padding: 10px 12px;
+}
+
+.fold-card {
+  padding: 10px 12px;
+}
+
+.fold-head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fold-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.fold-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a8cff;
+}
+
+.fold-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: color-mix(in srgb, var(--fg) 92%, transparent);
+}
+
+.fold-meta {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.fold-body {
+  margin-top: 10px;
 }
 
 .tuning-row {
@@ -1143,11 +1542,122 @@ onBeforeUnmount(() => {
   padding: 3px 9px;
 }
 
-.itinerary-board {
+.itinerary-card,
+.insight-card,
+.sources-card {
   margin: 8px 14px 4px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  padding: 12px;
+}
+
+.itinerary-board {
+  margin: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.scope-warning-card,
+.scope-warning-card {
+  margin: 8px 14px 4px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  padding: 12px;
+  border-color: color-mix(in srgb, #f59e0b 40%, transparent);
+  background: color-mix(in srgb, #f59e0b 10%, var(--surface) 90%);
+}
+
+.scope-warning-title,
+.insight-title,
+.sources-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.scope-warning-card p,
+.sources-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.insight-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.sources-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.source-item {
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, transparent);
+  background: color-mix(in srgb, var(--panel) 76%, transparent);
+  padding: 10px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.source-item:hover,
+.source-item:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #4d8cff 58%, transparent);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.14);
+}
+
+.source-topline,
+.source-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.source-type {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  color: #5a8cff;
+}
+
+.source-rank {
+  font-weight: 700;
+}
+
+.source-item h4 {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.source-item p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.source-foot {
+  margin-top: 10px;
+  align-items: flex-end;
 }
 
 .segment-card {
@@ -1535,6 +2045,10 @@ onBeforeUnmount(() => {
   }
 
   .itinerary-board {
+    grid-template-columns: 1fr;
+  }
+
+  .sources-grid {
     grid-template-columns: 1fr;
   }
 
