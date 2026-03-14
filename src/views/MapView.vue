@@ -4,34 +4,43 @@
       <button class="parking-btn" :disabled="parkingLoading || !hasRouteAnchors" @click="searchParkingNearby">
         {{ parkingLoading ? 'Scanning parking...' : 'Arrived: Find Parking' }}
       </button>
-      <div v-if="parkingResult?.items?.length" class="parking-card">
-        <div class="parking-head">
-          <div>
-            <strong>Nearby parking</strong>
-            <span>Within {{ parkingResult.searched_radius_m }} m of {{ routeStore.endAddress || 'destination' }}</span>
-          </div>
-          <button class="parking-close" type="button" @click="parkingResult = null">x</button>
+    </div>
+    <aside v-if="showParkingPanel" class="parking-card parking-card--route">
+      <div class="parking-head">
+        <div class="parking-head-copy">
+          <strong>Nearby parking</strong>
+          <span>Within {{ parkingResult.searched_radius_m }} m of {{ routeStore.endAddress || 'destination' }}</span>
         </div>
-        <div class="parking-list">
-          <button
-            v-for="item in parkingResult.items"
-            :key="`${item.source}-${item.id || ''}-${item.lat}-${item.lng}`"
-            class="parking-item"
-            type="button"
-            @click="focusParking(item)"
-          >
-            <div>
-              <strong>{{ item.name || 'Parking' }}</strong>
-              <span>{{ item.address || item.source }}</span>
-            </div>
-            <div class="parking-meta">
-              <span>{{ Math.round(item.distance_m || 0) }} m</span>
-              <span>{{ item.source === 'local_poi' ? 'Local' : 'OSM' }}</span>
-            </div>
-          </button>
+        <div class="parking-head-actions">
+          <span class="parking-count">{{ parkingResult.items.length }}</span>
+          <button class="parking-close" type="button" @click="clearParkingResults">Close</button>
         </div>
       </div>
-    </div>
+      <div class="parking-list">
+        <button
+          v-for="(item, index) in parkingResult.items"
+          :key="`${item.source}-${item.id || ''}-${item.lat}-${item.lng}`"
+          :class="['parking-item', { active: parkingFocusKey === getParkingKey(item) }]"
+          type="button"
+          @click="focusParking(item)"
+          @mouseenter="highlightParking(item)"
+          @focus="highlightParking(item)"
+        >
+          <span class="parking-rank">{{ index + 1 }}</span>
+          <div class="parking-copy">
+            <strong>{{ item.name || 'Parking' }}</strong>
+            <span>{{ item.address || item.source }}</span>
+          </div>
+          <div class="parking-meta">
+            <span>{{ Math.round(item.distance_m || 0) }} m</span>
+            <span>{{ item.source === 'local_poi' ? 'Local' : 'OSM' }}</span>
+          </div>
+        </button>
+      </div>
+      <div class="parking-foot">
+        <span>Click a row to center it on the map.</span>
+      </div>
+    </aside>
     <div class="debug-widget">
       <button class="debug-btn" @click="toggleDebug">
         {{ recoDebugEnabled ? 'Debug On' : 'Debug Off' }}
@@ -45,7 +54,7 @@
     </div>
     <RoutePanel />
     <MapContainer />
-    <RouteDirections :compact="hasPoiDetails" />
+    <RouteDirections v-if="!showParkingPanel" :compact="hasPoiDetails" />
     <PlaceDetailsPanel />
     <PoiShelfDrawer />
     <POIPanel />
@@ -68,7 +77,9 @@ const routeStore = useRouteStore()
 const hasPoiDetails = computed(() => !!routeStore.selectedPoi)
 const recoDebugEnabled = computed(() => !!routeStore.recoDebugEnabled)
 const parkingLoading = ref(false)
-const parkingResult = ref(null)
+const parkingResult = computed(() => routeStore.parkingSearchResult)
+const parkingFocusKey = computed(() => routeStore.parkingFocusKey)
+const showParkingPanel = computed(() => !!parkingResult.value?.items?.length)
 const hasRouteAnchors = computed(
   () =>
     Number.isFinite(Number(routeStore.startLat)) &&
@@ -86,6 +97,17 @@ const debugSummary = computed(() => {
     totalMs: Number.isFinite(totalMs) ? Math.round(totalMs) : null,
   }
 })
+
+const getParkingKey = (item) => {
+  if (!item) return null
+  if (item.source && item.id !== undefined && item.id !== null && item.id !== '') {
+    return `${item.source}:${item.id}`
+  }
+  if (typeof item.lat === 'number' && typeof item.lng === 'number') {
+    return `ll:${Number(item.lat).toFixed(6)},${Number(item.lng).toFixed(6)}`
+  }
+  return null
+}
 
 const toggleDebug = () => {
   routeStore.setRecoDebugEnabled(!routeStore.recoDebugEnabled)
@@ -107,13 +129,16 @@ const searchParkingNearby = async () => {
       throw new Error(data?.message || 'Parking query failed')
     }
     if (!data?.data?.found || !(data?.data?.items || []).length) {
-      parkingResult.value = null
+      routeStore.clearParkingSearchResult()
       await ElMessageBox.alert('No parking found within 1 km of the destination.', 'Parking nearby', {
         confirmButtonText: 'OK',
       })
       return
     }
-    parkingResult.value = data.data
+    routeStore.setParkingSearchResult(data.data)
+    if (Array.isArray(data.data.items) && data.data.items.length) {
+      focusParking(data.data.items[0], { zoom: 16 })
+    }
   } catch (err) {
     await ElMessageBox.alert(err?.message || 'Parking query failed', 'Parking nearby', {
       confirmButtonText: 'OK',
@@ -123,12 +148,21 @@ const searchParkingNearby = async () => {
   }
 }
 
-const focusParking = (item) => {
+const clearParkingResults = () => {
+  routeStore.clearParkingSearchResult()
+}
+
+const highlightParking = (item) => {
+  routeStore.setParkingFocus(item)
+}
+
+const focusParking = (item, options = {}) => {
   if (!item) return
   const lat = Number(item.lat)
   const lng = Number(item.lng)
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
-  routeStore.requestFocusPoint(lat, lng, 17)
+  routeStore.setParkingFocus(item)
+  routeStore.requestFocusPoint(lat, lng, Number(options.zoom) || 17)
 }
 
 const isTypingTarget = (target) => {
@@ -186,10 +220,6 @@ onBeforeUnmount(() => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 100002;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
 }
 .parking-btn {
   border: 1px solid var(--map-overlay-border);
@@ -206,13 +236,25 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 .parking-card {
-  width: min(420px, calc(100vw - 32px));
+  width: min(340px, calc(100vw - 28px));
   border-radius: 18px;
   border: 1px solid var(--map-overlay-border);
   background: color-mix(in srgb, var(--map-overlay-bg) 94%, transparent);
   box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
-  padding: 12px;
+  backdrop-filter: blur(18px);
+  padding: 12px 12px 10px;
   color: var(--map-overlay-fg);
+}
+.parking-card--route {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1100;
+  width: 350px;
+  max-height: 90vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 14px 16px 16px;
 }
 .parking-head {
   display: flex;
@@ -220,6 +262,15 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+}
+.parking-head-copy {
+  display: grid;
+  gap: 2px;
+}
+.parking-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .parking-head strong,
 .parking-item strong {
@@ -231,15 +282,32 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .parking-close {
-  border: none;
-  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--map-overlay-border) 92%, transparent);
+  background: color-mix(in srgb, var(--map-overlay-bg) 86%, transparent);
   color: var(--map-overlay-fg);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+.parking-count {
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #22d3ee 18%, var(--map-overlay-bg) 82%);
+  border: 1px solid color-mix(in srgb, #22d3ee 38%, var(--map-overlay-border) 62%);
+  color: var(--map-overlay-fg);
+  font-weight: 800;
+  font-size: 12px;
 }
 .parking-list {
   display: grid;
   gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .parking-item {
   width: 100%;
@@ -248,17 +316,53 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   padding: 10px 12px;
   color: var(--map-overlay-fg);
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
   text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.parking-item:hover,
+.parking-item.active {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #22d3ee 42%, var(--map-overlay-border) 58%);
+  background: color-mix(in srgb, #22d3ee 10%, var(--map-overlay-bg) 90%);
+  box-shadow: 0 14px 26px rgba(8, 145, 178, 0.14);
+}
+.parking-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: color-mix(in srgb, #0f172a 12%, var(--map-overlay-bg) 88%);
+  border: 1px solid color-mix(in srgb, #22d3ee 28%, var(--map-overlay-border) 72%);
+}
+.parking-copy {
+  min-width: 0;
+}
+.parking-copy strong,
+.parking-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .parking-meta {
   display: grid;
   justify-items: end;
   gap: 2px;
+}
+.parking-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--map-overlay-border) 80%, transparent);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--map-overlay-fg) 70%, transparent);
 }
 .debug-widget {
   position: absolute;
@@ -286,5 +390,16 @@ onBeforeUnmount(() => {
   font-size: 11px;
   line-height: 1.45;
   padding: 8px 10px;
+}
+
+@media (max-width: 900px) {
+  .parking-card--route {
+    top: auto;
+    right: 12px;
+    bottom: 84px;
+    left: 12px;
+    width: auto;
+    max-height: min(42vh, 320px);
+  }
 }
 </style>

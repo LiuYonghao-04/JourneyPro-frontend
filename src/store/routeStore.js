@@ -234,6 +234,17 @@ function getPoiKey(poi) {
   return null
 }
 
+function getParkingKey(item) {
+  if (!item) return null
+  if (item.source && item.id !== undefined && item.id !== null && item.id !== '') {
+    return `${item.source}:${item.id}`
+  }
+  if (typeof item.lat === 'number' && typeof item.lng === 'number') {
+    return `ll:${item.lat.toFixed(6)},${item.lng.toFixed(6)}`
+  }
+  return null
+}
+
 function buildPoiSummary(poi) {
   if (!poi) return null
   const key = getPoiKey(poi)
@@ -286,6 +297,8 @@ export const useRouteStore = defineStore('route', {
     poiDetailLoading: false,
     poiDetailError: null,
     previewPoi: null,
+    parkingSearchResult: null,
+    parkingFocusKey: null,
     savedPois: loadSavedPois(),
     recentPois: loadRecentPois(),
     recommendationProfile: null,
@@ -829,6 +842,46 @@ export const useRouteStore = defineStore('route', {
 
     clearPreviewPoi() {
       this.previewPoi = null
+    },
+
+    setParkingSearchResult(result) {
+      const items = Array.isArray(result?.items)
+        ? result.items
+            .map((item) => ({
+              ...item,
+              lat: Number(item?.lat),
+              lng: Number(item?.lng),
+              distance_m: Number(item?.distance_m) || 0,
+            }))
+            .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+        : []
+
+      if (!items.length) {
+        this.parkingSearchResult = null
+        this.parkingFocusKey = null
+        return
+      }
+
+      this.parkingSearchResult = {
+        ...result,
+        items,
+      }
+
+      const activeKey = this.parkingFocusKey
+      if (!activeKey || !items.some((item) => getParkingKey(item) === activeKey)) {
+        this.parkingFocusKey = getParkingKey(items[0])
+      }
+    },
+
+    clearParkingSearchResult() {
+      this.parkingSearchResult = null
+      this.parkingFocusKey = null
+    },
+
+    setParkingFocus(itemOrKey) {
+      const key = typeof itemOrKey === 'string' ? itemOrKey : getParkingKey(itemOrKey)
+      if (!key) return
+      this.parkingFocusKey = key
     },
 
     recordRecentPoi(poi) {

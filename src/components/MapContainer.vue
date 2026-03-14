@@ -23,6 +23,7 @@ let startMarker = null
 let endMarker = null
 let poiLayer = null
 let viaMarkerLayer = null
+let parkingLayer = null
 let routeLayer = null
 let baseLayer = null
 let highlightMarker = null
@@ -95,6 +96,7 @@ const refreshOverlayLayers = () => {
   refreshLayerPositions(endMarker)
   refreshLayerPositions(viaMarkerLayer)
   refreshLayerPositions(poiLayer)
+  refreshLayerPositions(parkingLayer)
   refreshLayerPositions(selectedPoiMarker)
   refreshLayerPositions(previewPoiMarker)
   refreshLayerPositions(highlightMarker)
@@ -166,6 +168,17 @@ const getPoiKey = (poi) => {
   return null
 }
 
+const getParkingKey = (item) => {
+  if (!item) return null
+  if (item.source && item.id !== undefined && item.id !== null && item.id !== "") {
+    return `${item.source}:${item.id}`
+  }
+  if (typeof item.lat === "number" && typeof item.lng === "number") {
+    return `ll:${item.lat.toFixed(6)},${item.lng.toFixed(6)}`
+  }
+  return null
+}
+
 const createPoiIcon = (rank, selected, color) =>
   L.divIcon({
     className: `jp-poi-marker${selected ? " selected" : ""}`,
@@ -175,6 +188,61 @@ const createPoiIcon = (rank, selected, color) =>
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   })
+
+const createParkingIcon = (rank, active = false) =>
+  L.divIcon({
+    className: `jp-parking-marker${active ? " active" : ""}`,
+    html: `
+      <div class="jp-parking-shell">
+        <span class="jp-parking-pulse"></span>
+        <div class="jp-parking-pin">P</div>
+        <span class="jp-parking-rank">${rank}</span>
+      </div>
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  })
+
+const updateParkingMarkers = (parkingResult, focusedKey) => {
+  if (!map.value || !parkingLayer) return
+  parkingLayer.clearLayers()
+
+  const items = Array.isArray(parkingResult?.items) ? parkingResult.items : []
+  if (!items.length) return
+
+  items.forEach((item, index) => {
+    const lat = Number(item?.lat)
+    const lng = Number(item?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    const key = getParkingKey(item)
+    const active = !!focusedKey && key === focusedKey
+    const marker = L.marker([lat, lng], {
+      icon: createParkingIcon(index + 1, active),
+      title: item?.name || "Parking",
+      keyboard: false,
+    })
+    marker.setZIndexOffset(active ? 1800 : 1300)
+    marker.bindTooltip(`${item?.name || "Parking"} · ${Math.round(Number(item?.distance_m) || 0)} m`, {
+      direction: "top",
+      offset: [0, -18],
+      opacity: 0.96,
+      className: "jp-map-tooltip",
+    })
+    marker.on("click", () => {
+      routeStore.setParkingFocus(key)
+      routeStore.requestFocusPoint(lat, lng, 17)
+    })
+    parkingLayer.addLayer(marker)
+    if (active && typeof marker.openTooltip === "function") {
+      marker.openTooltip()
+    }
+  })
+
+  if (map.value && !map.value.hasLayer(parkingLayer)) {
+    parkingLayer.addTo(map.value)
+  }
+}
 
 const updateSelectedPoiMarker = (selectedKey, selectedPoi, inList) => {
   if (!map.value) return
@@ -824,6 +892,7 @@ onMounted(() => {
   endMarker.addTo(map.value)
 
   viaMarkerLayer = L.layerGroup().addTo(map.value)
+  parkingLayer = L.layerGroup().addTo(map.value)
   updateViaMarkers()
 
   scheduleFetchRoute(0)
@@ -924,6 +993,14 @@ onMounted(() => {
     () => routeStore.previewPoi,
     (preview) => {
       updatePreviewPoiMarker(preview)
+    },
+    { deep: true }
+  )
+
+  watch(
+    () => [routeStore.parkingSearchResult, routeStore.parkingFocusKey],
+    ([parkingResult, focusedKey]) => {
+      updateParkingMarkers(parkingResult, focusedKey)
     },
     { deep: true }
   )
@@ -1072,6 +1149,68 @@ onBeforeUnmount(() => {
   transform: scale(1.08);
   box-shadow: 0 14px 26px rgba(249, 115, 22, 0.4);
 }
+:global(.jp-parking-marker) {
+  background: transparent;
+  border: none;
+}
+:global(.jp-parking-shell) {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+:global(.jp-parking-pulse) {
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.18);
+  border: 1px solid rgba(34, 211, 238, 0.34);
+  transform: scale(0.94);
+}
+:global(.jp-parking-pin) {
+  position: absolute;
+  inset: 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);
+  border: 2px solid #ffffff;
+  display: grid;
+  place-items: center;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 14px 28px rgba(8, 145, 178, 0.36);
+}
+:global(body[data-theme='dark'] .jp-parking-pin) {
+  border-color: #0f1624;
+}
+:global(body[data-theme='light'] .jp-parking-pin) {
+  border-color: #ffffff;
+}
+:global(.jp-parking-rank) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #0f172a;
+  color: #f8fafc;
+  border: 1px solid rgba(34, 211, 238, 0.48);
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.3);
+}
+:global(.jp-parking-marker.active .jp-parking-pulse) {
+  animation: jpParkingPulse 1.5s ease-out infinite;
+  background: rgba(34, 211, 238, 0.26);
+  border-color: rgba(34, 211, 238, 0.7);
+}
+:global(.jp-parking-marker.active .jp-parking-pin) {
+  transform: scale(1.08);
+  box-shadow: 0 18px 30px rgba(8, 145, 178, 0.5);
+}
 :global(.jp-waypoint-badge) {
   width: 24px;
   height: 24px;
@@ -1119,5 +1258,16 @@ onBeforeUnmount(() => {
 }
 :global(.leaflet-popup-content-wrapper) {
   border-radius: 14px;
+}
+
+@keyframes jpParkingPulse {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.86);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.46);
+  }
 }
 </style>
