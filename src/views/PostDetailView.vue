@@ -129,16 +129,17 @@
                     <div class="time">{{ formatTime(item.created_at) }}</div>
                   </div>
                 </div>
-                <p class="comment-content">{{ item.content }}</p>
+                <p class="comment-content" :class="{ deleted: item.is_deleted }">{{ item.content }}</p>
                 <div class="comment-actions">
-                  <button class="mini-btn" @click="likeComment(item)">Like {{ item.like_count || 0 }}</button>
-                  <button class="mini-btn" @click="replyTarget = item.id">Reply</button>
+                  <button v-if="!item.is_deleted" class="mini-btn" @click="likeComment(item)">Like {{ item.like_count || 0 }}</button>
+                  <button v-if="!item.is_deleted" class="mini-btn" @click="replyTarget = item.id">Reply</button>
+                  <button v-if="canDeleteComment(item)" class="mini-btn danger" @click="deleteComment(item)">Delete</button>
                   <button v-if="item.replies?.length" class="mini-btn" @click="item._expanded = !item._expanded">
                     {{ item._expanded ? 'Hide' : 'Show' }} replies
                   </button>
                 </div>
 
-                <div v-if="replyTarget === item.id" class="reply-box">
+                <div v-if="replyTarget === item.id && !item.is_deleted" class="reply-box">
                   <el-input v-model="replyText" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="Reply..." />
                   <div class="reply-actions">
                     <el-button size="small" type="primary" @click="submitComment(item)">Send</el-button>
@@ -155,10 +156,11 @@
                         <div class="time">{{ formatTime(reply.created_at) }}</div>
                       </div>
                     </div>
-                    <p class="comment-content">{{ reply.content }}</p>
+                    <p class="comment-content" :class="{ deleted: reply.is_deleted }">{{ reply.content }}</p>
                     <div class="comment-actions">
-                      <button class="mini-btn" @click="likeComment(reply)">Like {{ reply.like_count || 0 }}</button>
-                      <button class="mini-btn" @click="replyTarget = reply.id">Reply</button>
+                      <button v-if="!reply.is_deleted" class="mini-btn" @click="likeComment(reply)">Like {{ reply.like_count || 0 }}</button>
+                      <button v-if="!reply.is_deleted" class="mini-btn" @click="replyTarget = reply.id">Reply</button>
+                      <button v-if="canDeleteComment(reply)" class="mini-btn danger" @click="deleteComment(reply)">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -239,6 +241,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { CircleCheck, CircleCheckFilled, Star, StarFilled, Location, Plus } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import CroppedImage from '../components/CroppedImage.vue'
@@ -327,6 +330,18 @@ const findCommentById = (id, list = comments.value) => {
   return null
 }
 
+const removeCommentById = (id, list = comments.value) => {
+  const next = []
+  for (const item of list || []) {
+    if (item.id === id) continue
+    next.push({
+      ...item,
+      replies: item.replies?.length ? removeCommentById(id, item.replies) : [],
+    })
+  }
+  return next
+}
+
 const normalizeReplies = (replies = []) =>
   (replies || []).map((item) => ({
     ...item,
@@ -401,11 +416,14 @@ const fetchRelatedPosts = async () => {
 const updateCommentTree = (updated) => {
   const patch = (list) =>
     list.map((item) => {
-      if (item.id === updated.id) return { ...item, ...updated }
+      if (item.id === updated.id) return { ...item, ...updated, replies: updated.replies || item.replies || [] }
       return { ...item, replies: item.replies?.length ? patch(item.replies) : [] }
     })
   comments.value = patch(comments.value)
 }
+
+const canDeleteComment = (item) =>
+  !!auth.user?.id && Number(auth.user.id) === Number(item?.user_id) && !item?._deleting && !item?.is_deleted
 
 const toggleLikePost = async () => {
   if (!post.value) return
@@ -464,6 +482,48 @@ const likeComment = async (comment) => {
   const res = await axios.post(`${API_BASE}/comments/${comment.id}/like`, { user_id: auth.user?.id })
   const data = res.data?.data
   if (data) updateCommentTree({ ...data, _liked: !!res.data?.liked })
+}
+
+const deleteComment = async (comment) => {
+  if (!comment?.id || !auth.user?.id) return
+  try {
+    await ElMessageBox.confirm('Delete this comment?', 'Confirm', {
+      type: 'warning',
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
+    })
+  } catch {
+    return
+  }
+
+  comment._deleting = true
+  try {
+    const res = await axios.delete(`${API_BASE}/comments/${comment.id}`, {
+      data: { user_id: auth.user.id },
+    })
+    if (res.data?.hard_deleted) {
+      comments.value = removeCommentById(comment.id)
+    } else if (res.data?.data) {
+      updateCommentTree({
+        ...res.data.data,
+        like_count: 0,
+        _liked: false,
+        _expanded: comment._expanded ?? true,
+        replies: comment.replies || [],
+      })
+    }
+    if (replyTarget.value === comment.id) {
+      replyTarget.value = null
+      replyText.value = ''
+    }
+    ElMessage.success('Comment deleted')
+  } catch (err) {
+    if (err?.message !== 'cancel') {
+      ElMessage.error('Failed to delete comment')
+    }
+  } finally {
+    comment._deleting = false
+  }
 }
 
 const fetchPoiDetail = async () => {
@@ -1002,6 +1062,11 @@ watch(
   white-space: pre-wrap;
 }
 
+.comment-content.deleted {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .comment-actions {
   margin-top: 8px;
   display: flex;
@@ -1017,6 +1082,11 @@ watch(
   padding: 4px 10px;
   cursor: pointer;
   font-size: 12px;
+}
+
+.mini-btn.danger {
+  border-color: color-mix(in srgb, #ef4444 46%, transparent);
+  color: #ef4444;
 }
 
 .reply-box {

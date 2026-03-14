@@ -455,9 +455,20 @@ const handleSearch = () => {
   // computed filter only
 }
 
+const dedupePostsByPrimaryImage = (list) => {
+  const seen = new Set()
+  return (list || []).filter((post) => {
+    const raw = String(post?.cover_image || post?.images?.[0] || '').trim().toLowerCase()
+    if (!raw) return true
+    if (seen.has(raw)) return false
+    seen.add(raw)
+    return true
+  })
+}
+
 const filteredPosts = computed(() => {
   const kw = search.value.trim().toLowerCase()
-  return posts.value.filter((p) => {
+  const filtered = posts.value.filter((p) => {
     const inPoi = poiFilterId.value ? Number(p.poi_id) === poiFilterId.value : true
     const inTab =
       activeTab.value === 'Recommended'
@@ -473,6 +484,7 @@ const filteredPosts = computed(() => {
     const inLikes = (Number(p.like_count) || 0) >= minLikes.value
     return inPoi && inTab && inKw && inPoiToggle && inLikes
   })
+  return dedupePostsByPrimaryImage(filtered)
 })
 
 const avgLikes = computed(() => {

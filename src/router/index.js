@@ -12,6 +12,7 @@ const NotificationView = () => import('../views/NotificationView.vue')
 const PrivacyView = () => import('../views/PrivacyView.vue')
 const FastUxView = () => import('../views/FastUxView.vue')
 const AIPlannerView = () => import('../views/AIPlannerView.vue')
+const AdminView = () => import('../views/AdminView.vue')
 
 const routes = [
     {
@@ -80,6 +81,12 @@ const routes = [
         name: 'fast-ux',
         component: FastUxView,
     },
+    {
+        path: '/admin',
+        name: 'admin',
+        component: AdminView,
+        meta: { requiresAdmin: true },
+    },
 ]
 
 const router = createRouter({
@@ -100,6 +107,10 @@ router.beforeEach((to, from, next) => {
     const auth = useAuthStore()
     if (needAuth(to.path) && !auth.user) {
         next({ path: '/login', query: { redirect: to.fullPath } })
+        return
+    }
+    if (to.meta?.requiresAdmin && !auth.isAdmin) {
+        next({ path: '/home' })
         return
     }
     next()
