@@ -24,7 +24,7 @@
         {{ isSaved ? 'Saved' : 'Save' }}
       </button>
       <button class="action-pill" @click="sharePlace">Share</button>
-      <button class="action-pill" @click="openPosts">Posts</button>
+      <button class="action-pill" @click="openPosts">Stories</button>
       <button class="action-pill" @click="navigateTo">Navigate</button>
       <button class="action-pill ghost" @click="focus">Center</button>
       <button class="action-pill" :class="{ danger: isViaPoint }" @click="toggleVia">
@@ -181,6 +181,99 @@
           <div v-if="tagList.length" class="tags">
             <span v-for="tag in tagList" :key="tag" class="tag">#{{ tag }}</span>
           </div>
+
+          <div v-if="communitySummary" class="hub-block pulse-block">
+            <div class="section-title">Community pulse</div>
+            <div class="hub-metrics">
+              <div class="hub-metric">
+                <span class="hub-label">Stories</span>
+                <strong>{{ communityPostCountLabel }}</strong>
+              </div>
+              <div class="hub-metric">
+                <span class="hub-label">Avg rating</span>
+                <strong>{{ communityRatingLabel }}</strong>
+              </div>
+              <div class="hub-metric">
+                <span class="hub-label">Saves</span>
+                <strong>{{ communityFavoritesLabel }}</strong>
+              </div>
+              <div class="hub-metric">
+                <span class="hub-label">Views</span>
+                <strong>{{ communityViewsLabel }}</strong>
+              </div>
+            </div>
+            <div v-if="communityHighlights.length" class="hub-bullet-list">
+              <div v-for="line in communityHighlights" :key="line" class="hub-bullet">{{ line }}</div>
+            </div>
+            <div v-if="communityTopTags.length" class="hub-chip-row">
+              <span v-for="tag in communityTopTags" :key="`community-${tag}`" class="hub-chip">
+                {{ tag }}
+              </span>
+            </div>
+          </div>
+
+          <div v-if="bestForList.length || watchOutList.length" class="hub-dual">
+            <div v-if="bestForList.length" class="hub-block">
+              <div class="section-title">Best for</div>
+              <div class="hub-chip-row">
+                <span v-for="item in bestForList" :key="`best-${item}`" class="hub-chip positive">
+                  {{ item }}
+                </span>
+              </div>
+            </div>
+            <div v-if="watchOutList.length" class="hub-block">
+              <div class="section-title">Watch out</div>
+              <div class="hub-chip-row">
+                <span v-for="item in watchOutList" :key="`watch-${item}`" class="hub-chip caution">
+                  {{ item }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="pairedPlaces.length" class="hub-block">
+            <div class="section-title">Works well with nearby</div>
+            <div class="hub-place-row">
+              <button
+                v-for="place in pairedPlaces"
+                :key="`paired-${place.id || place.name}`"
+                class="hub-place-card"
+                @click="selectHubPlace(place)"
+                @mouseenter="previewNearby(place)"
+                @mouseleave="clearPreview"
+              >
+                <img v-if="place.image_url" :src="place.image_url" :alt="place.name || 'Place'" />
+                <div v-else class="hub-place-fallback">{{ place.name?.charAt(0) || 'P' }}</div>
+                <div class="hub-place-copy">
+                  <strong>{{ place.name }}</strong>
+                  <span>{{ place.category || 'POI' }}</span>
+                </div>
+                <div class="hub-place-distance">{{ formatDistance(toKm(place.distance_m)) }}</div>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="similarPlaces.length" class="hub-block">
+            <div class="section-title">Similar picks nearby</div>
+            <div class="hub-place-row">
+              <button
+                v-for="place in similarPlaces"
+                :key="`similar-${place.id || place.name}`"
+                class="hub-place-card subtle"
+                @click="selectHubPlace(place)"
+                @mouseenter="previewNearby(place)"
+                @mouseleave="clearPreview"
+              >
+                <img v-if="place.image_url" :src="place.image_url" :alt="place.name || 'Place'" />
+                <div v-else class="hub-place-fallback">{{ place.name?.charAt(0) || 'P' }}</div>
+                <div class="hub-place-copy">
+                  <strong>{{ place.name }}</strong>
+                  <span>{{ place.category || 'POI' }}</span>
+                </div>
+                <div class="hub-place-distance">{{ formatDistance(toKm(place.distance_m)) }}</div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -223,7 +316,7 @@
         <div v-else class="empty">No nearby places found.</div>
       </div>
 
-      <div v-else-if="activeTab === 'Reviews'" class="reviews">
+      <div v-else-if="activeTab === 'Stories'" class="reviews stories">
         <div class="rating-summary">
           <div class="rating-score">{{ ratingLabel }}</div>
           <div class="rating-bar">
@@ -232,22 +325,38 @@
           <div class="rating-count">{{ ratingCountLabel }}</div>
         </div>
 
-        <div v-if="reviewLoading" class="status">Loading reviews...</div>
-        <div v-else-if="reviewError" class="status error">{{ reviewError }}</div>
-        <div v-else-if="reviewPosts.length" class="review-list">
-          <div v-for="post in reviewPosts" :key="post.id" class="review-item">
+        <div v-if="communityHighlights.length" class="story-intro">
+          <div class="section-title">What travelers keep repeating</div>
+          <div class="hub-bullet-list">
+            <div v-for="line in communityHighlights" :key="`story-${line}`" class="hub-bullet">
+              {{ line }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="storyPosts.length" class="review-list story-list">
+          <div v-for="post in storyPosts" :key="post.id" class="review-item story-item">
             <div class="review-main">
               <div class="review-title">{{ post.title }}</div>
               <div class="review-meta">
+                <span v-if="post.author_name">{{ post.author_name }}</span>
                 <span v-if="post.rating">Rating {{ post.rating }}/5</span>
                 <span v-if="post.like_count">Likes {{ post.like_count }}</span>
                 <span v-if="post.view_count">Views {{ post.view_count }}</span>
+              </div>
+              <div v-if="storyExcerpt(post)" class="story-excerpt">{{ storyExcerpt(post) }}</div>
+              <div v-if="storyTags(post).length" class="hub-chip-row compact">
+                <span v-for="tag in storyTags(post)" :key="`${post.id}-${tag}`" class="hub-chip">
+                  {{ tag }}
+                </span>
               </div>
             </div>
             <button class="review-open" @click="openPost(post)">Open</button>
           </div>
         </div>
-        <div v-else class="empty">No reviews yet.</div>
+        <div v-else-if="reviewLoading" class="status">Loading reviews...</div>
+        <div v-else-if="reviewError" class="status error">{{ reviewError }}</div>
+        <div v-else class="empty">No community stories yet.</div>
       </div>
 
       <div v-if="poiDetailLoading" class="status">Loading details...</div>
@@ -289,7 +398,7 @@ import { apiUrl } from '../config/api'
 const router = useRouter()
 const routeStore = useRouteStore()
 const theme = ref(document.body.getAttribute('data-theme') || 'dark')
-const tabs = ['Overview', 'Photos', 'Nearby', 'Reviews']
+const tabs = ['Overview', 'Photos', 'Nearby', 'Stories']
 const activeTab = ref('Overview')
 const panelMode = ref('compact')
 const panelHeight = ref(0)
@@ -617,6 +726,54 @@ const ratingSummaryText = computed(() => {
   return parts.join(' / ')
 })
 
+const communitySummary = computed(() => {
+  const value = poi.value?.community_summary
+  return value && typeof value === 'object' ? value : null
+})
+
+const communityMetrics = computed(() => {
+  const value = communitySummary.value?.metrics
+  return value && typeof value === 'object' ? value : {}
+})
+
+const compactNumber = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return '0'
+  return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(num)
+}
+
+const communityPostCountLabel = computed(() => compactNumber(communityMetrics.value?.post_count))
+const communityRatingLabel = computed(() => {
+  const value = Number(communityMetrics.value?.avg_rating)
+  return Number.isFinite(value) && value > 0 ? `${value.toFixed(1)}/5` : 'N/A'
+})
+const communityFavoritesLabel = computed(() => compactNumber(communityMetrics.value?.total_favorites))
+const communityViewsLabel = computed(() => compactNumber(communityMetrics.value?.total_views))
+const communityTopTags = computed(() => {
+  const list = Array.isArray(communitySummary.value?.top_tags) ? communitySummary.value.top_tags : []
+  return list.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+})
+const communityHighlights = computed(() => {
+  const list = Array.isArray(communitySummary.value?.highlights) ? communitySummary.value.highlights : []
+  return list.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+})
+const bestForList = computed(() => {
+  const list = Array.isArray(communitySummary.value?.best_for) ? communitySummary.value.best_for : []
+  return list.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
+})
+const watchOutList = computed(() => {
+  const list = Array.isArray(communitySummary.value?.watch_out_for) ? communitySummary.value.watch_out_for : []
+  return list.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+})
+const pairedPlaces = computed(() => {
+  const list = Array.isArray(poi.value?.paired_places) ? poi.value.paired_places : []
+  return list.filter((item) => Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lng))).slice(0, 4)
+})
+const similarPlaces = computed(() => {
+  const list = Array.isArray(poi.value?.similar_places) ? poi.value.similar_places : []
+  return list.filter((item) => Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lng))).slice(0, 4)
+})
+
 const isViaPoint = computed(() => {
   if (!poi.value) return false
   return (routeStore.viaPoints || []).some((p) =>
@@ -851,6 +1008,10 @@ const selectNearby = (place) => {
   activeTab.value = 'Overview'
 }
 
+const selectHubPlace = (place) => {
+  selectNearby(place)
+}
+
 const previewNearby = (place) => {
   if (!place || typeof place.lat !== 'number' || typeof place.lng !== 'number') return
   routeStore.setPreviewPoi(place)
@@ -904,7 +1065,7 @@ const fetchReviews = async (poiId) => {
 }
 
 const ratingStats = computed(() => {
-  const ratings = (reviewPosts.value || [])
+  const ratings = (storyPosts.value || reviewPosts.value || [])
     .map((p) => Number(p.rating))
     .filter((r) => Number.isFinite(r) && r > 0)
   if (ratings.length === 0) {
@@ -926,6 +1087,22 @@ const ratingCountLabel = computed(() => {
   const count = ratingStats.value.count
   return count ? `${count} reviews` : 'No reviews'
 })
+
+const storyPosts = computed(() => {
+  const hubList = Array.isArray(poi.value?.related_posts) ? poi.value.related_posts : []
+  if (hubList.length) return hubList.slice(0, 6)
+  return (reviewPosts.value || []).slice(0, 6)
+})
+
+const storyTags = (post) => {
+  const list = Array.isArray(post?.tags) ? post.tags : []
+  return list.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+}
+
+const storyExcerpt = (post) => {
+  const excerpt = String(post?.excerpt || post?.content || '').trim()
+  return excerpt || ''
+}
 
 const openPost = (post) => {
   if (!post?.id) return
@@ -1597,6 +1774,175 @@ watch(
   border-radius: 999px;
 }
 
+.hub-block {
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--map-overlay-border);
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
+}
+
+.pulse-block {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, #60a5fa 16%, transparent), transparent 46%),
+    color-mix(in srgb, var(--badge) 80%, transparent);
+}
+
+.hub-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.hub-metric {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--map-overlay-border) 88%, transparent);
+  background: color-mix(in srgb, var(--map-overlay-bg) 82%, transparent);
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.hub-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hub-metric strong {
+  font-size: 14px;
+}
+
+.hub-bullet-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.hub-bullet {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+  padding-left: 12px;
+  position: relative;
+}
+
+.hub-bullet::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #60a5fa;
+}
+
+.hub-dual {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hub-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.hub-chip-row.compact {
+  margin-top: 8px;
+}
+
+.hub-chip {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--map-overlay-border) 88%, transparent);
+  background: color-mix(in srgb, var(--map-overlay-bg) 84%, transparent);
+  color: var(--map-overlay-fg);
+}
+
+.hub-chip.positive {
+  border-color: color-mix(in srgb, #22c55e 36%, var(--map-overlay-border) 64%);
+  background: color-mix(in srgb, #22c55e 10%, var(--map-overlay-bg) 90%);
+}
+
+.hub-chip.caution {
+  border-color: color-mix(in srgb, #f59e0b 36%, var(--map-overlay-border) 64%);
+  background: color-mix(in srgb, #f59e0b 10%, var(--map-overlay-bg) 90%);
+}
+
+.hub-place-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.hub-place-card {
+  border: 1px solid color-mix(in srgb, var(--map-overlay-border) 90%, transparent);
+  background: color-mix(in srgb, var(--map-overlay-bg) 82%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--map-overlay-fg);
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  grid-template-rows: 92px auto auto;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.hub-place-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #60a5fa 36%, var(--map-overlay-border) 64%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+}
+
+.hub-place-card img,
+.hub-place-fallback {
+  width: 100%;
+  height: 92px;
+  object-fit: cover;
+}
+
+.hub-place-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 800;
+  background: color-mix(in srgb, #4d8cff 18%, var(--badge) 82%);
+}
+
+.hub-place-copy {
+  display: grid;
+  gap: 4px;
+  padding: 10px 10px 0;
+}
+
+.hub-place-copy strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.hub-place-copy span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hub-place-distance {
+  padding: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hub-place-card.subtle {
+  opacity: 0.95;
+}
+
 .nearby-row {
   display: flex;
   gap: 8px;
@@ -1687,6 +2033,17 @@ watch(
   gap: 8px;
 }
 
+.stories {
+  gap: 10px;
+}
+
+.story-intro {
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--map-overlay-border);
+  background: color-mix(in srgb, var(--badge) 80%, transparent);
+}
+
 .rating-summary {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1734,10 +2091,15 @@ watch(
   background: color-mix(in srgb, var(--badge) 80%, transparent);
 }
 
+.story-item {
+  align-items: flex-start;
+}
+
 .review-main {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .review-title {
@@ -1751,6 +2113,13 @@ watch(
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.story-excerpt {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 4px;
 }
 
 .review-open {
@@ -1875,6 +2244,11 @@ watch(
   .overview {
     grid-template-columns: 200px 1fr;
   }
+  .hub-metrics,
+  .hub-place-row,
+  .hub-dual {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 960px) {
@@ -1886,6 +2260,11 @@ watch(
     max-height: 55vh;
   }
   .overview {
+    grid-template-columns: 1fr;
+  }
+  .hub-metrics,
+  .hub-place-row,
+  .hub-dual {
     grid-template-columns: 1fr;
   }
 }
