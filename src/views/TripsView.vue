@@ -12,6 +12,25 @@
         </button>
       </header>
 
+      <section v-if="auth.user?.id && tripList.length" class="sidebar-summary">
+        <article class="sidebar-stat">
+          <span>Total</span>
+          <strong>{{ tripStats.total }}</strong>
+        </article>
+        <article class="sidebar-stat">
+          <span>Active</span>
+          <strong>{{ tripStats.active }}</strong>
+        </article>
+        <article class="sidebar-stat">
+          <span>Completed</span>
+          <strong>{{ tripStats.completed }}</strong>
+        </article>
+        <article class="sidebar-stat">
+          <span>Starred</span>
+          <strong>{{ tripStats.starred }}</strong>
+        </article>
+      </section>
+
       <div v-if="!auth.user?.id" class="sidebar-empty">
         Login to create and manage trip workspaces.
       </div>
@@ -39,6 +58,16 @@
             <span>{{ formatRelativeTime(trip.updated_at) }}</span>
             <span>{{ trip.stop_count }} stops</span>
             <span>{{ trip.via_count }} via</span>
+          </div>
+          <div class="trip-list-actions">
+            <button
+              class="trip-inline-action"
+              type="button"
+              :disabled="isActionBusy"
+              @click.stop="deleteTripFromList(trip)"
+            >
+              Delete
+            </button>
           </div>
         </article>
       </div>
@@ -68,19 +97,38 @@
             </div>
             <h2>{{ tripDetail.title }}</h2>
             <p>{{ tripDetail.summary || tripDetail.prompt_preview || 'Route-aware travel workspace grounded in JourneyPro recommendations.' }}</p>
+            <div class="detail-pill-row">
+              <span class="detail-pill">{{ formatRelativeTime(tripDetail.updated_at) }}</span>
+              <span class="detail-pill">{{ tripDetail.stop_count }} stops</span>
+              <span class="detail-pill">{{ tripDetail.via_count }} via points</span>
+              <span class="detail-pill">{{ tripDetail.note_count }} notes</span>
+            </div>
           </div>
-          <div class="detail-actions">
-            <button class="btn ghost small" type="button" :disabled="actionBusy" @click="toggleTripStar">
-              {{ tripDetail.is_starred ? 'Unstar' : 'Star' }}
-            </button>
-            <button class="btn ghost small" type="button" :disabled="actionBusy" @click="openInPlanner">
-              Open in Planner
-            </button>
-            <button class="btn primary small" type="button" :disabled="actionBusy" @click="continueInMap">
-              Continue in Map
-            </button>
+          <div class="detail-hero-panel">
+            <span class="hero-kicker">Execution Ready</span>
+            <strong>{{ canContinueInMap ? 'Map handoff ready' : 'Waiting for route context' }}</strong>
+            <small>{{ actionHintText }}</small>
           </div>
         </header>
+
+        <section class="detail-toolbar">
+          <div class="toolbar-copy">
+            <span class="card-kicker">Actions</span>
+            <h3>Workspace Controls</h3>
+            <p>{{ actionHintText }}</p>
+          </div>
+          <div class="detail-actions">
+            <button class="btn ghost small" type="button" :disabled="!canToggleTripStar" @click="toggleTripStar">
+              {{ tripDetail.is_starred ? 'Unstar Workspace' : 'Mark Starred' }}
+            </button>
+            <button class="btn ghost small" type="button" :disabled="!canOpenInPlanner" @click="openInPlanner">
+              Resume in Planner
+            </button>
+            <button class="btn primary small" type="button" :disabled="!canContinueInMap" @click="continueInMap">
+              Launch in Map
+            </button>
+          </div>
+        </section>
 
         <section class="detail-summary-grid">
           <article class="summary-card">
@@ -119,7 +167,7 @@
                   class="status-btn"
                   :class="{ active: tripDetail.status === status }"
                   type="button"
-                  :disabled="actionBusy"
+                  :disabled="detailLoading || isActionBusy"
                   @click="setTripStatus(status)"
                 >
                   {{ status }}
@@ -153,7 +201,7 @@
                 <span class="card-kicker">Notes</span>
                 <h3>Trip Notes</h3>
               </div>
-              <button class="btn ghost small" type="button" :disabled="actionBusy" @click="saveNotes">
+              <button class="btn ghost small" type="button" :disabled="detailLoading || isActionBusy || !tripDetail" @click="saveNotes">
                 {{ actionBusy === 'notes' ? 'Saving...' : 'Save Notes' }}
               </button>
             </div>
@@ -214,7 +262,7 @@
         </section>
 
         <footer class="detail-footer">
-          <button class="btn ghost small danger" type="button" :disabled="actionBusy" @click="deleteTrip">
+          <button class="btn ghost small danger" type="button" :disabled="detailLoading || isActionBusy || !tripDetail" @click="deleteTrip">
             Delete Workspace
           </button>
           <span v-if="detailFlash" class="detail-flash">{{ detailFlash }}</span>
@@ -261,6 +309,31 @@ const recommendationList = computed(() => {
 const itinerarySegments = computed(() => {
   const segments = plannerSnapshot.value?.itinerary?.segments
   return Array.isArray(segments) ? segments : []
+})
+const isActionBusy = computed(() => !!actionBusy.value)
+const tripStats = computed(() => ({
+  total: tripList.value.length,
+  active: tripList.value.filter((item) => String(item?.status || '').toUpperCase() === 'ACTIVE').length,
+  completed: tripList.value.filter((item) => String(item?.status || '').toUpperCase() === 'COMPLETED').length,
+  starred: tripList.value.filter((item) => !!item?.is_starred).length,
+}))
+const hasValidPoint = (point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng))
+const hasPlannerSnapshot = computed(() => !!plannerSnapshot.value && typeof plannerSnapshot.value === 'object')
+const hasRouteMaterial = computed(() => {
+  const context = routeContext.value || {}
+  const hasVia = Array.isArray(context?.via) && context.via.length > 0
+  return hasValidPoint(context?.start) || hasValidPoint(context?.end) || hasVia || recommendationList.value.length > 0
+})
+const canToggleTripStar = computed(() => !!tripDetail.value && !detailLoading.value && !isActionBusy.value)
+const canOpenInPlanner = computed(() => !!auth.user?.id && hasPlannerSnapshot.value && !detailLoading.value && !isActionBusy.value)
+const canContinueInMap = computed(() => !!tripDetail.value && hasRouteMaterial.value && !detailLoading.value && !isActionBusy.value)
+const actionHintText = computed(() => {
+  if (detailLoading.value) return 'Loading workspace data.'
+  if (isActionBusy.value) return 'Applying your latest workspace action.'
+  if (!tripDetail.value) return 'Select a workspace to continue planning or route execution.'
+  if (!hasPlannerSnapshot.value) return 'This workspace has no saved planner snapshot yet, so Planner resume is unavailable.'
+  if (!hasRouteMaterial.value) return 'This workspace does not yet contain enough saved route context to launch into Map.'
+  return 'Resume the saved AI plan or jump straight into map execution with the stored route context.'
 })
 
 const setDetailFlash = (value) => {
@@ -510,36 +583,49 @@ const toggleTripStar = async () => {
   await patchTrip({ is_starred: !tripDetail.value.is_starred }, 'star', tripDetail.value.is_starred ? 'Trip unstarred.' : 'Trip starred.')
 }
 
-const deleteTrip = async () => {
-  if (!tripDetail.value?.id || !auth.user?.id || actionBusy.value) return
-  if (typeof window !== 'undefined' && !window.confirm(`Delete "${tripDetail.value.title}"?`)) return
+const performDeleteTrip = async (tripId, title) => {
+  const normalizedId = Number(tripId)
+  if (!normalizedId || !auth.user?.id || actionBusy.value) return false
+  if (typeof window !== 'undefined' && !window.confirm(`Delete "${title || 'this workspace'}"?`)) return false
   actionBusy.value = 'delete'
   tripError.value = ''
   try {
-    const res = await fetch(apiUrl(`/api/trips/${encodeURIComponent(String(tripDetail.value.id))}?user_id=${encodeURIComponent(String(auth.user.id))}`), {
+    const res = await fetch(apiUrl(`/api/trips/${encodeURIComponent(String(normalizedId))}?user_id=${encodeURIComponent(String(auth.user.id))}`), {
       method: 'DELETE',
     })
     const data = await res.json()
     if (!res.ok || !data?.success) {
       throw new Error(data?.message || 'Failed to delete trip workspace.')
     }
-    const deletedId = Number(tripDetail.value.id)
-    removeTrip(deletedId)
+    removeTrip(normalizedId)
     const nextId = Number(tripList.value[0]?.id || 0)
-    tripDetail.value = null
-    tripNotesDraft.value = ''
-    if (nextId) {
-      await selectTrip(nextId)
-    } else {
-      selectedTripId.value = null
-      router.replace({ path: '/trips' })
+    if (Number(selectedTripId.value) === normalizedId) {
+      tripDetail.value = null
+      tripNotesDraft.value = ''
+      if (nextId) {
+        await selectTrip(nextId)
+      } else {
+        selectedTripId.value = null
+        router.replace({ path: '/trips' })
+      }
     }
     setDetailFlash('Trip workspace deleted.')
+    return true
   } catch (err) {
     tripError.value = String(err?.message || 'Failed to delete trip workspace.')
+    return false
   } finally {
     actionBusy.value = ''
   }
+}
+
+const deleteTripFromList = async (trip) => {
+  await performDeleteTrip(trip?.id, trip?.title)
+}
+
+const deleteTrip = async () => {
+  if (!tripDetail.value?.id) return
+  await performDeleteTrip(tripDetail.value.id, tripDetail.value.title)
 }
 
 watch(
@@ -568,9 +654,9 @@ onMounted(() => {
 .trips-page {
   height: calc(100vh - 56px);
   display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
-  gap: 14px;
-  padding: 14px;
+  grid-template-columns: minmax(330px, 400px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
   box-sizing: border-box;
   background: var(--bg-pattern);
 }
@@ -578,16 +664,17 @@ onMounted(() => {
 .trip-sidebar,
 .trip-detail-panel {
   min-height: 0;
-  border-radius: 22px;
+  border-radius: 24px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
   background: color-mix(in srgb, var(--panel) 94%, transparent);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
 }
 
 .trip-sidebar {
-  padding: 16px;
+  padding: 18px;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   gap: 14px;
 }
 
@@ -626,6 +713,35 @@ onMounted(() => {
   font-size: 13px;
 }
 
+.sidebar-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sidebar-stat {
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #4d8cff 12%, transparent) 0%, color-mix(in srgb, var(--surface) 90%, transparent) 100%);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.sidebar-stat span {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sidebar-stat strong {
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
 .trip-list {
   min-height: 0;
   overflow: auto;
@@ -638,27 +754,51 @@ onMounted(() => {
 .sidebar-empty,
 .sidebar-error,
 .workspace-card,
-.detail-empty {
-  border-radius: 16px;
+.detail-empty,
+.detail-toolbar,
+.detail-head {
+  border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+}
+
+.trip-list-item,
+.sidebar-empty,
+.workspace-card,
+.detail-empty,
+.detail-toolbar {
   background: color-mix(in srgb, var(--surface) 84%, transparent);
 }
 
 .trip-list-item {
-  padding: 12px;
+  padding: 14px;
   display: grid;
   gap: 10px;
   cursor: pointer;
-  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .trip-list-item:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, #4d8cff 38%, transparent);
 }
 
 .trip-list-item.active {
   border-color: color-mix(in srgb, #4d8cff 55%, transparent);
-  box-shadow: 0 12px 28px rgba(77, 140, 255, 0.12);
+  box-shadow: 0 14px 32px rgba(77, 140, 255, 0.14);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #4d8cff 12%, transparent) 0%, color-mix(in srgb, var(--surface) 94%, transparent) 42%),
+    color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.trip-list-item.active::before {
+  content: '';
+  position: absolute;
+  inset: 10px auto 10px 8px;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #4d8cff 0%, #78a7ff 100%);
 }
 
 .trip-list-item.starred {
@@ -726,6 +866,33 @@ onMounted(() => {
   color: var(--muted);
 }
 
+.trip-list-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.trip-inline-action {
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.86;
+}
+
+.trip-inline-action:hover:not(:disabled) {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.trip-inline-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .sidebar-empty,
 .sidebar-error,
 .detail-empty {
@@ -741,25 +908,30 @@ onMounted(() => {
 }
 
 .trip-detail-panel {
-  padding: 16px;
+  padding: 18px;
   min-height: 0;
   overflow: auto;
 }
 
 .detail-shell {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .detail-head {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
+  gap: 18px;
+  align-items: stretch;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, #4d8cff 16%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent) 0%, color-mix(in srgb, var(--panel) 92%, transparent) 100%);
 }
 
 .detail-copy {
   min-width: 0;
+  flex: 1;
 }
 
 .detail-topline {
@@ -768,11 +940,86 @@ onMounted(() => {
   gap: 10px;
 }
 
+.detail-pill-row {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-pill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--fg) 76%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.detail-hero-panel {
+  min-width: 240px;
+  max-width: 290px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, #4d8cff 24%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, #4d8cff 13%, transparent) 0%, color-mix(in srgb, var(--surface) 92%, transparent) 100%);
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.hero-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4d8cff;
+}
+
+.detail-hero-panel strong {
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.detail-hero-panel small {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.detail-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.toolbar-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.toolbar-copy h3 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.toolbar-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
 .detail-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
 }
 
 .detail-summary-grid,
@@ -786,12 +1033,14 @@ onMounted(() => {
 }
 
 .detail-grid {
-  grid-template-columns: 1.1fr 0.9fr;
+  grid-template-columns: 1.08fr 0.92fr;
 }
 
 .summary-card,
 .workspace-card {
-  padding: 14px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, transparent) 0%, color-mix(in srgb, var(--panel) 88%, transparent) 100%);
 }
 
 .summary-card {
@@ -812,6 +1061,46 @@ onMounted(() => {
 .summary-card small {
   font-size: 12px;
   color: var(--muted);
+}
+
+.btn {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn.small {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #1677ff 0%, #4d8cff 100%);
+  border-color: #1677ff;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(22, 119, 255, 0.16);
+}
+
+.btn.ghost {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border-color: color-mix(in srgb, #4d8cff 34%, transparent);
+  color: #2563eb;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .card-head {
@@ -845,15 +1134,17 @@ onMounted(() => {
   border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   color: color-mix(in srgb, var(--fg) 86%, transparent);
-  padding: 6px 10px;
+  padding: 7px 11px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 
 .status-btn.active {
   border-color: color-mix(in srgb, #4d8cff 52%, transparent);
   color: #356fe0;
+  background: color-mix(in srgb, #4d8cff 12%, transparent);
 }
 
 .route-context-list {
@@ -1018,6 +1309,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  padding-bottom: 4px;
 }
 
 .detail-flash {
@@ -1030,6 +1322,13 @@ onMounted(() => {
   border-color: color-mix(in srgb, #ef4444 44%, transparent) !important;
 }
 
+.btn:focus-visible,
+.status-btn:focus-visible,
+.notes-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, #4d8cff 72%, transparent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1180px) {
   .trips-page {
     grid-template-columns: 1fr;
@@ -1038,6 +1337,11 @@ onMounted(() => {
   }
 
   .detail-head,
+  .detail-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .detail-grid,
   .detail-summary-grid,
   .segment-grid {
@@ -1046,6 +1350,11 @@ onMounted(() => {
 
   .route-context-list {
     grid-template-columns: 1fr;
+  }
+
+  .detail-hero-panel {
+    max-width: none;
+    width: 100%;
   }
 }
 </style>
