@@ -8,6 +8,9 @@
           <div class="scope-pill">London-only beta · community-grounded answers</div>
         </div>
         <div class="head-meta">
+          <button class="btn ghost small clear-chat-btn" type="button" :disabled="!canSavePlan" @click="saveCurrentPlan">
+            {{ planActionBusy === 'save' ? 'Saving...' : 'Save Plan' }}
+          </button>
           <span class="meta-badge">{{ latestStageLabel }}</span>
           <button class="btn ghost small clear-chat-btn" type="button" :disabled="isStreaming" @click="clearPlannerHistory">
             Clear History
@@ -27,6 +30,67 @@
           <span class="engine-badge" :class="`engine-${engineTone}`">{{ engineBadge }}</span>
         </div>
         <p v-if="engineHintText" class="engine-hint">{{ engineHintText }}</p>
+      </section>
+
+      <section class="plan-library-card fold-card">
+        <button class="fold-head" type="button" @click="togglePanel('library')">
+          <div class="fold-copy">
+            <span class="fold-kicker">Workspace</span>
+            <span class="fold-title">Saved Plans</span>
+          </div>
+          <span class="fold-meta">{{ planLibraryMetaText }} · {{ panelOpen.library ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div v-if="panelOpen.library" class="fold-body">
+          <div class="library-toolbar">
+            <button class="btn primary small" type="button" :disabled="!canSavePlan" @click="saveCurrentPlan">
+              {{ planActionBusy === 'save' ? 'Saving...' : 'Save Current Plan' }}
+            </button>
+            <span class="library-toolbar-copy">{{ auth.user?.id ? 'Plans sync to your account and can be restored later.' : 'Login to save plans across sessions and devices.' }}</span>
+          </div>
+
+          <div v-if="planLibraryError" class="library-error">{{ planLibraryError }}</div>
+          <div v-else-if="planFlash" class="library-flash">{{ planFlash }}</div>
+          <div v-else-if="planLibraryLoading" class="library-empty">Loading your saved plans...</div>
+          <div v-else-if="!auth.user?.id" class="library-empty">Login to unlock a synced plan library. Your current planner draft still stays in local storage.</div>
+          <div v-else-if="!planLibrary.length" class="library-empty">No saved AI plans yet. Save the current result to build your trip workspace.</div>
+          <div v-else class="plan-list">
+            <article
+              v-for="plan in planLibrary"
+              :key="plan.id"
+              class="plan-item"
+              :class="{ active: activeSavedPlanId === plan.id, starred: plan.is_starred }"
+            >
+              <div class="plan-item-top">
+                <div>
+                  <h4>{{ plan.title }}</h4>
+                  <p>{{ plan.summary || plan.prompt_preview || 'Saved route-aware AI plan.' }}</p>
+                </div>
+                <button
+                  class="plan-star-btn"
+                  type="button"
+                  :disabled="!!planActionBusy"
+                  @click="togglePlanStar(plan)"
+                >
+                  {{ plan.is_starred ? 'Starred' : 'Star' }}
+                </button>
+              </div>
+              <div class="plan-item-meta">
+                <span>{{ formatRelativePlanTime(plan.updated_at) }}</span>
+                <span>{{ plan.stop_count }} stops</span>
+                <span>{{ plan.via_count }} via</span>
+                <span>{{ plan.engine_mode || 'fallback' }}</span>
+              </div>
+              <div class="plan-item-actions">
+                <button class="btn ghost small" type="button" :disabled="!!planActionBusy" @click="loadSavedPlan(plan)">
+                  Load
+                </button>
+                <button class="btn ghost small" type="button" :disabled="!!planActionBusy" @click="deleteSavedPlan(plan)">
+                  Delete
+                </button>
+              </div>
+            </article>
+          </div>
+        </div>
       </section>
 
       <section class="tuning-card fold-card">
@@ -127,6 +191,9 @@
             <span class="meta-badge">{{ recommendationList.length }} items</span>
             <span class="meta-sub">Drive mode</span>
           </div>
+          <button class="btn ghost small map-sync-btn" type="button" :disabled="!canSavePlan" @click="saveCurrentPlan">
+            {{ planActionBusy === 'save' ? 'Saving...' : 'Save Plan' }}
+          </button>
           <button class="btn ghost small map-sync-btn" type="button" :disabled="!mapSyncStops.length" @click="applyItineraryToMap">
             Write to Map
           </button>
@@ -376,6 +443,12 @@ const plannerInsights = ref([])
 const plannerLlm = ref(null)
 const plannerRetrieval = ref(null)
 const plannerScope = ref({ supported: true, supported_city: 'London' })
+const planLibrary = ref([])
+const planLibraryLoading = ref(false)
+const planLibraryError = ref('')
+const planActionBusy = ref('')
+const activeSavedPlanId = ref(null)
+const planFlash = ref('')
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
@@ -384,6 +457,7 @@ const messageListEl = ref(null)
 const messages = ref([buildSeedMessage()])
 const panelOpen = ref({
   controls: false,
+  library: true,
   intent: false,
   itinerary: false,
   insights: false,
@@ -397,6 +471,7 @@ let streamController = null
 let scrollRaf = 0
 let persistTimer = null
 let latestDetailRequestSeq = 0
+let planFlashTimer = null
 const poiDetailCache = new Map()
 
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max)
@@ -445,9 +520,25 @@ const sanitizeMessages = (list) => {
   return safe
 }
 
+const buildRouteContextSnapshot = () => ({
+  start: { lng: routeStore.startLng, lat: routeStore.startLat },
+  end: { lng: routeStore.endLng, lat: routeStore.endLat },
+  via: (routeStore.viaPoints || []).map((point) => ({
+    id: point?.id ?? null,
+    name: point?.name || 'POI',
+    lat: Number(point?.lat),
+    lng: Number(point?.lng),
+    category: point?.category || '',
+    image_url: point?.image_url || '',
+  })),
+  interest_weight: interestWeight.value,
+  explore_weight: exploreWeight.value,
+})
+
 const buildPersistPayload = () => ({
   v: AI_PLANNER_CACHE_VERSION,
   saved_at: Date.now(),
+  saved_plan_id: activeSavedPlanId.value || null,
   request_id: requestId.value || '',
   stream_error: streamError.value || '',
   route_meta: routeMeta.value || null,
@@ -460,8 +551,68 @@ const buildPersistPayload = () => ({
   llm: plannerLlm.value || null,
   retrieval: plannerRetrieval.value || null,
   scope: plannerScope.value || null,
+  route_context: buildRouteContextSnapshot(),
   messages: sanitizeMessages(messages.value),
 })
+
+const applyRouteContextSnapshot = (context) => {
+  if (!context || typeof context !== 'object') return
+  if (Number.isFinite(Number(context?.interest_weight))) {
+    interestWeightPct.value = Math.round(clamp(Number(context.interest_weight), 0, 1) * 100)
+  }
+  if (Number.isFinite(Number(context?.explore_weight))) {
+    exploreWeightPct.value = Math.round(clamp(Number(context.explore_weight), 0, 1) * 100)
+  }
+
+  const startLat = Number(context?.start?.lat)
+  const startLng = Number(context?.start?.lng)
+  if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
+    routeStore.setStart(startLat, startLng)
+  }
+
+  const endLat = Number(context?.end?.lat)
+  const endLng = Number(context?.end?.lng)
+  if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
+    routeStore.setEnd(endLat, endLng)
+  }
+
+  const via = Array.isArray(context?.via) ? context.via : []
+  routeStore.replaceViaPoints(
+    via
+      .map((point) => ({
+        id: point?.id ?? null,
+        name: point?.name || 'POI',
+        lat: Number(point?.lat),
+        lng: Number(point?.lng),
+        category: point?.category || '',
+        image_url: point?.image_url || '',
+      }))
+      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+  )
+}
+
+const applyPlannerSnapshot = (parsed, { syncRouteContext = true } = {}) => {
+  if (!parsed || typeof parsed !== 'object') return
+  messages.value = sanitizeMessages(parsed.messages)
+  requestId.value = String(parsed.request_id || '')
+  streamError.value = String(parsed.stream_error || '')
+  routeMeta.value = parsed.route_meta || null
+  plannerMeta.value = parsed.planner_meta || null
+  plannerIntent.value = parsed.planner_intent || null
+  itineraryData.value = parsed.itinerary || null
+  rawRecommendations.value = Array.isArray(parsed.recommendations) ? parsed.recommendations : []
+  plannerSources.value = Array.isArray(parsed.sources) ? parsed.sources : []
+  plannerInsights.value = Array.isArray(parsed.insights) ? parsed.insights : []
+  plannerLlm.value = parsed.llm || null
+  plannerRetrieval.value = parsed.retrieval || null
+  plannerScope.value = parsed.scope || { supported: true, supported_city: 'London' }
+  activeSavedPlanId.value = parsed.saved_plan_id ? Number(parsed.saved_plan_id) : null
+  latestStage.value = 'idle'
+  typingHint.value = ''
+  if (syncRouteContext && parsed.route_context) {
+    applyRouteContextSnapshot(parsed.route_context)
+  }
+}
 
 const savePlannerStateNow = () => {
   if (typeof window === 'undefined') return
@@ -488,21 +639,7 @@ const restorePlannerState = () => {
     if (!raw) return
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return
-    messages.value = sanitizeMessages(parsed.messages)
-    requestId.value = String(parsed.request_id || '')
-    streamError.value = String(parsed.stream_error || '')
-    routeMeta.value = parsed.route_meta || null
-    plannerMeta.value = parsed.planner_meta || null
-    plannerIntent.value = parsed.planner_intent || null
-    itineraryData.value = parsed.itinerary || null
-    rawRecommendations.value = Array.isArray(parsed.recommendations) ? parsed.recommendations : []
-    plannerSources.value = Array.isArray(parsed.sources) ? parsed.sources : []
-    plannerInsights.value = Array.isArray(parsed.insights) ? parsed.insights : []
-    plannerLlm.value = parsed.llm || null
-    plannerRetrieval.value = parsed.retrieval || null
-    plannerScope.value = parsed.scope || { supported: true, supported_city: 'London' }
-    latestStage.value = 'idle'
-    typingHint.value = ''
+    applyPlannerSnapshot(parsed, { syncRouteContext: true })
   } catch (err) {
     // ignore broken cache
   }
@@ -550,6 +687,7 @@ watch(
     if (persistTimer) clearTimeout(persistTimer)
     poiDetailCache.clear()
     restorePlannerState()
+    fetchSavedPlans()
     nextTick(() => scheduleScrollToBottom())
   }
 )
@@ -660,6 +798,21 @@ const requestIdShort = computed(() => {
   return raw.slice(0, 8)
 })
 
+const plannerHasContent = computed(
+  () =>
+    recommendationList.value.length > 0 ||
+    itinerarySegments.value.length > 0 ||
+    sanitizeMessages(messages.value).length > 1
+)
+
+const canSavePlan = computed(() => !!auth.user?.id && plannerHasContent.value && !isStreaming.value)
+
+const planLibraryMetaText = computed(() => {
+  if (!auth.user?.id) return 'Login to sync'
+  if (planLibraryLoading.value) return 'Syncing'
+  return `${planLibrary.value.length} saved`
+})
+
 const intentSummaryText = computed(() => {
   const fromRecommendation = String(plannerIntent.value?.summary || '').trim()
   const fromMeta = String(plannerMeta.value?.prompt_summary || '').trim()
@@ -707,6 +860,57 @@ const togglePanel = (key) => {
     ...panelOpen.value,
     [key]: !panelOpen.value[key],
   }
+}
+
+const sortPlans = (list) =>
+  [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+    const starDiff = Number(!!b?.is_starred) - Number(!!a?.is_starred)
+    if (starDiff) return starDiff
+    const timeA = new Date(a?.updated_at || 0).getTime()
+    const timeB = new Date(b?.updated_at || 0).getTime()
+    return timeB - timeA
+  })
+
+const upsertPlanItem = (item) => {
+  if (!item || !item.id) return
+  const next = [...planLibrary.value]
+  const index = next.findIndex((row) => Number(row?.id) === Number(item.id))
+  if (index >= 0) next.splice(index, 1, item)
+  else next.unshift(item)
+  planLibrary.value = sortPlans(next)
+}
+
+const removePlanItem = (planId) => {
+  planLibrary.value = planLibrary.value.filter((item) => Number(item?.id) !== Number(planId))
+}
+
+const setPlanFlash = (text) => {
+  planFlash.value = String(text || '')
+  if (planFlashTimer) clearTimeout(planFlashTimer)
+  if (!planFlash.value) return
+  planFlashTimer = setTimeout(() => {
+    planFlash.value = ''
+    planFlashTimer = null
+  }, 2200)
+}
+
+const getLatestUserPrompt = () =>
+  [...sanitizeMessages(messages.value)]
+    .reverse()
+    .find((msg) => msg.role === 'user' && String(msg.content || '').trim())?.content || ''
+
+const formatRelativePlanTime = (value) => {
+  const ts = new Date(value || '').getTime()
+  if (!Number.isFinite(ts) || ts <= 0) return 'Unknown time'
+  const diffMs = Date.now() - ts
+  const diffMin = Math.max(0, Math.round(diffMs / 60000))
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin} min ago`
+  const diffHour = Math.round(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h ago`
+  const diffDay = Math.round(diffHour / 24)
+  if (diffDay < 7) return `${diffDay}d ago`
+  return new Date(ts).toLocaleDateString()
 }
 
 const escapeHtml = (value) =>
@@ -866,6 +1070,7 @@ const submitPrompt = async () => {
   plannerLlm.value = null
   plannerRetrieval.value = null
   plannerScope.value = { supported: true, supported_city: 'London' }
+  activeSavedPlanId.value = null
   closePoiDetail()
 
   isStreaming.value = true
@@ -1040,6 +1245,7 @@ const clearPlannerHistory = () => {
   plannerLlm.value = null
   plannerRetrieval.value = null
   plannerScope.value = { supported: true, supported_city: 'London' }
+  activeSavedPlanId.value = null
   closePoiDetail()
   if (typeof window !== 'undefined') {
     try {
@@ -1160,8 +1366,148 @@ const formatSourceMetrics = (source) => {
   return ''
 }
 
+const fetchSavedPlans = async () => {
+  if (!auth.user?.id) {
+    planLibrary.value = []
+    activeSavedPlanId.value = null
+    planLibraryError.value = ''
+    return
+  }
+
+  planLibraryLoading.value = true
+  planLibraryError.value = ''
+  try {
+    const res = await fetch(apiUrl(`/api/ai/plans?user_id=${encodeURIComponent(String(auth.user.id))}&limit=24`))
+    const data = await res.json()
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.message || 'Failed to load saved plans.')
+    }
+    planLibrary.value = sortPlans(Array.isArray(data.items) ? data.items : [])
+  } catch (err) {
+    planLibraryError.value = String(err?.message || 'Failed to load saved plans.')
+  } finally {
+    planLibraryLoading.value = false
+  }
+}
+
+const saveCurrentPlan = async () => {
+  if (!canSavePlan.value || planActionBusy.value) return
+  planActionBusy.value = 'save'
+  planLibraryError.value = ''
+  try {
+    const payload = buildPersistPayload()
+    const res = await fetch(apiUrl('/api/ai/plans'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: auth.user.id,
+        prompt: getLatestUserPrompt(),
+        payload,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.item) {
+      throw new Error(data?.message || 'Failed to save plan.')
+    }
+    upsertPlanItem(data.item)
+    activeSavedPlanId.value = Number(data.item.id)
+    savePlannerStateNow()
+    setPlanFlash('Plan saved to your AI workspace.')
+  } catch (err) {
+    planLibraryError.value = String(err?.message || 'Failed to save plan.')
+  } finally {
+    planActionBusy.value = ''
+  }
+}
+
+const loadSavedPlan = async (plan) => {
+  const planId = Number(plan?.id)
+  if (!auth.user?.id || !planId || planActionBusy.value) return
+  planActionBusy.value = `load:${planId}`
+  planLibraryError.value = ''
+  try {
+    stopStreaming()
+    const res = await fetch(apiUrl(`/api/ai/plans/${encodeURIComponent(String(planId))}?user_id=${encodeURIComponent(String(auth.user.id))}`))
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.item?.payload) {
+      throw new Error(data?.message || 'Failed to load saved plan.')
+    }
+    applyPlannerSnapshot(
+      {
+        ...data.item.payload,
+        saved_plan_id: planId,
+      },
+      { syncRouteContext: true }
+    )
+    closePoiDetail()
+    savePlannerStateNow()
+    activeSavedPlanId.value = planId
+    await nextTick()
+    scheduleScrollToBottom()
+    setPlanFlash('Saved plan restored into the planner.')
+  } catch (err) {
+    planLibraryError.value = String(err?.message || 'Failed to load saved plan.')
+  } finally {
+    planActionBusy.value = ''
+  }
+}
+
+const togglePlanStar = async (plan) => {
+  const planId = Number(plan?.id)
+  if (!auth.user?.id || !planId || planActionBusy.value) return
+  planActionBusy.value = `star:${planId}`
+  planLibraryError.value = ''
+  try {
+    const res = await fetch(apiUrl(`/api/ai/plans/${encodeURIComponent(String(planId))}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: auth.user.id,
+        is_starred: !plan?.is_starred,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.item) {
+      throw new Error(data?.message || 'Failed to update plan.')
+    }
+    upsertPlanItem(data.item)
+  } catch (err) {
+    planLibraryError.value = String(err?.message || 'Failed to update plan.')
+  } finally {
+    planActionBusy.value = ''
+  }
+}
+
+const deleteSavedPlan = async (plan) => {
+  const planId = Number(plan?.id)
+  if (!auth.user?.id || !planId || planActionBusy.value) return
+  if (typeof window !== 'undefined' && !window.confirm(`Delete "${plan?.title || 'this saved plan'}"?`)) return
+  planActionBusy.value = `delete:${planId}`
+  planLibraryError.value = ''
+  try {
+    const res = await fetch(apiUrl(`/api/ai/plans/${encodeURIComponent(String(planId))}?user_id=${encodeURIComponent(String(auth.user.id))}`), {
+      method: 'DELETE',
+    })
+    const data = await res.json()
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.message || 'Failed to delete plan.')
+    }
+    removePlanItem(planId)
+    if (Number(activeSavedPlanId.value) === planId) {
+      activeSavedPlanId.value = null
+      savePlannerStateNow()
+    }
+    setPlanFlash('Saved plan deleted.')
+  } catch (err) {
+    planLibraryError.value = String(err?.message || 'Failed to delete plan.')
+  } finally {
+    planActionBusy.value = ''
+  }
+}
+
 onMounted(() => {
   restorePlannerState()
+  fetchSavedPlans()
   window.addEventListener('beforeunload', onWindowBeforeUnload)
   window.addEventListener('keydown', onWindowKeydown)
   nextTick(() => scheduleScrollToBottom())
@@ -1175,6 +1521,10 @@ onBeforeUnmount(() => {
   if (persistTimer) {
     clearTimeout(persistTimer)
     persistTimer = null
+  }
+  if (planFlashTimer) {
+    clearTimeout(planFlashTimer)
+    planFlashTimer = null
   }
   if (scrollRaf) cancelAnimationFrame(scrollRaf)
   scrollRaf = 0
@@ -1304,6 +1654,124 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.library-toolbar {
+  display: grid;
+  gap: 8px;
+}
+
+.library-toolbar-copy {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.library-empty,
+.library-error,
+.library-flash {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.library-error {
+  color: #dc2626;
+  border-color: color-mix(in srgb, #ef4444 35%, transparent);
+  background: color-mix(in srgb, #ef4444 8%, transparent);
+}
+
+.library-flash {
+  color: #0f766e;
+  border-color: color-mix(in srgb, #14b8a6 30%, transparent);
+  background: color-mix(in srgb, #14b8a6 9%, transparent);
+}
+
+.plan-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+  max-height: 340px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.plan-item {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.plan-item.active {
+  border-color: color-mix(in srgb, #4d8cff 52%, transparent);
+  box-shadow: 0 12px 28px rgba(77, 140, 255, 0.12);
+}
+
+.plan-item.starred {
+  background: linear-gradient(180deg, color-mix(in srgb, #f59e0b 8%, var(--surface)) 0%, color-mix(in srgb, var(--surface) 94%, transparent) 100%);
+}
+
+.plan-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.plan-item-top h4 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--fg) 94%, transparent);
+}
+
+.plan-item-top p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.plan-star-btn {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: color-mix(in srgb, var(--fg) 84%, transparent);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plan-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plan-item-meta span {
+  font-size: 11px;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+}
+
+.plan-item-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .engine-live .engine-dot,
