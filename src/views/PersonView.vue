@@ -3,6 +3,7 @@
     <aside class="left-rail">
       <div class="brand">Profile</div>
       <RouterLink to="/posts" class="rail-link">Discover</RouterLink>
+      <RouterLink to="/trips" class="rail-link">Trips</RouterLink>
       <RouterLink to="/posts/publish" class="rail-link">Publish</RouterLink>
       <RouterLink to="/notifications" class="rail-link">Notifications</RouterLink>
       <RouterLink to="/person" class="rail-link active">Me</RouterLink>

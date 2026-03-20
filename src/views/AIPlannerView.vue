@@ -8,6 +8,9 @@
           <div class="scope-pill">London-only beta · community-grounded answers</div>
         </div>
         <div class="head-meta">
+          <button class="btn ghost small clear-chat-btn" type="button" :disabled="!canSavePlan" @click="createTripWorkspace">
+            {{ planActionBusy === 'trip' ? 'Creating...' : 'Create Trip' }}
+          </button>
           <button class="btn ghost small clear-chat-btn" type="button" :disabled="!canSavePlan" @click="saveCurrentPlan">
             {{ planActionBusy === 'save' ? 'Saving...' : 'Save Plan' }}
           </button>
@@ -42,6 +45,9 @@
         </button>
         <div v-if="panelOpen.library" class="fold-body">
           <div class="library-toolbar">
+            <button class="btn ghost small" type="button" :disabled="!canSavePlan" @click="createTripWorkspace">
+              {{ planActionBusy === 'trip' ? 'Creating...' : 'Create Trip Workspace' }}
+            </button>
             <button class="btn primary small" type="button" :disabled="!canSavePlan" @click="saveCurrentPlan">
               {{ planActionBusy === 'save' ? 'Saving...' : 'Save Current Plan' }}
             </button>
@@ -191,6 +197,9 @@
             <span class="meta-badge">{{ recommendationList.length }} items</span>
             <span class="meta-sub">Drive mode</span>
           </div>
+          <button class="btn ghost small map-sync-btn" type="button" :disabled="!canSavePlan" @click="createTripWorkspace">
+            {{ planActionBusy === 'trip' ? 'Creating...' : 'Create Trip' }}
+          </button>
           <button class="btn ghost small map-sync-btn" type="button" :disabled="!canSavePlan" @click="saveCurrentPlan">
             {{ planActionBusy === 'save' ? 'Saving...' : 'Save Plan' }}
           </button>
@@ -1415,6 +1424,38 @@ const saveCurrentPlan = async () => {
     setPlanFlash('Plan saved to your AI workspace.')
   } catch (err) {
     planLibraryError.value = String(err?.message || 'Failed to save plan.')
+  } finally {
+    planActionBusy.value = ''
+  }
+}
+
+const createTripWorkspace = async () => {
+  if (!canSavePlan.value || planActionBusy.value) return
+  planActionBusy.value = 'trip'
+  planLibraryError.value = ''
+  try {
+    const snapshot = buildPersistPayload()
+    const sourcePlanId = Number(activeSavedPlanId.value) || null
+    const res = await fetch(apiUrl('/api/trips'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: auth.user.id,
+        source_plan_id: sourcePlanId,
+        title: getLatestUserPrompt(),
+        planner_snapshot: snapshot,
+        route_context: snapshot.route_context || null,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.item?.id) {
+      throw new Error(data?.message || 'Failed to create trip workspace.')
+    }
+    savePlannerStateNow()
+    setPlanFlash('Trip workspace created.')
+    router.push({ path: '/trips', query: { tripId: String(data.item.id) } })
+  } catch (err) {
+    planLibraryError.value = String(err?.message || 'Failed to create trip workspace.')
   } finally {
     planActionBusy.value = ''
   }

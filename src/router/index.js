@@ -13,6 +13,7 @@ const PrivacyView = () => import('../views/PrivacyView.vue')
 const FastUxView = () => import('../views/FastUxView.vue')
 const AIPlannerView = () => import('../views/AIPlannerView.vue')
 const AdminView = () => import('../views/AdminView.vue')
+const TripsView = () => import('../views/TripsView.vue')
 
 const routes = [
     {
@@ -33,6 +34,11 @@ const routes = [
         path: '/ai-planner',
         name: 'ai-planner',
         component: AIPlannerView,
+    },
+    {
+        path: '/trips',
+        name: 'trips',
+        component: TripsView,
     },
     {
         path: '/posts',
@@ -99,7 +105,8 @@ const needAuth = (path) => {
         path.startsWith('/posts/publish') ||
         path.startsWith('/notifications') ||
         path.startsWith('/person') ||
-        path.startsWith('/posts/postsid')
+        path.startsWith('/posts/postsid') ||
+        path.startsWith('/trips')
     )
 }
 
