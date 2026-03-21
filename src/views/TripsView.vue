@@ -59,6 +59,11 @@
             <span>{{ trip.stop_count }} stops</span>
             <span>{{ trip.via_count }} via</span>
           </div>
+          <div class="trip-list-meta trip-list-meta-wrap">
+            <span v-if="trip.source_plan_title">{{ trip.source_plan_title }}</span>
+            <span v-if="trip.profile_snapshot?.archetype">{{ trip.profile_snapshot.archetype }}</span>
+            <span v-if="trip.intent_snapshot?.preferred_categories?.[0]">{{ trip.intent_snapshot.preferred_categories[0] }}</span>
+          </div>
           <div class="trip-list-actions">
             <button
               class="trip-inline-action"
@@ -102,6 +107,7 @@
               <span class="detail-pill">{{ tripDetail.stop_count }} stops</span>
               <span class="detail-pill">{{ tripDetail.via_count }} via points</span>
               <span class="detail-pill">{{ tripDetail.note_count }} notes</span>
+              <span v-if="tripDetail.profile_snapshot?.archetype" class="detail-pill">{{ tripDetail.profile_snapshot.archetype }}</span>
             </div>
           </div>
           <div class="detail-hero-panel">
@@ -148,8 +154,15 @@
           </article>
           <article class="summary-card">
             <span>Source</span>
-            <strong>{{ tripDetail.source_plan_id ? `AI Plan #${tripDetail.source_plan_id}` : 'Manual workspace' }}</strong>
+            <strong>{{ tripDetail.source_plan_title || (tripDetail.source_plan_id ? `AI Plan #${tripDetail.source_plan_id}` : 'Manual workspace') }}</strong>
             <small>{{ tripDetail.is_starred ? 'Starred workspace' : 'Standard workspace' }}</small>
+          </article>
+          <article class="summary-card">
+            <span>Profile</span>
+            <strong>{{ tripDetail.profile_snapshot?.archetype || 'No snapshot' }}</strong>
+            <small>
+              {{ tripDetail.intent_snapshot?.preferred_categories?.slice(0, 2).join(' · ') || tripDetail.intent_snapshot?.pace || 'No focus captured' }}
+            </small>
           </article>
         </section>
 

@@ -544,6 +544,20 @@ const buildRouteContextSnapshot = () => ({
   explore_weight: exploreWeight.value,
 })
 
+const buildProfileSnapshot = () => {
+  const profile = routeStore.userInterestProfile || null
+  const story = profile?.profile_story || null
+  return {
+    archetype: String(story?.archetype || ''),
+    confidence: Number(story?.confidence || 0),
+    dominant_category: String(story?.dominant_category?.name || ''),
+    dominant_tag: String(story?.dominant_tag?.name || ''),
+    source: String(profile?.source || ''),
+    interest_weight: interestWeight.value,
+    explore_weight: exploreWeight.value,
+  }
+}
+
 const buildPersistPayload = () => ({
   v: AI_PLANNER_CACHE_VERSION,
   saved_at: Date.now(),
@@ -560,6 +574,7 @@ const buildPersistPayload = () => ({
   llm: plannerLlm.value || null,
   retrieval: plannerRetrieval.value || null,
   scope: plannerScope.value || null,
+  profile_snapshot: buildProfileSnapshot(),
   route_context: buildRouteContextSnapshot(),
   messages: sanitizeMessages(messages.value),
 })

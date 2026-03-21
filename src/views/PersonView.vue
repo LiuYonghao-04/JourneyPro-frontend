@@ -280,6 +280,112 @@
         </article>
       </section>
 
+      <section v-if="isSelf" class="workflow-grid">
+        <article class="panel workflow-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Trip Hub</h3>
+              <p class="panel-copy">Recent workspaces created from AI planning and route execution.</p>
+            </div>
+            <RouterLink to="/trips" class="workflow-link">Open Trips</RouterLink>
+          </div>
+          <div class="workflow-summary-row">
+            <div class="summary-tile">
+              <span>Total trips</span>
+              <strong>{{ tripStats.total }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Active</span>
+              <strong>{{ tripStats.active }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Starred</span>
+              <strong>{{ tripStats.starred }}</strong>
+            </div>
+          </div>
+          <div v-if="tripHubLoading" class="muted">Loading trip workspace summary...</div>
+          <div v-else-if="tripHubError" class="muted">{{ tripHubError }}</div>
+          <div v-else-if="!tripHub.length" class="muted">No trip workspaces yet. Create one from AI Planner.</div>
+          <div v-else class="workflow-list">
+            <article v-for="trip in tripHub" :key="trip.id" class="workflow-card">
+              <div class="workflow-card-top">
+                <div>
+                  <h4>{{ trip.title }}</h4>
+                  <p>{{ trip.summary || trip.prompt_preview || 'Trip workspace' }}</p>
+                </div>
+                <span class="status-pill">{{ trip.status }}</span>
+              </div>
+              <div class="workflow-chip-row">
+                <span class="meta-chip">{{ trip.stop_count }} stops</span>
+                <span class="meta-chip">{{ trip.via_count }} via</span>
+                <span v-if="trip.profile_snapshot?.archetype" class="meta-chip">{{ trip.profile_snapshot.archetype }}</span>
+                <span v-if="trip.intent_snapshot?.preferred_categories?.[0]" class="meta-chip">
+                  {{ trip.intent_snapshot.preferred_categories[0] }}
+                </span>
+              </div>
+              <div class="workflow-footer">
+                <span>{{ formatRelativeTimeShort(trip.updated_at) }}</span>
+                <div class="workflow-actions">
+                  <button class="inline-cta" type="button" @click="openTripWorkspace(trip.id)">Open</button>
+                  <button class="inline-cta inline-cta-primary" type="button" @click="continueTripInMap(trip)">Map</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </article>
+
+        <article class="panel workflow-panel">
+          <div class="panel-head">
+            <div>
+              <h3>AI Plan Shelf</h3>
+              <p class="panel-copy">Saved planner outputs that can be restored back into the AI workspace.</p>
+            </div>
+            <RouterLink to="/ai-planner" class="workflow-link">Open Planner</RouterLink>
+          </div>
+          <div class="workflow-summary-row">
+            <div class="summary-tile">
+              <span>Saved plans</span>
+              <strong>{{ planStats.total }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Starred</span>
+              <strong>{{ planStats.starred }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Live AI</span>
+              <strong>{{ planStats.external }}</strong>
+            </div>
+          </div>
+          <div v-if="planHubLoading" class="muted">Loading AI plans...</div>
+          <div v-else-if="planHubError" class="muted">{{ planHubError }}</div>
+          <div v-else-if="!planHub.length" class="muted">No saved AI plans yet. Save one from AI Planner.</div>
+          <div v-else class="workflow-list">
+            <article v-for="plan in planHub" :key="plan.id" class="workflow-card">
+              <div class="workflow-card-top">
+                <div>
+                  <h4>{{ plan.title }}</h4>
+                  <p>{{ plan.summary || plan.prompt_preview || 'AI plan snapshot' }}</p>
+                </div>
+                <span class="status-pill" :class="{ accent: plan.is_starred }">{{ plan.engine_mode || 'saved' }}</span>
+              </div>
+              <div class="workflow-chip-row">
+                <span class="meta-chip">{{ plan.stop_count }} stops</span>
+                <span class="meta-chip">{{ plan.scope_city }}</span>
+                <span v-if="plan.profile_snapshot?.archetype" class="meta-chip">{{ plan.profile_snapshot.archetype }}</span>
+                <span v-if="plan.intent_snapshot?.pace" class="meta-chip">{{ plan.intent_snapshot.pace }} pace</span>
+              </div>
+              <div class="workflow-footer">
+                <span>{{ formatRelativeTimeShort(plan.updated_at) }}</span>
+                <div class="workflow-actions">
+                  <button class="inline-cta" type="button" @click="restorePlanToPlanner(plan.id)">Restore</button>
+                  <button class="inline-cta inline-cta-primary" type="button" @click="openPlannerPage()">Planner</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </article>
+      </section>
+
       <section class="controls">
         <div class="tabs">
           <button class="tab" :class="{ active: tab === 'posts' }" @click="tab = 'posts'">Posts</button>
@@ -387,10 +493,13 @@ import { apiUrl } from '../config/api'
 const API_BASE = apiUrl('/api/posts')
 const FOLLOW_API = apiUrl('/api/follow')
 const AUTH_API = apiUrl('/api/auth')
+const TRIPS_API = apiUrl('/api/trips')
+const AI_PLANS_API = apiUrl('/api/ai/plans')
 const PERSON_POST_LIMIT = 80
 const PERSON_REACTION_TAB_LIMIT = 40
 const PERSON_CACHE_PREFIX = 'jp_person_cache_v3_'
 const PERSON_INTEREST_COLLAPSE_PREFIX = 'jp_person_interest_collapsed_v1_'
+const AI_PLANNER_CACHE_PREFIX = 'jp_ai_planner_v1_'
 
 const route = useRoute()
 const router = useRouter()
@@ -407,6 +516,12 @@ const followers = ref([])
 const followerCountValue = ref(0)
 const profile = ref(null)
 const reactionSummary = ref({ liked_ids: [], favorited_ids: [] })
+const tripHub = ref([])
+const planHub = ref([])
+const tripHubLoading = ref(false)
+const planHubLoading = ref(false)
+const tripHubError = ref('')
+const planHubError = ref('')
 const favsLoaded = ref(false)
 const likesLoaded = ref(false)
 const requestSeq = ref(0)
@@ -435,6 +550,7 @@ const toUid = (raw) => {
 const currentUid = () => toUid(userId.value)
 const cacheKey = (uid) => `${PERSON_CACHE_PREFIX}${uid}`
 const interestCollapseKey = (uid) => `${PERSON_INTEREST_COLLAPSE_PREFIX}${uid || 'guest'}`
+const plannerStorageKey = computed(() => `${AI_PLANNER_CACHE_PREFIX}${auth.user?.id || 'guest'}`)
 
 const hydrateInterestCollapsed = (uid) => {
   if (typeof window === 'undefined') return
@@ -552,6 +668,10 @@ const resetState = () => {
   followerCountValue.value = 0
   profile.value = null
   reactionSummary.value = { liked_ids: [], favorited_ids: [] }
+  tripHub.value = []
+  planHub.value = []
+  tripHubError.value = ''
+  planHubError.value = ''
   favsLoaded.value = false
   likesLoaded.value = false
 }
@@ -673,6 +793,50 @@ const fetchProfile = async (uid) => {
   persistCache()
 }
 
+const fetchTripHub = async (uid) => {
+  if (!isSelf.value || !uid) {
+    tripHub.value = []
+    tripHubError.value = ''
+    return
+  }
+  tripHubLoading.value = true
+  tripHubError.value = ''
+  try {
+    const res = await fetch(`${TRIPS_API}?user_id=${encodeURIComponent(String(uid))}&limit=3`)
+    const data = await res.json()
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.message || 'Failed to load trips.')
+    }
+    tripHub.value = Array.isArray(data.items) ? data.items : []
+  } catch (err) {
+    tripHubError.value = String(err?.message || 'Failed to load trips.')
+  } finally {
+    tripHubLoading.value = false
+  }
+}
+
+const fetchPlanHub = async (uid) => {
+  if (!isSelf.value || !uid) {
+    planHub.value = []
+    planHubError.value = ''
+    return
+  }
+  planHubLoading.value = true
+  planHubError.value = ''
+  try {
+    const res = await fetch(`${AI_PLANS_API}?user_id=${encodeURIComponent(String(uid))}&limit=3`)
+    const data = await res.json()
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.message || 'Failed to load saved plans.')
+    }
+    planHub.value = Array.isArray(data.items) ? data.items : []
+  } catch (err) {
+    planHubError.value = String(err?.message || 'Failed to load saved plans.')
+  } finally {
+    planHubLoading.value = false
+  }
+}
+
 const refreshPage = async ({ useCache = true } = {}) => {
   const uid = currentUid()
   if (!uid) return
@@ -698,6 +862,8 @@ const refreshPage = async ({ useCache = true } = {}) => {
   if (auth.user?.id) {
     routeStore.fetchRecoSettingsFromServer(auth.user.id)
     routeStore.fetchUserInterestProfile(auth.user.id)
+    fetchTripHub(auth.user.id)
+    fetchPlanHub(auth.user.id)
   }
 }
 
@@ -721,6 +887,16 @@ const filteredList = computed(() => {
 })
 
 const followerCount = computed(() => Number(followerCountValue.value || followers.value.length || 0))
+const tripStats = computed(() => ({
+  total: tripHub.value.length,
+  active: tripHub.value.filter((item) => String(item?.status || '').toUpperCase() === 'ACTIVE').length,
+  starred: tripHub.value.filter((item) => !!item?.is_starred).length,
+}))
+const planStats = computed(() => ({
+  total: planHub.value.length,
+  starred: planHub.value.filter((item) => !!item?.is_starred).length,
+  external: planHub.value.filter((item) => String(item?.engine_mode || '').toLowerCase() === 'external').length,
+}))
 const likeTotal = computed(() => {
   if (!isSelf.value) return 0
   const summaryCount = Number(reactionSummary.value?.liked_ids?.length || 0)
@@ -852,6 +1028,95 @@ const applyPreferencePreset = (preset) => {
 }
 
 const resetPreferencePreset = () => applyPreferencePreset('balanced')
+
+const formatRelativeTimeShort = (value) => {
+  const ts = new Date(value || '').getTime()
+  if (!Number.isFinite(ts) || ts <= 0) return 'Unknown'
+  const diffMin = Math.max(0, Math.round((Date.now() - ts) / 60000))
+  if (diffMin < 1) return 'now'
+  if (diffMin < 60) return `${diffMin}m`
+  const diffHour = Math.round(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h`
+  const diffDay = Math.round(diffHour / 24)
+  if (diffDay < 7) return `${diffDay}d`
+  return new Date(ts).toLocaleDateString()
+}
+
+const applyRouteContextToStore = (context, fallbackStops = []) => {
+  if (!context || typeof context !== 'object') return
+  const startLat = Number(context?.start?.lat)
+  const startLng = Number(context?.start?.lng)
+  if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
+    routeStore.setStart(startLat, startLng)
+  }
+  const endLat = Number(context?.end?.lat)
+  const endLng = Number(context?.end?.lng)
+  if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
+    routeStore.setEnd(endLat, endLng)
+  }
+  const via = Array.isArray(context?.via) ? context.via : []
+  const normalizedVia = (via.length ? via : fallbackStops)
+    .map((point) => ({
+      id: point?.id ?? null,
+      name: point?.name || 'POI',
+      lat: Number(point?.lat),
+      lng: Number(point?.lng),
+      category: point?.category || '',
+      image_url: point?.image_url || '',
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+  routeStore.replaceViaPoints(normalizedVia)
+  if (Number.isFinite(Number(context?.interest_weight))) routeStore.setRecoInterestWeight(Number(context.interest_weight))
+  if (Number.isFinite(Number(context?.explore_weight))) routeStore.setRecoExploreWeight(Number(context.explore_weight))
+}
+
+const openPlannerPage = () => {
+  router.push('/ai-planner')
+}
+
+const restorePlanToPlanner = async (planId) => {
+  const uid = auth.user?.id
+  if (!uid || !planId) return
+  try {
+    const res = await fetch(`${AI_PLANS_API}/${encodeURIComponent(String(planId))}?user_id=${encodeURIComponent(String(uid))}`)
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.item?.payload) return
+    localStorage.setItem(
+      plannerStorageKey.value,
+      JSON.stringify({
+        ...data.item.payload,
+        saved_plan_id: Number(planId),
+      })
+    )
+    router.push('/ai-planner')
+  } catch {
+    // ignore
+  }
+}
+
+const openTripWorkspace = (tripId) => {
+  if (!tripId) return
+  router.push({ path: '/trips', query: { tripId: String(tripId) } })
+}
+
+const continueTripInMap = async (trip) => {
+  const uid = auth.user?.id
+  const tripId = Number(trip?.id)
+  if (!uid || !tripId) return
+  try {
+    const res = await fetch(`${TRIPS_API}/${encodeURIComponent(String(tripId))}?user_id=${encodeURIComponent(String(uid))}`)
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.item) return
+    const detail = data.item
+    applyRouteContextToStore(
+      detail.route_context,
+      Array.isArray(detail?.planner_snapshot?.recommendations) ? detail.planner_snapshot.recommendations.slice(0, 8) : []
+    )
+    router.push('/map')
+  } catch {
+    // ignore
+  }
+}
 
 const goDetail = (id) => router.push(`/posts/postsid=${id}`)
 const openFollowers = async () => {
@@ -1372,6 +1637,120 @@ watch(
   color: var(--muted);
 }
 
+.workflow-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workflow-panel {
+  min-height: 100%;
+}
+
+.workflow-link {
+  text-decoration: none;
+  color: #4f8cff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workflow-summary-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workflow-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 12px;
+}
+
+.workflow-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workflow-card-top h4 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.workflow-card-top p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-pill {
+  align-self: flex-start;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-pill.accent {
+  color: #4f8cff;
+  border-color: color-mix(in srgb, #4f8cff 50%, transparent);
+}
+
+.workflow-chip-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflow-footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-cta {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--fg);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inline-cta-primary {
+  border-color: color-mix(in srgb, #4f8cff 56%, transparent);
+  background: color-mix(in srgb, #4f8cff 14%, transparent);
+  color: #4f8cff;
+}
+
 .collapse-btn {
   border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
   border-radius: 999px;
@@ -1639,6 +2018,7 @@ watch(
 @media (max-width: 1180px) {
   .insights,
   .personalization-grid,
+  .workflow-grid,
   .interest-columns,
   .explanation-grid {
     grid-template-columns: 1fr;
@@ -1674,7 +2054,8 @@ watch(
 
   .control-matrix,
   .summary-strip,
-  .activity-strip {
+  .activity-strip,
+  .workflow-summary-row {
     grid-template-columns: 1fr;
   }
 
