@@ -25,9 +25,14 @@ const {
   followRoute,
   isRouting,
   routeError,
+  executionMode,
+  executionTargets,
+  executionCurrentTarget,
+  executionProgress,
 } = storeToRefs(routeStore)
 const collapsed = ref(false)
 const hasRoute = computed(() => steps.value && steps.value.length > 0)
+const hasExecutionTargets = computed(() => Array.isArray(executionTargets.value) && executionTargets.value.length > 0)
 const theme = ref(document.body.getAttribute("data-theme") || "dark")
 const stepsEl = ref(null)
 let themeObserver = null
@@ -36,6 +41,7 @@ onMounted(() => {
     theme.value = document.body.getAttribute("data-theme") || "dark"
   })
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] })
+  routeStore.syncExecutionTargets()
 })
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
@@ -66,6 +72,86 @@ const onStepClick = (idx) => {
   const [lng, lat] = step.location
   if (typeof lat !== "number" || typeof lng !== "number") return
   routeStore.requestFocusPoint(lat, lng, 16)
+}
+
+const executionTargetMap = computed(() => {
+  const map = new Map()
+  ;(executionTargets.value || []).forEach((target) => {
+    if (target.kind === "destination") {
+      map.set("destination", target)
+      return
+    }
+    map.set(`waypoint:${target.sourceIndex}`, target)
+  })
+  return map
+})
+
+const getStepExecutionTarget = (step) => {
+  if (!step?.arrivalKind) return null
+  if (step.arrivalKind === "destination") {
+    return executionTargetMap.value.get("destination") || null
+  }
+  if (step.arrivalKind === "waypoint") {
+    return executionTargetMap.value.get(`waypoint:${step.legIndex}`) || null
+  }
+  return null
+}
+
+const getStepExecutionStatus = (step) => getStepExecutionTarget(step)?.status || null
+
+const getStepExecutionLabel = (step) => {
+  const status = getStepExecutionStatus(step)
+  if (status === "current") return "Next stop"
+  if (status === "visited") return "Reached"
+  if (status === "skipped") return "Skipped"
+  if (status === "pending") return "Upcoming"
+  return ""
+}
+
+const progressPercent = computed(() => Number(executionProgress.value?.percent) || 0)
+const currentStopLabel = computed(() => {
+  if (executionCurrentTarget.value?.label) return executionCurrentTarget.value.label
+  if (executionProgress.value?.isCompleted) return "Trip completed"
+  return "Execution not started"
+})
+const executionModeLabel = computed(() => {
+  if (executionProgress.value?.isCompleted) return "Completed"
+  return executionMode.value ? "Live" : "Ready"
+})
+const executionSummary = computed(() => {
+  if (!hasExecutionTargets.value) return "Add waypoints or keep the destination to start execution."
+  if (executionProgress.value?.isCompleted) {
+    return `Visited ${executionProgress.value.visited} stops, skipped ${executionProgress.value.skipped}.`
+  }
+  if (executionMode.value && executionCurrentTarget.value) {
+    return `${executionProgress.value.remaining} stops left. Current target: ${executionCurrentTarget.value.label}.`
+  }
+  return `${executionProgress.value.total} tracked stops ready for this route.`
+})
+const canStartExecution = computed(() => hasRoute.value && hasExecutionTargets.value && !executionMode.value)
+const canAdvanceExecution = computed(
+  () => !!executionMode.value && !!executionCurrentTarget.value && !executionProgress.value?.isCompleted
+)
+
+const startExecution = () => {
+  routeStore.startExecution()
+}
+
+const markReached = () => {
+  routeStore.markExecutionReached()
+}
+
+const skipStop = () => {
+  routeStore.skipExecutionTarget()
+}
+
+const focusCurrentTarget = () => {
+  routeStore.focusExecutionTarget()
+}
+
+const endExecution = () => {
+  routeStore.endExecution()
+  routeStore.requestParkingSearch()
 }
 
 const legMetaByIndex = computed(() => {
@@ -169,6 +255,57 @@ watch(
     </div>
 
     <div v-if="!collapsed">
+      <div v-if="hasRoute && hasExecutionTargets" class="execution-shell">
+        <div
+          class="execution-hero"
+          :class="{
+            live: executionMode,
+            done: executionProgress?.isCompleted,
+          }"
+        >
+          <div class="execution-topline">
+            <span class="execution-kicker">Trip progress</span>
+            <span class="execution-mode">{{ executionModeLabel }}</span>
+          </div>
+          <div class="execution-main">
+            <div>
+              <div class="execution-title">{{ currentStopLabel }}</div>
+              <div class="execution-copy">{{ executionSummary }}</div>
+            </div>
+            <div class="execution-metrics">
+              <div class="metric-card">
+                <span class="metric-value">{{ executionProgress?.visited || 0 }}</span>
+                <span class="metric-label">Reached</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-value">{{ executionProgress?.remaining || 0 }}</span>
+                <span class="metric-label">Remaining</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-value">{{ executionProgress?.skipped || 0 }}</span>
+                <span class="metric-label">Skipped</span>
+              </div>
+            </div>
+          </div>
+          <div class="progress-bar">
+            <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
+          </div>
+          <div class="execution-actions">
+            <button v-if="canStartExecution" class="exec-btn primary" @click="startExecution">Start Trip</button>
+            <template v-else>
+              <button class="exec-btn primary" :disabled="!canAdvanceExecution" @click="markReached">
+                Mark Reached
+              </button>
+              <button class="exec-btn ghost" :disabled="!canAdvanceExecution" @click="skipStop">Skip Stop</button>
+              <button class="exec-btn ghost" :disabled="!executionCurrentTarget" @click="focusCurrentTarget">
+                Focus Next
+              </button>
+              <button class="exec-btn subtle" @click="endExecution">End Trip</button>
+            </template>
+          </div>
+        </div>
+      </div>
+
       <div class="steps" v-if="hasRoute" ref="stepsEl">
         <template v-for="(s, idx) in steps" :key="idx">
           <div v-if="isLegStart(idx)" class="leg-header">
@@ -183,6 +320,9 @@ watch(
               pinned: pinnedStepIndex === idx,
               waypoint: s.arrivalKind === 'waypoint',
               destination: s.arrivalKind === 'destination',
+              current: getStepExecutionStatus(s) === 'current',
+              visited: getStepExecutionStatus(s) === 'visited',
+              skipped: getStepExecutionStatus(s) === 'skipped',
             }"
             :data-step-index="idx"
             @mouseenter="onStepEnter(idx)"
@@ -196,6 +336,13 @@ watch(
               </div>
               <div v-else-if="s.arrivalKind === 'destination'" class="badge destination-badge">
                 Destination
+              </div>
+              <div
+                v-if="getStepExecutionTarget(s)"
+                class="exec-step-badge"
+                :class="`is-${getStepExecutionStatus(s)}`"
+              >
+                {{ getStepExecutionLabel(s) }}
               </div>
 
               <div class="instruction">
@@ -309,6 +456,125 @@ watch(
   max-height: calc(80vh - 100px);
   padding-right: 10px;
 }
+.execution-shell {
+  margin-top: 14px;
+  margin-bottom: 10px;
+}
+.execution-hero {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.14), rgba(15, 23, 42, 0.06));
+}
+.execution-hero.live {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.14), rgba(15, 23, 42, 0.06));
+}
+.execution-hero.done {
+  border-color: rgba(14, 165, 233, 0.28);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.14), rgba(15, 23, 42, 0.06));
+}
+.execution-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.execution-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.execution-mode {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(15, 23, 42, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+.execution-main {
+  display: grid;
+  gap: 12px;
+}
+.execution-title {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.execution-copy {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.execution-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.metric-card {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.1);
+}
+.metric-value {
+  font-size: 18px;
+  font-weight: 800;
+}
+.metric-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.progress-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+}
+.progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #60a5fa 0%, #34d399 100%);
+}
+.execution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.exec-btn {
+  border-radius: 11px;
+  padding: 8px 12px;
+  border: 1px solid var(--map-overlay-border);
+  background: transparent;
+  color: var(--map-overlay-fg);
+  font-weight: 700;
+  cursor: pointer;
+}
+.exec-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.exec-btn.primary {
+  background: var(--btn-primary);
+  color: var(--btn-text);
+  border-color: transparent;
+}
+.exec-btn.ghost {
+  background: rgba(15, 23, 42, 0.12);
+}
+.exec-btn.subtle {
+  background: rgba(148, 163, 184, 0.08);
+}
 .leg-header {
   padding: 6px 10px 0;
   margin-top: 6px;
@@ -347,6 +613,18 @@ watch(
 .step.waypoint {
   border-left: 4px solid #22c55e;
 }
+.step.current {
+  border-color: rgba(96, 165, 250, 0.64);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+}
+.step.visited {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.08);
+}
+.step.skipped {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(100, 116, 139, 0.08);
+}
 .badge {
   display: inline-flex;
   align-items: center;
@@ -364,6 +642,30 @@ watch(
   background: rgba(59, 130, 246, 0.18);
   color: #60a5fa;
   border: 1px solid rgba(96, 165, 250, 0.35);
+}
+.exec-step-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--map-overlay-fg);
+}
+.exec-step-badge.is-current {
+  background: rgba(96, 165, 250, 0.18);
+  color: #60a5fa;
+}
+.exec-step-badge.is-visited {
+  background: rgba(34, 197, 94, 0.18);
+  color: #22c55e;
+}
+.exec-step-badge.is-skipped {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
 }
 .step-num {
   width: 28px;
@@ -450,6 +752,26 @@ watch(
   background: #ffffff;
   border: 1px solid #e5e7eb;
 }
+.directions-panel.light .execution-hero {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.08), rgba(148, 163, 184, 0.04));
+}
+.directions-panel.light .execution-hero.live {
+  border-color: rgba(34, 197, 94, 0.2);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(148, 163, 184, 0.04));
+}
+.directions-panel.light .execution-hero.done {
+  border-color: rgba(14, 165, 233, 0.2);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.08), rgba(148, 163, 184, 0.04));
+}
+.directions-panel.light .metric-card {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+.directions-panel.light .execution-mode {
+  background: rgba(255, 255, 255, 0.84);
+  border-color: rgba(148, 163, 184, 0.2);
+}
 .directions-panel.light .step.pinned {
   border-color: #a855f7;
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.16);
@@ -464,6 +786,18 @@ watch(
   border-color: #f97316;
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
 }
+.directions-panel.light .step.current {
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.directions-panel.light .step.visited {
+  border-color: rgba(34, 197, 94, 0.34);
+  background: rgba(34, 197, 94, 0.06);
+}
+.directions-panel.light .step.skipped {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
+}
 .directions-panel.light .step.waypoint {
   border-left: 4px solid #22c55e;
 }
@@ -476,6 +810,18 @@ watch(
   background: rgba(59, 130, 246, 0.12);
   color: #1d4ed8;
   border: 1px solid rgba(29, 78, 216, 0.2);
+}
+.directions-panel.light .exec-step-badge.is-current {
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+}
+.directions-panel.light .exec-step-badge.is-visited {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+.directions-panel.light .exec-step-badge.is-skipped {
+  background: rgba(148, 163, 184, 0.14);
+  color: #475569;
 }
 .directions-panel.light .step-num {
   background: #eef2f7;

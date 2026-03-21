@@ -14,10 +14,12 @@ const INTEREST_PROFILE_TTL_MS = 30 * 60 * 1000
 const POI_API_BASE = apiUrl('/api/poi')
 const SAVED_POI_KEY = 'jp_saved_pois'
 const RECENT_POI_KEY = 'jp_recent_pois'
+const EXECUTION_STATE_KEY = 'jp_route_execution_v1'
 const MAX_RECENT_POIS = 12
 const CATEGORY_COLORS = ['#2563eb', '#10b981', '#f97316', '#a855f7', '#f59e0b', '#06b6d4', '#22c55e', '#ef4444']
 const PANEL_MODES = ['collapsed', 'half', 'full']
 const RECO_MODES = ['driving']
+const EXECUTION_STATUSES = ['pending', 'current', 'visited', 'skipped']
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 const normalizePanelMode = (mode) => (PANEL_MODES.includes(mode) ? mode : 'half')
@@ -182,6 +184,66 @@ function saveRecentPois(list) {
   }
 }
 
+function createExecutionStateDefaults() {
+  return {
+    executionMode: false,
+    executionCompleted: false,
+    executionRouteHash: '',
+    executionTargets: [],
+  }
+}
+
+function normalizeExecutionStatus(value) {
+  const next = String(value || '').trim().toLowerCase()
+  return EXECUTION_STATUSES.includes(next) ? next : 'pending'
+}
+
+function normalizeExecutionTarget(target) {
+  if (!target || typeof target !== 'object') return null
+  const lat = Number(target.lat)
+  const lng = Number(target.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return {
+    key: String(target.key || ''),
+    kind: target.kind === 'destination' ? 'destination' : 'waypoint',
+    label: String(target.label || '').trim() || 'Stop',
+    lat,
+    lng,
+    sourceIndex: Number.isFinite(Number(target.sourceIndex)) ? Number(target.sourceIndex) : 0,
+    status: normalizeExecutionStatus(target.status),
+  }
+}
+
+function loadExecutionState() {
+  if (typeof window === 'undefined') return createExecutionStateDefaults()
+  try {
+    const raw = localStorage.getItem(EXECUTION_STATE_KEY)
+    if (!raw) return createExecutionStateDefaults()
+    const parsed = JSON.parse(raw)
+    const defaults = createExecutionStateDefaults()
+    const executionTargets = Array.isArray(parsed?.executionTargets)
+      ? parsed.executionTargets.map(normalizeExecutionTarget).filter(Boolean)
+      : []
+    return {
+      executionMode: !!parsed?.executionMode,
+      executionCompleted: !!parsed?.executionCompleted,
+      executionRouteHash: String(parsed?.executionRouteHash || ''),
+      executionTargets,
+    }
+  } catch (e) {
+    return createExecutionStateDefaults()
+  }
+}
+
+function saveExecutionState(state) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(EXECUTION_STATE_KEY, JSON.stringify(state))
+  } catch (e) {
+    // ignore
+  }
+}
+
 function interestProfileCacheKey(userId) {
   return `${INTEREST_PROFILE_CACHE_PREFIX}${userId}`
 }
@@ -260,6 +322,46 @@ function buildPoiSummary(poi) {
   }
 }
 
+function buildExecutionTargetKey(kind, target) {
+  const base =
+    target?.id !== undefined && target?.id !== null && target?.id !== ''
+      ? `id:${target.id}`
+      : typeof target?.lat === 'number' && typeof target?.lng === 'number'
+      ? `ll:${target.lat.toFixed(6)},${target.lng.toFixed(6)}`
+      : 'unknown'
+  return `${kind}:${base}`
+}
+
+function buildExecutionTargets({ viaPoints, endLat, endLng, endAddress }) {
+  const targets = []
+  ;(Array.isArray(viaPoints) ? viaPoints : []).forEach((poi, index) => {
+    if (!poi || typeof poi.lat !== 'number' || typeof poi.lng !== 'number') return
+    targets.push({
+      key: buildExecutionTargetKey('waypoint', poi),
+      kind: 'waypoint',
+      label: poi.name || `Waypoint ${index + 1}`,
+      lat: Number(poi.lat),
+      lng: Number(poi.lng),
+      sourceIndex: index,
+      status: 'pending',
+    })
+  })
+
+  if (typeof endLat === 'number' && typeof endLng === 'number') {
+    targets.push({
+      key: buildExecutionTargetKey('destination', { lat: endLat, lng: endLng }),
+      kind: 'destination',
+      label: endAddress || 'Destination',
+      lat: Number(endLat),
+      lng: Number(endLng),
+      sourceIndex: targets.length,
+      status: 'pending',
+    })
+  }
+
+  return targets
+}
+
 function normalizeRecoMode(mode) {
   const value = String(mode || '').trim().toLowerCase()
   return RECO_MODES.includes(value) ? value : 'driving'
@@ -276,7 +378,9 @@ function buildRouteHash({ startLat, startLng, endLat, endLng, viaPoints, mode })
 }
 
 export const useRouteStore = defineStore('route', {
-  state: () => ({
+  state: () => {
+    const executionState = loadExecutionState()
+    return ({
     startAddress: 'London_center',
     endAddress: 'Grosvenor Square',
     startLat: 51.5074,
@@ -299,6 +403,7 @@ export const useRouteStore = defineStore('route', {
     previewPoi: null,
     parkingSearchResult: null,
     parkingFocusKey: null,
+    parkingSearchNonce: 0,
     savedPois: loadSavedPois(),
     recentPois: loadRecentPois(),
     recommendationProfile: null,
@@ -320,6 +425,10 @@ export const useRouteStore = defineStore('route', {
     followRoute: true,
     routePanelMode: 'half',
     poiPanelMode: 'half',
+    executionMode: executionState.executionMode,
+    executionCompleted: executionState.executionCompleted,
+    executionRouteHash: executionState.executionRouteHash,
+    executionTargets: executionState.executionTargets,
     hoveredStepIndex: null,
     hoveredStepSource: null,
     pinnedStepIndex: null,
@@ -327,7 +436,8 @@ export const useRouteStore = defineStore('route', {
     fitRouteNonce: 0,
     focusPoint: null,
     focusPointNonce: 0,
-  }),
+  })
+  },
 
   getters: {
     filteredRecommendedPOIs(state) {
@@ -336,12 +446,37 @@ export const useRouteStore = defineStore('route', {
       if (filter.length === 0) return list
       return list.filter((poi) => filter.includes(normalizeCategory(poi?.category)))
     },
+    executionCurrentTarget(state) {
+      return (state.executionTargets || []).find((target) => target.status === 'current') || null
+    },
+    executionProgress(state) {
+      const targets = Array.isArray(state.executionTargets) ? state.executionTargets : []
+      const total = targets.length
+      const visited = targets.filter((target) => target.status === 'visited').length
+      const skipped = targets.filter((target) => target.status === 'skipped').length
+      const current = targets.find((target) => target.status === 'current') || null
+      const pending = targets.filter((target) => target.status === 'pending').length
+      const handled = visited + skipped
+      const percent = total ? Math.round((handled / total) * 100) : 0
+      return {
+        total,
+        visited,
+        skipped,
+        handled,
+        pending,
+        remaining: pending + (current ? 1 : 0),
+        percent,
+        current,
+        isCompleted: !!state.executionCompleted || (total > 0 && !current && pending === 0),
+      }
+    },
   },
 
   actions: {
     setStart(lat, lng) {
       this.startLat = lat
       this.startLng = lng
+      this.syncExecutionTargets()
     },
 
     setRoutePanelMode(mode) {
@@ -369,6 +504,166 @@ export const useRouteStore = defineStore('route', {
     setEnd(lat, lng) {
       this.endLat = lat
       this.endLng = lng
+      this.syncExecutionTargets()
+    },
+
+    getCurrentRouteHash() {
+      return buildRouteHash({
+        startLat: this.startLat,
+        startLng: this.startLng,
+        endLat: this.endLat,
+        endLng: this.endLng,
+        viaPoints: this.viaPoints,
+        mode: this.recoMode,
+      })
+    },
+
+    persistExecutionState() {
+      saveExecutionState({
+        executionMode: !!this.executionMode,
+        executionCompleted: !!this.executionCompleted,
+        executionRouteHash: this.executionRouteHash || this.getCurrentRouteHash(),
+        executionTargets: Array.isArray(this.executionTargets) ? this.executionTargets : [],
+      })
+    },
+
+    syncExecutionTargets({ preserveState = true } = {}) {
+      const nextRouteHash = this.getCurrentRouteHash()
+      const nextTargets = buildExecutionTargets({
+        viaPoints: this.viaPoints,
+        endLat: this.endLat,
+        endLng: this.endLng,
+        endAddress: this.endAddress,
+      })
+      const routeChanged = !!this.executionRouteHash && this.executionRouteHash !== nextRouteHash
+
+      if (routeChanged) {
+        this.executionMode = false
+        this.executionCompleted = false
+      }
+
+      const canPreserve = preserveState && this.executionMode && !routeChanged
+      const prevTargets = Array.isArray(this.executionTargets) ? this.executionTargets : []
+      const prevByKey = new Map(prevTargets.map((target) => [target.key, target]))
+      const prevCurrentKey = prevTargets.find((target) => target.status === 'current')?.key || null
+
+      this.executionTargets = nextTargets.map((target) => {
+        const prev = prevByKey.get(target.key)
+        let status = 'pending'
+        if (canPreserve && prev) {
+          if (prev.status === 'visited' || prev.status === 'skipped') {
+            status = prev.status
+          } else if (prev.key === prevCurrentKey) {
+            status = 'current'
+          }
+        }
+        return { ...target, status }
+      })
+
+      if (this.executionMode) {
+        let currentIndex = this.executionTargets.findIndex((target) => target.status === 'current')
+        if (currentIndex < 0) {
+          currentIndex = this.executionTargets.findIndex((target) => target.status === 'pending')
+          if (currentIndex >= 0) {
+            this.executionTargets[currentIndex] = {
+              ...this.executionTargets[currentIndex],
+              status: 'current',
+            }
+          }
+        }
+        this.executionCompleted =
+          this.executionTargets.length > 0 &&
+          currentIndex < 0 &&
+          this.executionTargets.every((target) => target.status !== 'pending')
+      } else {
+        this.executionTargets = this.executionTargets.map((target) => ({ ...target, status: 'pending' }))
+        this.executionCompleted = false
+      }
+
+      this.executionRouteHash = nextRouteHash
+      this.persistExecutionState()
+    },
+
+    startExecution() {
+      this.executionMode = true
+      this.executionCompleted = false
+      this.executionRouteHash = this.getCurrentRouteHash()
+      this.syncExecutionTargets({ preserveState: false })
+      if (!this.executionTargets.length) return
+      const firstTarget = this.executionTargets.find((target) => target.status === 'current') || this.executionTargets[0]
+      this.clearParkingSearchResult()
+      this.focusExecutionTarget(firstTarget)
+      this.requestFitRoute()
+      this.persistExecutionState()
+    },
+
+    endExecution({ resetProgress = true } = {}) {
+      this.executionMode = false
+      this.executionCompleted = false
+      if (resetProgress) {
+        this.executionTargets = buildExecutionTargets({
+          viaPoints: this.viaPoints,
+          endLat: this.endLat,
+          endLng: this.endLng,
+          endAddress: this.endAddress,
+        })
+      }
+      this.executionRouteHash = this.getCurrentRouteHash()
+      this.persistExecutionState()
+    },
+
+    focusExecutionTarget(target = null) {
+      const nextTarget = target || this.executionCurrentTarget || this.executionTargets?.find((item) => item.status === 'current')
+      if (!nextTarget) return
+      this.requestFocusPoint(nextTarget.lat, nextTarget.lng, nextTarget.kind === 'destination' ? 15 : 16)
+    },
+
+    moveExecutionToNext(status) {
+      if (!this.executionMode) return
+      const currentIndex = this.executionTargets.findIndex((target) => target.status === 'current')
+      if (currentIndex < 0) return
+
+      const nextTargets = [...this.executionTargets]
+      nextTargets[currentIndex] = {
+        ...nextTargets[currentIndex],
+        status: normalizeExecutionStatus(status),
+      }
+
+      let nextIndex = nextTargets.findIndex((target, index) => index > currentIndex && target.status === 'pending')
+      if (nextIndex < 0) {
+        nextIndex = nextTargets.findIndex((target) => target.status === 'pending')
+      }
+
+      this.executionCompleted = nextIndex < 0
+      if (nextIndex >= 0) {
+        nextTargets[nextIndex] = {
+          ...nextTargets[nextIndex],
+          status: 'current',
+        }
+      }
+
+      this.executionTargets = nextTargets
+      this.persistExecutionState()
+
+      if (nextIndex >= 0) {
+        this.focusExecutionTarget(nextTargets[nextIndex])
+      }
+    },
+
+    markExecutionReached() {
+      this.moveExecutionToNext('visited')
+    },
+
+    skipExecutionTarget() {
+      this.moveExecutionToNext('skipped')
+    },
+
+    reorderViaPoints(list) {
+      const source = Array.isArray(list) ? list : []
+      this.viaPoints = source.map((poi) => ({ ...poi }))
+      saveViaPoints(this.viaPoints)
+      this.syncExecutionTargets()
+      this.applyWaypointsToControl()
     },
 
     buildWaypoints() {
@@ -397,6 +692,7 @@ export const useRouteStore = defineStore('route', {
           this.viaPoints.push(poi)
           saveViaPoints(this.viaPoints)
           this.logRecommendationEvent('add_via', poi)
+          this.syncExecutionTargets()
         }
 
         this.applyWaypointsToControl()
@@ -417,6 +713,7 @@ export const useRouteStore = defineStore('route', {
       if (before !== this.viaPoints.length) {
         saveViaPoints(this.viaPoints)
         this.logRecommendationEvent('remove_via', poi)
+        this.syncExecutionTargets()
       }
     },
 
@@ -424,6 +721,7 @@ export const useRouteStore = defineStore('route', {
       if (this.viaPoints.length === 0) return
       this.viaPoints = []
       saveViaPoints(this.viaPoints)
+      this.syncExecutionTargets()
     },
 
     replaceViaPoints(list) {
@@ -449,6 +747,7 @@ export const useRouteStore = defineStore('route', {
       })
       this.viaPoints = next
       saveViaPoints(this.viaPoints)
+      this.syncExecutionTargets()
       this.applyWaypointsToControl()
     },
 
@@ -882,6 +1181,10 @@ export const useRouteStore = defineStore('route', {
       const key = typeof itemOrKey === 'string' ? itemOrKey : getParkingKey(itemOrKey)
       if (!key) return
       this.parkingFocusKey = key
+    },
+
+    requestParkingSearch() {
+      this.parkingSearchNonce += 1
     },
 
     recordRecentPoi(poi) {

@@ -124,27 +124,68 @@ function createColoredMarker(color, position, onDrag) {
   return marker
 }
 
-const createWaypointIcon = (label) =>
+const createWaypointIcon = (label, status = "pending") =>
   L.divIcon({
-    className: "jp-waypoint-icon",
+    className: `jp-waypoint-icon jp-waypoint-${status}`,
     html: `<div class="jp-waypoint-badge">${label}</div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   })
 
+const getExecutionStatusCopy = (status) => {
+  if (status === "current") return "Next stop"
+  if (status === "visited") return "Reached"
+  if (status === "skipped") return "Skipped"
+  return "Upcoming"
+}
+
+const updateAnchorTooltips = () => {
+  if (!startMarker || !endMarker) return
+  const current = routeStore.executionCurrentTarget
+  const destinationTarget = (routeStore.executionTargets || []).find((target) => target.kind === "destination")
+  const destinationStatus = destinationTarget?.status
+  const destinationLabel =
+    destinationStatus === "current"
+      ? "End · Next stop"
+      : destinationStatus === "visited"
+      ? "End · Reached"
+      : destinationStatus === "skipped"
+      ? "End · Skipped"
+      : "End"
+
+  if (typeof startMarker.setTooltipContent === "function") {
+    startMarker.setTooltipContent(routeStore.executionMode ? "Start · Active" : "Start")
+  }
+  if (typeof endMarker.setTooltipContent === "function") {
+    endMarker.setTooltipContent(
+      routeStore.executionMode && current?.kind === "destination" ? "End · Next stop" : destinationLabel
+    )
+  }
+}
+
 const updateViaMarkers = () => {
   if (!map.value || !viaMarkerLayer) return
   viaMarkerLayer.clearLayers()
   const list = routeStore.viaPoints || []
+  const executionMap = new Map(
+    (routeStore.executionTargets || [])
+      .filter((target) => target.kind === "waypoint")
+      .map((target) => [target.sourceIndex, target])
+  )
   list.forEach((poi, idx) => {
     if (!poi || typeof poi.lat !== "number" || typeof poi.lng !== "number") return
     const title = poi.name || `Waypoint ${idx + 1}`
+    const executionTarget = executionMap.get(idx)
+    const status = executionTarget?.status || "pending"
     const marker = L.marker([poi.lat, poi.lng], {
-      icon: createWaypointIcon(idx + 1),
+      icon: createWaypointIcon(idx + 1, status),
       title,
       keyboard: false,
     })
-    marker.bindTooltip(title, {
+    if (status === "current") {
+      marker.setZIndexOffset(1200)
+    }
+    marker.bindTooltip(`${title} · ${getExecutionStatusCopy(status)}`, {
       direction: "top",
       offset: [0, -10],
       opacity: 0.95,
@@ -156,6 +197,7 @@ const updateViaMarkers = () => {
     })
     viaMarkerLayer.addLayer(marker)
   })
+  updateAnchorTooltips()
 }
 
 const getPoiKey = (poi) => {
@@ -894,6 +936,7 @@ onMounted(() => {
   viaMarkerLayer = L.layerGroup().addTo(map.value)
   parkingLayer = L.layerGroup().addTo(map.value)
   updateViaMarkers()
+  updateAnchorTooltips()
 
   scheduleFetchRoute(0)
 
@@ -993,6 +1036,15 @@ onMounted(() => {
     () => routeStore.previewPoi,
     (preview) => {
       updatePreviewPoiMarker(preview)
+    },
+    { deep: true }
+  )
+
+  watch(
+    () => [routeStore.executionMode, routeStore.executionCompleted, routeStore.executionTargets],
+    () => {
+      updateViaMarkers()
+      updateAnchorTooltips()
     },
     { deep: true }
   )
@@ -1230,6 +1282,27 @@ onBeforeUnmount(() => {
   background: #ffffff;
   color: #0f172a;
   border: 1px solid rgba(37, 99, 235, 0.85);
+}
+:global(.jp-waypoint-icon.jp-waypoint-current .jp-waypoint-badge) {
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  color: #eff6ff;
+  border-color: rgba(147, 197, 253, 0.95);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.36);
+  transform: scale(1.06);
+}
+:global(.jp-waypoint-icon.jp-waypoint-visited .jp-waypoint-badge) {
+  background: linear-gradient(180deg, #34d399 0%, #16a34a 100%);
+  color: #ecfdf5;
+  border-color: rgba(134, 239, 172, 0.9);
+}
+:global(.jp-waypoint-icon.jp-waypoint-skipped .jp-waypoint-badge) {
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.52);
+}
+:global(body[data-theme='light'] .jp-waypoint-icon.jp-waypoint-skipped .jp-waypoint-badge) {
+  background: rgba(148, 163, 184, 0.12);
+  color: #475569;
 }
 
 :global(.jp-map-tooltip.leaflet-tooltip) {

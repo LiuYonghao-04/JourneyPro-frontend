@@ -222,8 +222,7 @@ const handleDrop = (idx) => {
   const list = [...viaPoints.value]
   const [moved] = list.splice(dragIndex.value, 1)
   list.splice(idx, 0, moved)
-  routeStore.viaPoints = list
-  persistViaPoints(list)
+  routeStore.reorderViaPoints(list)
   dragIndex.value = null
 }
 

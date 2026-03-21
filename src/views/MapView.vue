@@ -1,7 +1,7 @@
 <template>
   <div class="map-page">
     <div class="parking-widget">
-      <button class="parking-btn" :disabled="parkingLoading || !hasRouteAnchors" @click="searchParkingNearby">
+      <button class="parking-btn" :disabled="parkingLoading || !hasRouteAnchors" @click="requestParkingSearch">
         {{ parkingLoading ? 'Scanning parking...' : 'Arrived: Find Parking' }}
       </button>
     </div>
@@ -62,7 +62,7 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, computed, ref } from 'vue'
+import { onMounted, onBeforeUnmount, computed, ref, watch } from 'vue'
 import RoutePanel from '../components/RoutePanel.vue'
 import MapContainer from '../components/MapContainer.vue'
 import RouteDirections from '../components/RouteDirections.vue'
@@ -112,6 +112,10 @@ const getParkingKey = (item) => {
 const toggleDebug = () => {
   routeStore.setRecoDebugEnabled(!routeStore.recoDebugEnabled)
   routeStore.fetchRecommendedPois()
+}
+
+const requestParkingSearch = () => {
+  routeStore.requestParkingSearch()
 }
 
 const searchParkingNearby = async () => {
@@ -205,6 +209,14 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
 })
+
+watch(
+  () => routeStore.parkingSearchNonce,
+  (nonce, prev) => {
+    if (nonce === prev || !nonce) return
+    searchParkingNearby()
+  }
+)
 </script>
 
 <style scoped>
