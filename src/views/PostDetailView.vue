@@ -84,6 +84,10 @@
               <span v-for="tag in post.tags" :key="tag" class="tag">#{{ tag }}</span>
             </div>
 
+            <div v-if="tripContextChips.length" class="trip-context-chips">
+              <span v-for="chip in tripContextChips" :key="chip" class="trip-chip">{{ chip }}</span>
+            </div>
+
             <div class="post-actions">
               <button class="pill" @click="toggleLikePost">
                 <el-icon :class="{ active: post._liked }">
@@ -199,6 +203,31 @@
             </section>
 
             <section class="side-card card">
+              <h3>Travel context</h3>
+              <div v-if="hasTripMeta" class="context-stack">
+                <div class="context-grid">
+                  <div v-for="item in tripContextItems" :key="item.label" class="context-item">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                  </div>
+                </div>
+                <div v-if="tripBestFor.length" class="context-bucket">
+                  <div class="context-title">Best for</div>
+                  <div class="context-tags">
+                    <span v-for="item in tripBestFor" :key="item">{{ item }}</span>
+                  </div>
+                </div>
+                <div v-if="tripAvoidFor.length" class="context-bucket">
+                  <div class="context-title">Watch out</div>
+                  <div class="context-tags muted">
+                    <span v-for="item in tripAvoidFor" :key="item">{{ item }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty">No structured travel context yet.</div>
+            </section>
+
+            <section class="side-card card">
               <h3>Post insights</h3>
               <div class="kpi-grid">
                 <div class="kpi"><span>Likes</span><strong>{{ post.like_count || 0 }}</strong></div>
@@ -284,6 +313,34 @@ const activePhotoUrl = computed(() => photoViewerImages.value[photoViewerIndex.v
 const normalizeImageList = (list) => Array.from(new Set((list || []).map((img) => String(img || '').trim()).filter(Boolean)))
 const postImages = computed(() => normalizeImageList(post.value?.images || [post.value?.cover_image]))
 const poiGallery = computed(() => normalizeImageList([poiDetail.value?.image_url, ...(poiDetail.value?.photos || [])]).slice(0, 8))
+const tripMeta = computed(() => post.value?.trip_meta || null)
+const humanizeTripMetaValue = (value) =>
+  String(value || '')
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+const hasTripMeta = computed(() => !!tripMeta.value)
+const tripContextItems = computed(() => {
+  const meta = tripMeta.value
+  if (!meta) return []
+  return [
+    { label: 'Style', value: humanizeTripMetaValue(meta.trip_style) },
+    { label: 'Route role', value: humanizeTripMetaValue(meta.route_role) },
+    { label: 'Best time', value: humanizeTripMetaValue(meta.visit_time) },
+    { label: 'Pace', value: humanizeTripMetaValue(meta.pace) },
+    { label: 'Spend', value: humanizeTripMetaValue(meta.spend_level) },
+    { label: 'Crowd', value: humanizeTripMetaValue(meta.crowd_level) },
+    { label: 'Companion', value: humanizeTripMetaValue(meta.companion_type) },
+  ].filter((item) => item.value)
+})
+const tripBestFor = computed(() => (Array.isArray(tripMeta.value?.best_for) ? tripMeta.value.best_for : []))
+const tripAvoidFor = computed(() => (Array.isArray(tripMeta.value?.avoid_for) ? tripMeta.value.avoid_for : []))
+const tripContextChips = computed(() => {
+  const chips = tripContextItems.value.slice(0, 4).map((item) => item.value)
+  if (tripBestFor.value.length) chips.push(`Best for ${tripBestFor.value[0]}`)
+  return chips
+})
 
 const commentTotal = computed(() => {
   const walk = (list) => (list || []).reduce((sum, item) => sum + 1 + walk(item.replies || []), 0)
@@ -951,6 +1008,22 @@ watch(
   background: color-mix(in srgb, var(--badge) 82%, transparent);
 }
 
+.trip-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trip-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--badge) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
+}
+
 .post-actions {
   margin-top: 6px;
   padding-top: 14px;
@@ -1167,6 +1240,69 @@ watch(
 
 .side-card h3 {
   margin: 0 0 10px;
+}
+
+.context-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.context-item {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+}
+
+.context-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.context-item strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.context-bucket {
+  display: grid;
+  gap: 8px;
+}
+
+.context-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.context-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.context-tags span {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--badge) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+}
+
+.context-tags.muted span {
+  color: var(--muted);
 }
 
 .kpi-grid {

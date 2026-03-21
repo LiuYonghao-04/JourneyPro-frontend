@@ -10,23 +10,44 @@
     </aside>
 
     <main class="content">
-      <section class="hero">
+      <section class="hero hero-v2">
         <div class="avatar-wrap" @click="isSelf && openAvatarDialog()">
           <CroppedImage :src="displayAvatar" alt="avatar" class="avatar" :aspect-ratio="1" />
           <div v-if="isSelf" class="avatar-mask">Change</div>
         </div>
         <div class="hero-main">
-          <h1>{{ displayUserName }}</h1>
+          <div class="hero-eyebrow">Personalization Center</div>
+          <div class="hero-title-row">
+            <h1>{{ displayUserName }}</h1>
+            <span v-if="isSelf && profileArchetype" class="hero-pill hero-pill-accent">{{ profileArchetype }}</span>
+            <span v-if="isSelf && profileConfidence" class="hero-pill">
+              {{ profileConfidence }}% {{ profileConfidenceLabel }}
+            </span>
+          </div>
+          <p class="hero-summary">
+            {{ isSelf ? profileSummaryText : 'Personal posts, reactions and public travel content in one workspace.' }}
+          </p>
           <div class="hero-sub">
             <span>User ID: {{ userId || 'guest' }}</span>
             <button class="link-btn" :disabled="!isSelf" @click="isSelf && openFollowers()">
               Followers {{ followerCount }}
             </button>
+            <span v-if="isSelf && profileGeneratedAt">Profile updated {{ profileGeneratedAt }}</span>
           </div>
-          <div class="kpi-row">
+          <div v-if="isSelf" class="hero-tag-row">
+            <span class="hero-chip">Focus {{ dominantCategoryLabel }}</span>
+            <span class="hero-chip">Tag {{ dominantTagLabel }}</span>
+            <span class="hero-chip">Signal {{ dominantSignalLabel }}</span>
+            <span class="hero-chip">Diversity {{ profileDiversity }}%</span>
+          </div>
+          <div class="kpi-row kpi-row-wide">
             <div class="kpi-card">
               <span>Posts</span>
               <strong>{{ posts.length }}</strong>
+            </div>
+            <div class="kpi-card">
+              <span>Followers</span>
+              <strong>{{ followerCount }}</strong>
             </div>
             <div class="kpi-card">
               <span>Favorites</span>
@@ -40,13 +61,23 @@
               <span>Visible</span>
               <strong>{{ filteredList.length }}</strong>
             </div>
+            <div v-if="isSelf" class="kpi-card">
+              <span>Profile confidence</span>
+              <strong>{{ profileConfidence || 0 }}%</strong>
+            </div>
           </div>
         </div>
       </section>
 
-      <section v-if="isSelf" class="insights">
-        <article class="panel">
-          <h3>Recommendation Controls</h3>
+      <section v-if="isSelf" class="personalization-grid">
+        <article class="panel preference-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Preference Center</h3>
+              <p class="panel-copy">Manual controls only reorder recommendations. Categories remain available.</p>
+            </div>
+            <button class="collapse-btn" type="button" @click="resetPreferencePreset">Balanced reset</button>
+          </div>
           <div class="slider-wrap">
             <div class="slider-labels">
               <span>Distance {{ distancePercent }}%</span>
@@ -61,17 +92,126 @@
             </div>
             <el-slider v-model="exploreSlider" :min="0" :max="100" />
           </div>
+          <div class="preset-row">
+            <button class="preset-btn" :class="{ active: currentPreset === 'balanced' }" type="button" @click="applyPreferencePreset('balanced')">
+              Balanced
+            </button>
+            <button class="preset-btn" :class="{ active: currentPreset === 'route' }" type="button" @click="applyPreferencePreset('route')">
+              Route-first
+            </button>
+            <button class="preset-btn" :class="{ active: currentPreset === 'discovery' }" type="button" @click="applyPreferencePreset('discovery')">
+              Discovery
+            </button>
+          </div>
+          <div class="control-matrix">
+            <div class="mini-stat">
+              <span>Ordering</span>
+              <strong>{{ profileOrderingMode }}</strong>
+            </div>
+            <div class="mini-stat">
+              <span>Exploration</span>
+              <strong>{{ profileExploreMode }}</strong>
+            </div>
+            <div class="mini-stat">
+              <span>Profile source</span>
+              <strong>{{ profileSourceLabel }}</strong>
+            </div>
+          </div>
         </article>
 
-        <article class="panel">
+        <article class="panel story-panel">
           <div class="panel-head">
-            <h3>Interest Profile</h3>
-            <button
-              v-if="interestProfile?.personalized"
-              class="collapse-btn"
-              type="button"
-              @click="interestCollapsed = !interestCollapsed"
-            >
+            <div>
+              <h3>Why JourneyPro leans this way</h3>
+              <p class="panel-copy">An explanation layer for what is shaping ranking decisions right now.</p>
+            </div>
+            <button class="collapse-btn" type="button" @click="explanationCollapsed = !explanationCollapsed">
+              {{ explanationCollapsed ? 'Expand' : 'Collapse' }}
+            </button>
+          </div>
+          <div v-if="explanationCollapsed" class="summary-strip">
+            <div class="summary-tile">
+              <span>Archetype</span>
+              <strong>{{ profileArchetype }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Confidence</span>
+              <strong>{{ profileConfidence }}%</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Dominant category</span>
+              <strong>{{ dominantCategoryLabel }}</strong>
+            </div>
+          </div>
+          <div v-else class="explanation-grid">
+            <div v-for="item in profileExplanations" :key="item.key" class="explanation-card">
+              <span>{{ item.title }}</span>
+              <strong>{{ item.value }}</strong>
+              <p>{{ item.detail }}</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel signal-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Signal Mix</h3>
+              <p class="panel-copy">Likes, saves and reading depth contribute differently to the profile.</p>
+            </div>
+            <button class="collapse-btn" type="button" @click="signalCollapsed = !signalCollapsed">
+              {{ signalCollapsed ? 'Expand' : 'Collapse' }}
+            </button>
+          </div>
+          <div v-if="signalCollapsed" class="summary-strip">
+            <div class="summary-tile">
+              <span>Primary signal</span>
+              <strong>{{ dominantSignalLabel }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Last 7 days</span>
+              <strong>{{ recentActivity7d }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Momentum</span>
+              <strong>{{ recentMomentumLabel }}</strong>
+            </div>
+          </div>
+          <div v-else class="signal-stack">
+            <div v-for="item in signalMixItems" :key="item.key" class="signal-item">
+              <div class="signal-head">
+                <span>{{ item.label }}</span>
+                <span>{{ item.percent }}%</span>
+              </div>
+              <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
+              <div class="signal-foot">
+                <span>{{ item.count }} events</span>
+                <span>{{ item.note }}</span>
+              </div>
+            </div>
+            <div class="activity-strip">
+              <div class="summary-tile">
+                <span>Last 7 days</span>
+                <strong>{{ recentActivity7d }}</strong>
+              </div>
+              <div class="summary-tile">
+                <span>Last 30 days</span>
+                <strong>{{ recentActivity30d }}</strong>
+              </div>
+              <div class="summary-tile">
+                <span>Momentum</span>
+                <strong>{{ recentMomentumLabel }}</strong>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel interest-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Interest Profile</h3>
+              <p class="panel-copy">Current tag and category distribution inferred from your behavior.</p>
+            </div>
+            <button v-if="interestProfile?.personalized" class="collapse-btn" type="button" @click="interestCollapsed = !interestCollapsed">
               {{ interestCollapsed ? 'Expand' : 'Collapse' }}
             </button>
           </div>
@@ -80,6 +220,11 @@
             <div class="muted">Interact with posts to generate preference profile.</div>
           </template>
           <template v-else>
+            <div class="interest-meta-row">
+              <span class="meta-chip">Source {{ profileSourceLabel }}</span>
+              <span class="meta-chip">Evidence {{ profileEvidenceScore }}%</span>
+              <span class="meta-chip">Diversity {{ profileDiversity }}%</span>
+            </div>
             <div v-if="interestCollapsed" class="bar-grid">
               <div class="bar-block" v-for="item in collapsedInterestItems" :key="item.key">
                 <div class="bar-head">
@@ -90,36 +235,44 @@
               </div>
             </div>
             <template v-else>
-              <div class="bar-grid">
-                <div class="bar-block" v-for="item in interestTags" :key="`tag-${item.name}`">
-                  <div class="bar-head">
-                    <span>#{{ item.name }}</span>
-                    <span>{{ item.percent }}%</span>
+              <div class="interest-columns">
+                <div class="interest-column">
+                  <div class="interest-column-title">Tags</div>
+                  <div class="bar-grid">
+                    <div class="bar-block" v-for="item in interestTags" :key="`tag-${item.name}`">
+                      <div class="bar-head">
+                        <span>#{{ item.name }}</span>
+                        <span>{{ item.percent }}%</span>
+                      </div>
+                      <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
+                    </div>
+                    <div class="bar-block" v-if="otherTagPercent > 0">
+                      <div class="bar-head">
+                        <span>Other tags</span>
+                        <span>{{ otherTagPercent }}%</span>
+                      </div>
+                      <el-progress :percentage="otherTagPercent" :stroke-width="8" :show-text="false" />
+                    </div>
                   </div>
-                  <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
                 </div>
-                <div class="bar-block" v-if="otherTagPercent > 0">
-                  <div class="bar-head">
-                    <span>Other tags</span>
-                    <span>{{ otherTagPercent }}%</span>
+                <div class="interest-column">
+                  <div class="interest-column-title">Categories</div>
+                  <div class="bar-grid">
+                    <div class="bar-block" v-for="item in interestCategories" :key="`cat-${item.name}`">
+                      <div class="bar-head">
+                        <span>{{ item.name }}</span>
+                        <span>{{ item.percent }}%</span>
+                      </div>
+                      <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
+                    </div>
+                    <div class="bar-block" v-if="otherCategoryPercent > 0">
+                      <div class="bar-head">
+                        <span>Other categories</span>
+                        <span>{{ otherCategoryPercent }}%</span>
+                      </div>
+                      <el-progress :percentage="otherCategoryPercent" :stroke-width="8" :show-text="false" />
+                    </div>
                   </div>
-                  <el-progress :percentage="otherTagPercent" :stroke-width="8" :show-text="false" />
-                </div>
-              </div>
-              <div class="bar-grid">
-                <div class="bar-block" v-for="item in interestCategories" :key="`cat-${item.name}`">
-                  <div class="bar-head">
-                    <span>{{ item.name }}</span>
-                    <span>{{ item.percent }}%</span>
-                  </div>
-                  <el-progress :percentage="item.percent" :stroke-width="8" :show-text="false" />
-                </div>
-                <div class="bar-block" v-if="otherCategoryPercent > 0">
-                  <div class="bar-head">
-                    <span>Other categories</span>
-                    <span>{{ otherCategoryPercent }}%</span>
-                  </div>
-                  <el-progress :percentage="otherCategoryPercent" :stroke-width="8" :show-text="false" />
                 </div>
               </div>
             </template>
@@ -271,6 +424,8 @@ const avatarCropSrc = ref('')
 const avatarCropInitial = ref(null)
 const avatarCropBaseUrl = ref('')
 const interestCollapsed = ref(true)
+const explanationCollapsed = ref(false)
+const signalCollapsed = ref(false)
 
 const toUid = (raw) => {
   const n = Number(raw)
@@ -300,6 +455,18 @@ const persistInterestCollapsed = (uid, collapsed) => {
   } catch {
     // ignore storage failures
   }
+}
+
+const formatDateLabel = (value) => {
+  if (!value) return ''
+  const time = new Date(value).getTime()
+  if (!Number.isFinite(time)) return ''
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(time))
 }
 
 const normalizeList = (list) => {
@@ -528,7 +695,10 @@ const refreshPage = async ({ useCache = true } = {}) => {
   fetchReactionSummary(uid)
   if (tab.value === 'favs') ensureFavsLoaded(uid)
   if (tab.value === 'likes') ensureLikesLoaded(uid)
-  if (auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
+  if (auth.user?.id) {
+    routeStore.fetchRecoSettingsFromServer(auth.user.id)
+    routeStore.fetchUserInterestProfile(auth.user.id)
+  }
 }
 
 const currentList = computed(() => {
@@ -593,6 +763,52 @@ const interestTags = computed(() => interestProfile.value?.tags?.items || [])
 const otherTagPercent = computed(() => Number(interestProfile.value?.tags?.other_percent) || 0)
 const interestCategories = computed(() => interestProfile.value?.categories?.items || [])
 const otherCategoryPercent = computed(() => Number(interestProfile.value?.categories?.other_percent) || 0)
+const profileSettings = computed(() => interestProfile.value?.settings || null)
+const profileStory = computed(() => interestProfile.value?.profile_story || null)
+const signalMixItems = computed(() => interestProfile.value?.signals?.mix?.items || [])
+const profileExplanations = computed(() => interestProfile.value?.explanations || [])
+const recentActivity = computed(() => interestProfile.value?.recent_activity || null)
+const profileGeneratedAt = computed(() =>
+  formatDateLabel(interestProfile.value?.generated_at || profileSettings.value?.updated_at || '')
+)
+const profileArchetype = computed(() => profileStory.value?.archetype || 'Unshaped profile')
+const profileSummaryText = computed(() => {
+  if (!isSelf.value) return ''
+  return (
+    profileStory.value?.summary ||
+    'JourneyPro is still learning from your posts, saves and reading behavior. Interact with more places to sharpen the profile.'
+  )
+})
+const profileConfidence = computed(() => Math.round(Number(profileStory.value?.confidence) || 0))
+const profileConfidenceLabel = computed(() => profileStory.value?.confidence_label || 'Early')
+const profileDiversity = computed(() => Math.round(Number(profileStory.value?.diversity_score) || 0))
+const profileEvidenceScore = computed(() => Math.round(Number(profileStory.value?.evidence_score) || 0))
+const dominantCategoryLabel = computed(() => profileStory.value?.dominant_category?.name || 'Mixed')
+const dominantTagLabel = computed(() => {
+  const raw = profileStory.value?.dominant_tag?.name
+  return raw ? `#${raw}` : 'No clear tag'
+})
+const dominantSignalLabel = computed(() => profileStory.value?.dominant_signal?.label || 'Light signal')
+const recentActivity7d = computed(() => Number(recentActivity.value?.last_7d || 0))
+const recentActivity30d = computed(() => Number(recentActivity.value?.last_30d || 0))
+const recentMomentumLabel = computed(() => recentActivity.value?.momentum_label || 'Cold start')
+const profileSourceLabel = computed(() => {
+  const source = String(interestProfile.value?.source || '').toLowerCase()
+  if (source === 'user_interest_agg') return 'learned'
+  if (source === 'fallback_posts') return 'fallback'
+  if (source === 'empty_agg') return 'warming up'
+  return 'local'
+})
+const profileOrderingMode = computed(() => {
+  if (interestPercent.value >= 60) return 'Interest-first'
+  if (distancePercent.value >= 60) return 'Distance-first'
+  return 'Balanced'
+})
+const profileExploreMode = computed(() => {
+  if (explorePercent.value >= 60) return 'Discovery-heavy'
+  if (safePercent.value >= 60) return 'Stable picks'
+  return 'Balanced'
+})
 const collapsedInterestItems = computed(() => {
   const tagItems = (interestTags.value || []).map((item) => ({
     key: `tag-${item.name}`,
@@ -608,6 +824,34 @@ const collapsedInterestItems = computed(() => {
     .sort((a, b) => b.percent - a.percent)
     .slice(0, 3)
 })
+
+const near = (value, target) => Math.abs(Number(value || 0) - Number(target || 0)) <= 6
+
+const currentPreset = computed(() => {
+  if (near(interestPercent.value, 50) && near(explorePercent.value, 50)) return 'balanced'
+  if (interestPercent.value <= 42 && explorePercent.value <= 28) return 'route'
+  if (interestPercent.value >= 62 && explorePercent.value >= 62) return 'discovery'
+  return 'custom'
+})
+
+const applyPreferencePreset = (preset) => {
+  if (preset === 'balanced') {
+    routeStore.setRecoInterestWeight(0.5)
+    routeStore.setRecoExploreWeight(0.5)
+    return
+  }
+  if (preset === 'route') {
+    routeStore.setRecoInterestWeight(0.35)
+    routeStore.setRecoExploreWeight(0.2)
+    return
+  }
+  if (preset === 'discovery') {
+    routeStore.setRecoInterestWeight(0.68)
+    routeStore.setRecoExploreWeight(0.72)
+  }
+}
+
+const resetPreferencePreset = () => applyPreferencePreset('balanced')
 
 const goDetail = (id) => router.push(`/posts/postsid=${id}`)
 const openFollowers = async () => {
@@ -701,7 +945,10 @@ watch(
   () => isSelf.value,
   (val) => {
     if (!val) tab.value = 'posts'
-    if (val && auth.user?.id) routeStore.fetchUserInterestProfile(auth.user.id)
+    if (val && auth.user?.id) {
+      routeStore.fetchRecoSettingsFromServer(auth.user.id)
+      routeStore.fetchUserInterestProfile(auth.user.id)
+    }
   }
 )
 
@@ -779,10 +1026,11 @@ watch(
   border: 1px solid color-mix(in srgb, var(--panel-border) 80%, transparent);
   border-radius: 20px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
-  padding: 16px;
+  padding: 18px;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 14px;
+  gap: 18px;
+  align-items: start;
 }
 
 .avatar-wrap {
@@ -823,6 +1071,49 @@ watch(
   letter-spacing: -0.02em;
 }
 
+.hero-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #4f8cff;
+}
+
+.hero-title-row {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-summary {
+  margin: 10px 0 0;
+  max-width: 920px;
+  color: var(--muted);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.hero-pill,
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge) 84%, transparent);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hero-pill-accent {
+  border-color: color-mix(in srgb, #4f8cff 55%, transparent);
+  background: color-mix(in srgb, #4f8cff 14%, transparent);
+  color: #4f8cff;
+}
+
 .hero-sub {
   margin-top: 8px;
   display: flex;
@@ -830,6 +1121,13 @@ watch(
   gap: 12px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.hero-tag-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .link-btn {
@@ -852,6 +1150,10 @@ watch(
   gap: 8px;
 }
 
+.kpi-row-wide {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .kpi-card {
   border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
   border-radius: 12px;
@@ -869,10 +1171,11 @@ watch(
   font-size: 22px;
 }
 
-.insights {
+.insights,
+.personalization-grid {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -887,6 +1190,13 @@ watch(
   margin: 0 0 8px;
 }
 
+.panel-copy {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -897,6 +1207,169 @@ watch(
 
 .panel-head h3 {
   margin: 0;
+}
+
+.preference-panel,
+.story-panel,
+.signal-panel,
+.interest-panel {
+  min-height: 100%;
+}
+
+.preset-row {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-btn {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge) 84%, transparent);
+  color: var(--fg);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.preset-btn.active {
+  border-color: #4f8cff;
+  box-shadow: inset 0 0 0 1px #4f8cff;
+  color: #4f8cff;
+}
+
+.control-matrix,
+.summary-strip,
+.activity-strip {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mini-stat,
+.summary-tile {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 10px;
+}
+
+.mini-stat span,
+.summary-tile span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mini-stat strong,
+.summary-tile strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.explanation-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.explanation-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 12px;
+}
+
+.explanation-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.explanation-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.explanation-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.signal-stack {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.signal-item {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 10px;
+}
+
+.signal-head,
+.signal-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.signal-head {
+  margin-bottom: 6px;
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.signal-foot {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.interest-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-chip {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.interest-columns {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.interest-column {
+  min-width: 0;
+}
+
+.interest-column-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .collapse-btn {
@@ -1164,8 +1637,15 @@ watch(
 }
 
 @media (max-width: 1180px) {
-  .insights {
+  .insights,
+  .personalization-grid,
+  .interest-columns,
+  .explanation-grid {
     grid-template-columns: 1fr;
+  }
+
+  .kpi-row-wide {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1189,6 +1669,18 @@ watch(
 
   .kpi-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .control-matrix,
+  .summary-strip,
+  .activity-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-title-row,
+  .hero-tag-row,
+  .hero-sub {
     width: 100%;
   }
 

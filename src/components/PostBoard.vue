@@ -30,6 +30,10 @@
             <div class="stat-label">With POI</div>
             <div class="stat-value">{{ poiLinkRate }}%</div>
           </div>
+          <div class="stat-item">
+            <div class="stat-label">Structured</div>
+            <div class="stat-value">{{ structuredRate }}%</div>
+          </div>
         </div>
       </div>
 
@@ -100,6 +104,9 @@
           <button class="chip outline" :class="{ active: onlyPoi }" @click="onlyPoi = !onlyPoi">
             POI linked only
           </button>
+          <button class="chip outline" :class="{ active: structuredOnly }" @click="structuredOnly = !structuredOnly">
+            Structured stories
+          </button>
           <div class="likes-filter">
             <span>Min likes {{ minLikes }}</span>
             <el-slider v-model="minLikes" :min="0" :max="120" :show-tooltip="false" />
@@ -139,6 +146,9 @@
 
             <div class="card-body">
               <h3 class="card-title">{{ card.title }}</h3>
+              <div v-if="travelSignals(card).length" class="signal-row">
+                <span v-for="signal in travelSignals(card).slice(0, 3)" :key="signal" class="signal-pill">{{ signal }}</span>
+              </div>
               <div class="card-meta">
                 <span>{{ card.user?.nickname || 'Guest' }}</span>
                 <span v-if="card.tags?.length">&middot; {{ card.tags.slice(0, 2).join(' / ') }}</span>
@@ -188,6 +198,9 @@
             </div>
             <div class="list-body">
               <h3 class="list-title">{{ card.title }}</h3>
+              <div v-if="travelSignals(card).length" class="signal-row compact">
+                <span v-for="signal in travelSignals(card).slice(0, 4)" :key="signal" class="signal-pill">{{ signal }}</span>
+              </div>
               <p class="list-text">{{ summarize(card.content) }}</p>
               <div class="list-meta">
                 <span>{{ card.user?.nickname || 'Guest' }}</span>
@@ -264,6 +277,7 @@ const limit = 12
 const offset = ref(0)
 const cursor = ref(null)
 const onlyPoi = ref(false)
+const structuredOnly = ref(false)
 const minLikes = ref(0)
 const viewMode = ref(localStorage.getItem('jp_post_view_mode') || 'masonry')
 const poiFilterId = computed(() => {
@@ -312,6 +326,7 @@ const fetchPosts = async (reset = false) => {
       tag: activeTagParam.value || undefined,
       poi_id: poiFilterId.value || undefined,
       viewer_id: auth.user?.id || undefined,
+      structured_only: structuredOnly.value ? 1 : undefined,
     }
     if (isCursorSort.value) {
       if (cursor.value?.created_at && cursor.value?.id) {
@@ -469,6 +484,20 @@ const dedupePostsByPrimaryImage = (list) => {
 const filteredPosts = computed(() => {
   const kw = search.value.trim().toLowerCase()
   const filtered = posts.value.filter((p) => {
+    const metaText = [
+      p.trip_meta?.trip_style,
+      p.trip_meta?.route_role,
+      p.trip_meta?.visit_time,
+      p.trip_meta?.pace,
+      p.trip_meta?.spend_level,
+      p.trip_meta?.crowd_level,
+      p.trip_meta?.companion_type,
+      ...(p.trip_meta?.best_for || []),
+      ...(p.trip_meta?.avoid_for || []),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
     const inPoi = poiFilterId.value ? Number(p.poi_id) === poiFilterId.value : true
     const inTab =
       activeTab.value === 'Recommended'
@@ -479,10 +508,12 @@ const filteredPosts = computed(() => {
       p.title?.toLowerCase().includes(kw) ||
       p.content?.toLowerCase().includes(kw) ||
       (p.tags || []).some((t) => t.toLowerCase().includes(kw)) ||
-      p.user?.nickname?.toLowerCase().includes(kw)
+      p.user?.nickname?.toLowerCase().includes(kw) ||
+      metaText.includes(kw)
     const inPoiToggle = onlyPoi.value ? !!p.poi_id : true
+    const inStructured = structuredOnly.value ? !!p.trip_meta : true
     const inLikes = (Number(p.like_count) || 0) >= minLikes.value
-    return inPoi && inTab && inKw && inPoiToggle && inLikes
+    return inPoi && inTab && inKw && inPoiToggle && inStructured && inLikes
   })
   return dedupePostsByPrimaryImage(filtered)
 })
@@ -503,6 +534,12 @@ const poiLinkRate = computed(() => {
   if (!filteredPosts.value.length) return 0
   const linked = filteredPosts.value.filter((p) => !!p.poi_id).length
   return Math.round((linked * 100) / filteredPosts.value.length)
+})
+
+const structuredRate = computed(() => {
+  if (!filteredPosts.value.length) return 0
+  const count = filteredPosts.value.filter((p) => !!p.trip_meta).length
+  return Math.round((count * 100) / filteredPosts.value.length)
 })
 
 const topCreators = computed(() => {
@@ -531,6 +568,25 @@ const formatTime = (time) => {
 
 const markLoaded = (card) => {
   loadedMap.value = { ...loadedMap.value, [card.id]: true }
+}
+
+const humanizeTripMetaValue = (value) =>
+  String(value || '')
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+
+const travelSignals = (card) => {
+  const meta = card?.trip_meta
+  if (!meta) return []
+  const chips = []
+  if (meta.route_role) chips.push(humanizeTripMetaValue(meta.route_role))
+  if (meta.trip_style) chips.push(humanizeTripMetaValue(meta.trip_style))
+  if (meta.visit_time) chips.push(humanizeTripMetaValue(meta.visit_time))
+  if (meta.spend_level) chips.push(humanizeTripMetaValue(meta.spend_level))
+  if (meta.best_for?.length) chips.push(`Best for ${meta.best_for[0]}`)
+  return chips
 }
 
 const visibleImageIds = ref(new Set())
@@ -590,6 +646,7 @@ const resetFilters = () => {
   activeTab.value = 'Recommended'
   search.value = ''
   onlyPoi.value = false
+  structuredOnly.value = false
   minLikes.value = 0
 }
 
@@ -599,6 +656,7 @@ const openCreator = (id) => {
 
 watch(sort, () => fetchPosts(true))
 watch(activeTagParam, () => fetchPosts(true))
+watch(structuredOnly, () => fetchPosts(true))
 watch(
   () => route.query.poi_name,
   (name) => {
@@ -989,6 +1047,27 @@ onBeforeUnmount(() => {
   font-size: 14px;
   color: var(--fg);
   margin-bottom: 6px;
+}
+
+.signal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.signal-row.compact {
+  margin-bottom: 4px;
+}
+
+.signal-pill {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--badge) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
 }
 
 .card-meta {

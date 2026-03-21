@@ -124,6 +124,40 @@
 
           <div class="block">
             <div class="block-head">
+              <span class="title">Travel Context</span>
+              <span class="meta">Structure the post so community readers can judge fit quickly.</span>
+            </div>
+            <div class="context-grid">
+              <el-select v-model="form.tripStyle" placeholder="Trip style" clearable>
+                <el-option v-for="item in tripStyleOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="form.routeRole" placeholder="Route role" clearable>
+                <el-option v-for="item in routeRoleOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="form.visitTime" placeholder="Best time" clearable>
+                <el-option v-for="item in visitTimeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="form.pace" placeholder="Pace" clearable>
+                <el-option v-for="item in paceOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="form.spendLevel" placeholder="Spend level" clearable>
+                <el-option v-for="item in spendLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="form.crowdLevel" placeholder="Crowd level" clearable>
+                <el-option v-for="item in crowdLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="form.companionType" placeholder="Companion" clearable>
+                <el-option v-for="item in companionTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </div>
+            <div class="context-grid context-grid-text">
+              <el-input v-model="form.bestForText" placeholder="Best for: museum lovers, rainy day, first-time visitors..." />
+              <el-input v-model="form.avoidForText" placeholder="Avoid for: long queues, tight schedules..." />
+            </div>
+          </div>
+
+          <div class="block">
+            <div class="block-head">
               <span class="title">Linked POI</span>
               <span class="meta">Optional</span>
             </div>
@@ -180,6 +214,9 @@
                 <span>{{ auth.user?.nickname || 'Guest' }}</span>
                 <span>{{ mergedTags.length }} tags</span>
                 <span>{{ images.length }} images</span>
+              </div>
+              <div v-if="structuredChips.length" class="preview-context">
+                <span v-for="chip in structuredChips.slice(0, 6)" :key="chip">{{ chip }}</span>
               </div>
               <div v-if="mergedTags.length" class="preview-tags">
                 <span v-for="tag in mergedTags.slice(0, 6)" :key="tag">#{{ tag }}</span>
@@ -249,11 +286,61 @@ const selectedPoi = ref(null)
 const savedAt = ref(null)
 const fileInput = ref(null)
 const draggingIndex = ref(null)
+const tripStyleOptions = [
+  { label: 'City walk', value: 'city-walk' },
+  { label: 'Museum day', value: 'museum-day' },
+  { label: 'Food crawl', value: 'food-crawl' },
+  { label: 'Photo route', value: 'photo-route' },
+  { label: 'Slow afternoon', value: 'slow-afternoon' },
+]
+const routeRoleOptions = [
+  { label: 'Trip start', value: 'start-anchor' },
+  { label: 'Core stop', value: 'core-stop' },
+  { label: 'Break stop', value: 'pit-stop' },
+  { label: 'Finish', value: 'final-stop' },
+]
+const visitTimeOptions = [
+  { label: 'Morning', value: 'morning' },
+  { label: 'Midday', value: 'midday' },
+  { label: 'Afternoon', value: 'afternoon' },
+  { label: 'Evening', value: 'evening' },
+  { label: 'Rainy day', value: 'rainy-day' },
+]
+const paceOptions = [
+  { label: 'Fast', value: 'fast' },
+  { label: 'Balanced', value: 'balanced' },
+  { label: 'Slow', value: 'slow' },
+]
+const spendLevelOptions = [
+  { label: 'Budget', value: 'budget' },
+  { label: 'Moderate', value: 'moderate' },
+  { label: 'Premium', value: 'premium' },
+]
+const crowdLevelOptions = [
+  { label: 'Quiet', value: 'quiet' },
+  { label: 'Balanced', value: 'balanced' },
+  { label: 'Lively', value: 'lively' },
+]
+const companionTypeOptions = [
+  { label: 'Solo', value: 'solo' },
+  { label: 'Couple', value: 'couple' },
+  { label: 'Friends', value: 'friends' },
+  { label: 'Family', value: 'family' },
+]
 
 const form = reactive({
   title: '',
   content: '',
   tagsText: '',
+  tripStyle: '',
+  routeRole: '',
+  pace: '',
+  visitTime: '',
+  spendLevel: '',
+  crowdLevel: '',
+  companionType: '',
+  bestForText: '',
+  avoidForText: '',
 })
 
 const parseTags = (txt) =>
@@ -262,18 +349,76 @@ const parseTags = (txt) =>
     .map((s) => s.trim())
     .filter(Boolean)
 
+const parseContextList = (txt) =>
+  String(txt || '')
+    .split(/[,\n|/]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+
 const mergedTags = computed(() => Array.from(new Set([...selectedTags, ...parseTags(form.tagsText)])))
 const coverImage = computed(() => images.value[0] || '')
 const snippet = computed(() => (form.content ? form.content.slice(0, 180) : 'Write your travel highlights...'))
 const savedAtText = computed(() => (savedAt.value ? new Date(savedAt.value).toLocaleTimeString() : 'just now'))
+const tripMetaPayload = computed(() => ({
+  trip_style: form.tripStyle || null,
+  route_role: form.routeRole || null,
+  pace: form.pace || null,
+  visit_time: form.visitTime || null,
+  spend_level: form.spendLevel || null,
+  crowd_level: form.crowdLevel || null,
+  companion_type: form.companionType || null,
+  best_for: parseContextList(form.bestForText),
+  avoid_for: parseContextList(form.avoidForText),
+}))
+const structuredFieldCount = computed(
+  () =>
+    [
+      form.tripStyle,
+      form.routeRole,
+      form.pace,
+      form.visitTime,
+      form.spendLevel,
+      form.crowdLevel,
+      form.companionType,
+      ...parseContextList(form.bestForText),
+      ...parseContextList(form.avoidForText),
+    ].filter(Boolean).length
+)
+const labelMap = new Map(
+  [
+    ...tripStyleOptions,
+    ...routeRoleOptions,
+    ...visitTimeOptions,
+    ...paceOptions,
+    ...spendLevelOptions,
+    ...crowdLevelOptions,
+    ...companionTypeOptions,
+  ].map((item) => [item.value, item.label])
+)
+const structuredChips = computed(() => {
+  const base = [
+    form.tripStyle,
+    form.routeRole,
+    form.visitTime,
+    form.pace,
+    form.spendLevel,
+    form.crowdLevel,
+    form.companionType,
+  ]
+    .filter(Boolean)
+    .map((value) => labelMap.get(value) || value)
+  const bestFor = parseContextList(form.bestForText).slice(0, 2).map((item) => `Best for ${item}`)
+  return [...base, ...bestFor]
+})
 
 const qualityScore = computed(() => {
   const checks = [
-    form.title.trim().length >= 8 ? 24 : 0,
-    form.content.trim().length >= 80 ? 24 : 0,
-    images.value.length >= 3 ? 24 : images.value.length > 0 ? 10 : 0,
-    mergedTags.value.length >= 2 ? 14 : mergedTags.value.length ? 8 : 0,
-    selectedPoi.value?.id ? 14 : 0,
+    form.title.trim().length >= 8 ? 20 : 0,
+    form.content.trim().length >= 80 ? 20 : 0,
+    images.value.length >= 3 ? 20 : images.value.length > 0 ? 10 : 0,
+    mergedTags.value.length >= 2 ? 12 : mergedTags.value.length ? 6 : 0,
+    selectedPoi.value?.id ? 12 : 0,
+    structuredFieldCount.value >= 4 ? 16 : structuredFieldCount.value >= 2 ? 8 : 0,
   ]
   return Math.min(100, checks.reduce((a, b) => a + b, 0))
 })
@@ -283,6 +428,7 @@ const checkItems = computed(() => [
   { label: 'Content length >= 80', done: form.content.trim().length >= 80 },
   { label: 'At least 3 images', done: images.value.length >= 3 },
   { label: 'At least 2 tags', done: mergedTags.value.length >= 2 },
+  { label: 'Travel context filled', done: structuredFieldCount.value >= 2 },
   { label: 'Linked POI (recommended)', done: !!selectedPoi.value?.id },
 ])
 
@@ -293,6 +439,13 @@ const applyTemplate = (type) => {
       form.content ||
       'Morning coffee, lunch market, sunset rooftop, and practical budget tips. Here is a complete route with timing and must-order dishes.'
     selectTags(['food', 'city-walk', 'budget'])
+    form.tripStyle = form.tripStyle || 'food-crawl'
+    form.routeRole = form.routeRole || 'core-stop'
+    form.visitTime = form.visitTime || 'midday'
+    form.pace = form.pace || 'balanced'
+    form.spendLevel = form.spendLevel || 'moderate'
+    form.crowdLevel = form.crowdLevel || 'lively'
+    form.bestForText = form.bestForText || 'group lunch, quick route, first-time visitors'
     return
   }
   if (type === 'museum') {
@@ -301,6 +454,13 @@ const applyTemplate = (type) => {
       form.content ||
       'A compact route for art lovers: ticket advice, queue timing, quiet corners, and nearby cafes for a break.'
     selectTags(['museum', 'history', 'rainy-day'])
+    form.tripStyle = form.tripStyle || 'museum-day'
+    form.routeRole = form.routeRole || 'core-stop'
+    form.visitTime = form.visitTime || 'morning'
+    form.pace = form.pace || 'slow'
+    form.crowdLevel = form.crowdLevel || 'quiet'
+    form.companionType = form.companionType || 'solo'
+    form.bestForText = form.bestForText || 'art lovers, rainy day, quiet visit'
     return
   }
   form.title = form.title || 'Nature Escape Route with Photo Spots'
@@ -308,6 +468,12 @@ const applyTemplate = (type) => {
     form.content ||
     'A slow-paced route with viewpoints, trail notes, transport details, and the best time window for photos.'
   selectTags(['nature', 'photography', 'outdoor'])
+  form.tripStyle = form.tripStyle || 'photo-route'
+  form.routeRole = form.routeRole || 'final-stop'
+  form.visitTime = form.visitTime || 'afternoon'
+  form.pace = form.pace || 'slow'
+  form.crowdLevel = form.crowdLevel || 'quiet'
+  form.bestForText = form.bestForText || 'sunset photos, slow walk, friends'
 }
 
 const selectTags = (tags) => {
@@ -446,6 +612,15 @@ const saveDraft = () => {
     title: form.title,
     content: form.content,
     tagsText: form.tagsText,
+    tripStyle: form.tripStyle,
+    routeRole: form.routeRole,
+    pace: form.pace,
+    visitTime: form.visitTime,
+    spendLevel: form.spendLevel,
+    crowdLevel: form.crowdLevel,
+    companionType: form.companionType,
+    bestForText: form.bestForText,
+    avoidForText: form.avoidForText,
     selectedTags: [...selectedTags],
     images: [...images.value],
     poi: selectedPoi.value,
@@ -464,6 +639,15 @@ const loadDraft = () => {
     form.title = payload.title || ''
     form.content = payload.content || ''
     form.tagsText = payload.tagsText || ''
+    form.tripStyle = payload.tripStyle || ''
+    form.routeRole = payload.routeRole || ''
+    form.pace = payload.pace || ''
+    form.visitTime = payload.visitTime || ''
+    form.spendLevel = payload.spendLevel || ''
+    form.crowdLevel = payload.crowdLevel || ''
+    form.companionType = payload.companionType || ''
+    form.bestForText = payload.bestForText || ''
+    form.avoidForText = payload.avoidForText || ''
     images.value = Array.isArray(payload.images) ? payload.images : []
     selectedPoi.value = payload.poi || null
     poiInput.value = payload.poiInput || payload.poi?.name || ''
@@ -478,6 +662,15 @@ const clearDraft = () => {
   form.title = ''
   form.content = ''
   form.tagsText = ''
+  form.tripStyle = ''
+  form.routeRole = ''
+  form.pace = ''
+  form.visitTime = ''
+  form.spendLevel = ''
+  form.crowdLevel = ''
+  form.companionType = ''
+  form.bestForText = ''
+  form.avoidForText = ''
   selectedTags.splice(0, selectedTags.length)
   images.value = []
   selectedPoi.value = null
@@ -507,6 +700,7 @@ const submitPost = async () => {
       tags: mergedTags.value,
       poi_id: selectedPoi.value?.id ?? null,
       user_id: auth.user?.id,
+      trip_meta: tripMetaPayload.value,
     })
     clearDraft()
     alertType.value = 'success'
@@ -530,6 +724,15 @@ watch(
     title: form.title,
     content: form.content,
     tagsText: form.tagsText,
+    tripStyle: form.tripStyle,
+    routeRole: form.routeRole,
+    pace: form.pace,
+    visitTime: form.visitTime,
+    spendLevel: form.spendLevel,
+    crowdLevel: form.crowdLevel,
+    companionType: form.companionType,
+    bestForText: form.bestForText,
+    avoidForText: form.avoidForText,
     selectedTags: [...selectedTags],
     images: [...images.value],
     poi: selectedPoi.value,
@@ -778,6 +981,16 @@ watch(
   gap: 8px;
 }
 
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.context-grid-text {
+  margin-top: 8px;
+}
+
 .chip {
   cursor: pointer;
 }
@@ -885,6 +1098,22 @@ watch(
   font-size: 12px;
 }
 
+.preview-context {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preview-context span {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--badge) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+}
+
 .preview-tags {
   margin-top: 10px;
   display: flex;
@@ -971,6 +1200,10 @@ watch(
 
   .score-card {
     width: 100%;
+  }
+
+  .context-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
