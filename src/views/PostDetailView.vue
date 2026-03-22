@@ -183,6 +183,7 @@
                 </div>
                 <div class="poi-actions">
                   <el-button size="small" :icon="Location" :disabled="!poiDetail" @click="viewOnMap">View map</el-button>
+                  <el-button size="small" :disabled="!poiDetail" @click="planWithAi">Plan with AI</el-button>
                   <el-button size="small" type="primary" :icon="Plus" :disabled="!poiDetail" @click="addToRoute">Add via</el-button>
                 </div>
               </div>
@@ -191,6 +192,9 @@
                 <button v-for="(img, idx) in poiGallery" :key="`${img}-${idx}`" class="poi-photo" @click="openPhotoViewer(poiGallery, idx)">
                   <CroppedImage :src="img" :alt="`poi-${idx}`" class="poi-photo-img" />
                 </button>
+              </div>
+              <div v-if="poiCommunityTags.length" class="context-tags poi-ai-tags">
+                <span v-for="tag in poiCommunityTags" :key="`poi-tag-${tag}`">#{{ tag }}</span>
               </div>
               <el-alert
                 v-if="alertMessage"
@@ -275,6 +279,7 @@ import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import CroppedImage from '../components/CroppedImage.vue'
 import { apiUrl } from '../config/api'
+import { buildPoiPlannerPrompt, seedAiPlannerFromContext } from '../utils/aiPlannerBridge'
 
 const API_BASE = apiUrl('/api/posts')
 const FOLLOW_API = apiUrl('/api/follow')
@@ -340,6 +345,10 @@ const tripContextChips = computed(() => {
   const chips = tripContextItems.value.slice(0, 4).map((item) => item.value)
   if (tripBestFor.value.length) chips.push(`Best for ${tripBestFor.value[0]}`)
   return chips
+})
+const poiCommunityTags = computed(() => {
+  const list = Array.isArray(poiDetail.value?.community_summary?.top_tags) ? poiDetail.value.community_summary.top_tags : []
+  return list.slice(0, 4)
 })
 
 const commentTotal = computed(() => {
@@ -644,6 +653,39 @@ const addToRoute = () => {
 const openPoiPostFeed = () => {
   if (!poiDetail.value?.id) return
   router.push({ path: '/posts', query: { poi_id: String(poiDetail.value.id), poi_name: poiDetail.value.name || '' } })
+}
+
+const planWithAi = () => {
+  if (!poiDetail.value) return
+  const tripBest = Array.isArray(tripMeta.value?.best_for) ? tripMeta.value.best_for.slice(0, 2) : []
+  const tripAvoid = Array.isArray(tripMeta.value?.avoid_for) ? tripMeta.value.avoid_for.slice(0, 2) : []
+  const prompt =
+    String(poiDetail.value?.planner_bridge?.suggested_prompt || '').trim() ||
+    buildPoiPlannerPrompt(poiDetail.value, {
+      bestFor: tripBest.length ? tripBest : poiDetail.value?.community_summary?.best_for,
+      watchOut: tripAvoid.length ? tripAvoid : poiDetail.value?.community_summary?.watch_out_for,
+      topTags: poiCommunityTags.value,
+    })
+
+  seedAiPlannerFromContext({
+    userId: auth.user?.id || null,
+    routeStore,
+    prompt,
+    anchorPoi: poiDetail.value,
+    profileSnapshot: routeStore.userInterestProfile?.profile_story
+      ? {
+          archetype: routeStore.userInterestProfile.profile_story.archetype,
+          confidence: Number(routeStore.userInterestProfile.profile_story.confidence || 0),
+          dominant_category: String(routeStore.userInterestProfile.profile_story.dominant_category?.name || ''),
+          dominant_tag: String(routeStore.userInterestProfile.profile_story.dominant_tag?.name || ''),
+          source: String(routeStore.userInterestProfile.source || ''),
+          interest_weight: Number(routeStore.recoInterestWeight || 0.5),
+          explore_weight: Number(routeStore.recoExploreWeight || 0.15),
+        }
+      : null,
+    source: 'post-detail-poi',
+  })
+  router.push('/ai-planner')
 }
 
 const goBack = () => router.back()
@@ -1235,6 +1277,10 @@ watch(
 }
 
 .inline-alert {
+  margin-top: 10px;
+}
+
+.poi-ai-tags {
   margin-top: 10px;
 }
 

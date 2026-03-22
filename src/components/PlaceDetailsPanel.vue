@@ -25,6 +25,7 @@
       </button>
       <button class="action-pill" @click="sharePlace">Share</button>
       <button class="action-pill" @click="openPosts">Stories</button>
+      <button class="action-pill" @click="planWithAi">AI Plan</button>
       <button class="action-pill" @click="navigateTo">Navigate</button>
       <button class="action-pill ghost" @click="focus">Center</button>
       <button class="action-pill" :class="{ danger: isViaPoint }" @click="toggleVia">
@@ -392,10 +393,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import { apiUrl } from '../config/api'
+import { buildPoiPlannerPrompt, seedAiPlannerFromContext } from '../utils/aiPlannerBridge'
 
 const router = useRouter()
+const auth = useAuthStore()
 const routeStore = useRouteStore()
 const theme = ref(document.body.getAttribute('data-theme') || 'dark')
 const tabs = ['Overview', 'Photos', 'Nearby', 'Stories']
@@ -1117,6 +1121,37 @@ const openPosts = () => {
   if (poiIdValue.value) query.poi_id = String(poiIdValue.value)
   if (poi.value?.name) query.poi_name = poi.value.name
   router.push({ path: '/posts', query })
+}
+
+const planWithAi = () => {
+  if (!poi.value) return
+  const prompt =
+    String(poi.value?.planner_bridge?.suggested_prompt || '').trim() ||
+    buildPoiPlannerPrompt(poi.value, {
+      bestFor: bestForList.value,
+      watchOut: watchOutList.value,
+      topTags: communityTopTags.value,
+    })
+
+  seedAiPlannerFromContext({
+    userId: auth.user?.id || null,
+    routeStore,
+    prompt,
+    anchorPoi: poi.value,
+    profileSnapshot: routeStore.userInterestProfile?.profile_story
+      ? {
+          archetype: routeStore.userInterestProfile.profile_story.archetype,
+          confidence: Number(routeStore.userInterestProfile.profile_story.confidence || 0),
+          dominant_category: String(routeStore.userInterestProfile.profile_story.dominant_category?.name || ''),
+          dominant_tag: String(routeStore.userInterestProfile.profile_story.dominant_tag?.name || ''),
+          source: String(routeStore.userInterestProfile.source || ''),
+          interest_weight: Number(routeStore.recoInterestWeight || 0.5),
+          explore_weight: Number(routeStore.recoExploreWeight || 0.15),
+        }
+      : null,
+    source: 'map-place-panel',
+  })
+  router.push('/ai-planner')
 }
 
 const shareLink = computed(() => {

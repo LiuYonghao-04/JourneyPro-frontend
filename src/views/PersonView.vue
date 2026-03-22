@@ -489,6 +489,7 @@ import CroppedImage from '../components/CroppedImage.vue'
 import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
 import { proxiedImageSrc } from '../utils/imageProxy'
 import { apiUrl } from '../config/api'
+import { buildPlannerStorageKey } from '../utils/aiPlannerBridge'
 
 const API_BASE = apiUrl('/api/posts')
 const FOLLOW_API = apiUrl('/api/follow')
@@ -499,7 +500,6 @@ const PERSON_POST_LIMIT = 80
 const PERSON_REACTION_TAB_LIMIT = 40
 const PERSON_CACHE_PREFIX = 'jp_person_cache_v3_'
 const PERSON_INTEREST_COLLAPSE_PREFIX = 'jp_person_interest_collapsed_v1_'
-const AI_PLANNER_CACHE_PREFIX = 'jp_ai_planner_v1_'
 
 const route = useRoute()
 const router = useRouter()
@@ -550,7 +550,6 @@ const toUid = (raw) => {
 const currentUid = () => toUid(userId.value)
 const cacheKey = (uid) => `${PERSON_CACHE_PREFIX}${uid}`
 const interestCollapseKey = (uid) => `${PERSON_INTEREST_COLLAPSE_PREFIX}${uid || 'guest'}`
-const plannerStorageKey = computed(() => `${AI_PLANNER_CACHE_PREFIX}${auth.user?.id || 'guest'}`)
 
 const hydrateInterestCollapsed = (uid) => {
   if (typeof window === 'undefined') return
@@ -1082,7 +1081,7 @@ const restorePlanToPlanner = async (planId) => {
     const data = await res.json()
     if (!res.ok || !data?.success || !data?.item?.payload) return
     localStorage.setItem(
-      plannerStorageKey.value,
+      buildPlannerStorageKey(uid),
       JSON.stringify({
         ...data.item.payload,
         saved_plan_id: Number(planId),

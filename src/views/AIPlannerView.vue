@@ -299,8 +299,13 @@
                 <h4>{{ source.title }}</h4>
                 <p>{{ source.snippet }}</p>
                 <div class="source-foot">
-                  <span>{{ source.author || source.poi_name || 'JourneyPro' }}</span>
-                  <span>{{ formatSourceMetrics(source) }}</span>
+                  <div class="source-foot-copy">
+                    <span>{{ source.author || source.poi_name || 'JourneyPro' }}</span>
+                    <span>{{ formatSourceMetrics(source) }}</span>
+                  </div>
+                  <button class="source-plan-btn" type="button" @click.stop="focusPlannerOnSource(source)">
+                    Use in Planner
+                  </button>
                 </div>
               </article>
             </div>
@@ -404,7 +409,51 @@
             <div class="meta-row"><span>Website</span><strong>{{ detailPoi?.website || 'N/A' }}</strong></div>
           </div>
 
+          <div v-if="detailCommunity" class="detail-community-card">
+            <div class="detail-section-head">
+              <span class="detail-section-kicker">Community</span>
+              <strong>{{ detailCommunity.metrics?.post_count || 0 }} stories linked</strong>
+            </div>
+            <div class="detail-community-metrics">
+              <span>{{ detailCommunity.metrics?.avg_rating || 'N/A' }} avg rating</span>
+              <span>{{ detailCommunity.metrics?.total_favorites || 0 }} saves</span>
+              <span>{{ detailCommunity.metrics?.total_views || 0 }} views</span>
+            </div>
+            <div v-if="detailCommunity.highlights?.length" class="detail-community-copy">
+              <p v-for="line in detailCommunity.highlights.slice(0, 3)" :key="line">{{ line }}</p>
+            </div>
+            <div v-if="detailStoryTags.length || detailBestFor.length || detailWatchOut.length" class="detail-chip-row">
+              <span v-for="tag in detailStoryTags" :key="`tag-${tag}`" class="detail-chip">#{{ tag }}</span>
+              <span v-for="item in detailBestFor" :key="`best-${item}`" class="detail-chip positive">{{ item }}</span>
+              <span v-for="item in detailWatchOut" :key="`watch-${item}`" class="detail-chip caution">{{ item }}</span>
+            </div>
+          </div>
+
+          <div v-if="detailStoryPosts.length" class="detail-story-block">
+            <div class="detail-section-head">
+              <span class="detail-section-kicker">Stories</span>
+              <strong>Community examples</strong>
+            </div>
+            <div class="detail-story-list">
+              <button
+                v-for="post in detailStoryPosts"
+                :key="post.id"
+                class="detail-story-card"
+                type="button"
+                @click="openSourceCard({ type: 'post', post_id: post.id })"
+              >
+                <div class="detail-story-title">{{ post.title }}</div>
+                <div class="detail-story-meta">
+                  <span>{{ post.author_name || 'Traveler' }}</span>
+                  <span>{{ post.like_count || 0 }} likes</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
           <div class="detail-actions">
+            <button class="btn ghost small" type="button" @click="openDetailStories">Open Stories</button>
+            <button class="btn ghost small" type="button" @click="focusPlannerOnPoi">Use as Focus</button>
             <button class="btn ghost small" type="button" @click="openOnMap(detailPoi, false)">Preview on Map</button>
             <button class="btn primary small" type="button" @click="openOnMap(detailPoi, true)">Add as Waypoint</button>
           </div>
@@ -421,6 +470,7 @@ import CroppedImage from '../components/CroppedImage.vue'
 import { apiUrl } from '../config/api'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
+import { buildPoiPlannerPrompt } from '../utils/aiPlannerBridge'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -499,6 +549,11 @@ const detailPhotos = computed(() => {
   if (detailPoi.value?.image_url) return [detailPoi.value.image_url]
   return []
 })
+const detailCommunity = computed(() => detailPoi.value?.community_summary || null)
+const detailStoryPosts = computed(() => (Array.isArray(detailPoi.value?.related_posts) ? detailPoi.value.related_posts.slice(0, 3) : []))
+const detailStoryTags = computed(() => (Array.isArray(detailCommunity.value?.top_tags) ? detailCommunity.value.top_tags.slice(0, 4) : []))
+const detailBestFor = computed(() => (Array.isArray(detailCommunity.value?.best_for) ? detailCommunity.value.best_for.slice(0, 3) : []))
+const detailWatchOut = computed(() => (Array.isArray(detailCommunity.value?.watch_out_for) ? detailCommunity.value.watch_out_for.slice(0, 3) : []))
 
 const visibleMessages = computed(() =>
   (messages.value || []).filter((msg) => msg?.role === 'user' || String(msg?.content || '').trim().length > 0)
@@ -562,6 +617,7 @@ const buildPersistPayload = () => ({
   v: AI_PLANNER_CACHE_VERSION,
   saved_at: Date.now(),
   saved_plan_id: activeSavedPlanId.value || null,
+  draft_prompt: String(promptInput.value || ''),
   request_id: requestId.value || '',
   stream_error: streamError.value || '',
   route_meta: routeMeta.value || null,
@@ -617,6 +673,7 @@ const applyRouteContextSnapshot = (context) => {
 
 const applyPlannerSnapshot = (parsed, { syncRouteContext = true } = {}) => {
   if (!parsed || typeof parsed !== 'object') return
+  promptInput.value = String(parsed.draft_prompt || '')
   messages.value = sanitizeMessages(parsed.messages)
   requestId.value = String(parsed.request_id || '')
   streamError.value = String(parsed.stream_error || '')
@@ -685,6 +742,7 @@ watch(
 
 watch(
   () => [
+    promptInput.value,
     messages.value,
     requestId.value,
     streamError.value,
@@ -1353,6 +1411,67 @@ const openOnMap = (poi, addVia) => {
   }
   savePlannerStateNow()
   router.push({ path: '/map', query })
+}
+
+const openDetailStories = () => {
+  if (!detailPoi.value?.id) return
+  savePlannerStateNow()
+  router.push({
+    path: '/posts',
+    query: {
+      poi_id: String(detailPoi.value.id),
+      poi_name: detailPoi.value.name || '',
+    },
+  })
+}
+
+const focusPlannerOnPoi = () => {
+  if (!detailPoi.value) return
+  const bridgePrompt =
+    String(detailPoi.value?.planner_bridge?.suggested_prompt || '').trim() ||
+    buildPoiPlannerPrompt(detailPoi.value, {
+      bestFor: detailBestFor.value,
+      watchOut: detailWatchOut.value,
+      topTags: detailStoryTags.value,
+    })
+  promptInput.value = bridgePrompt
+  panelOpen.value.controls = true
+  closePoiDetail()
+  nextTick(() => scheduleScrollToBottom())
+}
+
+const buildSourcePlannerPrompt = (source) => {
+  const matchedPoi = source?.poi_id
+    ? recommendationList.value.find((poi) => Number(poi?.id) === Number(source.poi_id))
+    : null
+
+  if (matchedPoi) {
+    return buildPoiPlannerPrompt(matchedPoi, {
+      focusText: source?.poi_category || source?.title || matchedPoi.category || '',
+      routeHint: source?.snippet || '',
+    })
+  }
+
+  const placeName = String(source?.poi_name || source?.title || 'this place').trim() || 'this place'
+  const sourceTitle = String(source?.title || '').trim()
+  const snippet = String(source?.snippet || '').replace(/\s+/g, ' ').trim()
+  const sourceLead =
+    source?.type === 'comment'
+      ? `community comment${sourceTitle ? ` from "${sourceTitle}"` : ''}`
+      : source?.type === 'post'
+        ? `community story${sourceTitle ? ` "${sourceTitle}"` : ''}`
+        : 'place evidence'
+  const snippetPart = snippet ? ` Use this signal: ${snippet.slice(0, 140)}.` : ''
+  return `Plan a London route around ${placeName}. Prioritize culturally rich stops, keep detours practical, and avoid collapsing the plan into only food. Use ${sourceLead} to guide the stop order.${snippetPart}`
+}
+
+const focusPlannerOnSource = (source) => {
+  if (!source || typeof source !== 'object') return
+  promptInput.value = buildSourcePlannerPrompt(source)
+  panelOpen.value.sources = true
+  panelOpen.value.controls = true
+  savePlannerStateNow()
+  nextTick(() => scheduleScrollToBottom())
 }
 
 const openSourceCard = (source) => {
@@ -2338,6 +2457,33 @@ onBeforeUnmount(() => {
   align-items: flex-end;
 }
 
+.source-foot-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.source-plan-btn {
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #5a8cff 36%, transparent);
+  background: color-mix(in srgb, #5a8cff 10%, transparent);
+  color: #3d73ff;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.source-plan-btn:hover,
+.source-plan-btn:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #5a8cff 58%, transparent);
+  background: color-mix(in srgb, #5a8cff 16%, transparent);
+}
+
 .segment-card {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
@@ -2698,8 +2844,97 @@ onBeforeUnmount(() => {
   line-height: 1.35;
 }
 
+.detail-community-card,
+.detail-story-block {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  padding: 12px;
+}
+
+.detail-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-section-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4f8cff;
+}
+
+.detail-community-metrics,
+.detail-chip-row,
+.detail-story-meta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-community-metrics span,
+.detail-story-meta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-community-copy {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.detail-community-copy p {
+  margin: 0;
+  color: color-mix(in srgb, var(--fg) 84%, transparent);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.detail-chip {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.detail-chip.positive {
+  color: #10b981;
+}
+
+.detail-chip.caution {
+  color: #f59e0b;
+}
+
+.detail-story-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.detail-story-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-story-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

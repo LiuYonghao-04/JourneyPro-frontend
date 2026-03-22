@@ -160,6 +160,9 @@
               </button>
 
               <div class="card-footer">
+                <button v-if="card.poi?.id" class="story-ai-btn" @click.stop="planFromStory(card)">
+                  Plan with AI
+                </button>
                 <button class="icon-btn" @click.stop="toggleLike(card)">
                   <el-icon :class="['stat-icon', { liked: card._liked }]">
                     <component :is="card._liked ? CircleCheckFilled : CircleCheck" />
@@ -208,10 +211,15 @@
                 <span>{{ formatTime(card.created_at) }}</span>
               </div>
               <div class="list-actions">
-                <button v-if="card.poi?.id" class="poi-link" @click.stop="openPoiFromFeed(card)">
-                  <el-icon><Location /></el-icon>
-                  <span>{{ card.poi?.name || 'Linked place' }}</span>
-                </button>
+                <div class="list-link-group">
+                  <button v-if="card.poi?.id" class="poi-link" @click.stop="openPoiFromFeed(card)">
+                    <el-icon><Location /></el-icon>
+                    <span>{{ card.poi?.name || 'Linked place' }}</span>
+                  </button>
+                  <button v-if="card.poi?.id" class="story-ai-btn subtle" @click.stop="planFromStory(card)">
+                    Plan with AI
+                  </button>
+                </div>
                 <div class="metric-group">
                   <span>{{ card.like_count || 0 }} likes</span>
                   <span>{{ card.favorite_count || 0 }} favs</span>
@@ -253,12 +261,15 @@ import {
   TrendCharts,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/authStore'
+import { useRouteStore } from '../store/routeStore'
 import CroppedImage from './CroppedImage.vue'
 import { proxiedImageSrc } from '../utils/imageProxy'
 import { apiUrl } from '../config/api'
+import { buildPoiPlannerPrompt, seedAiPlannerFromContext } from '../utils/aiPlannerBridge'
 
 const API_BASE = apiUrl('/api/posts')
 const auth = useAuthStore()
+const routeStore = useRouteStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -409,6 +420,51 @@ const openPoiFromFeed = (card) => {
       poi_lng: poi.lng ?? '',
     },
   })
+}
+
+const buildProfileSnapshot = () => {
+  const profile = routeStore.userInterestProfile || null
+  const story = profile?.profile_story || null
+  if (!story) return null
+  return {
+    archetype: String(story?.archetype || ''),
+    confidence: Number(story?.confidence || 0),
+    dominant_category: String(story?.dominant_category?.name || ''),
+    dominant_tag: String(story?.dominant_tag?.name || ''),
+    source: String(profile?.source || ''),
+    interest_weight: Number(routeStore.recoInterestWeight || 0.5),
+    explore_weight: Number(routeStore.recoExploreWeight || 0.15),
+  }
+}
+
+const buildStoryPrompt = (card) => {
+  const poi = card?.poi || null
+  const bestFor = Array.isArray(card?.trip_meta?.best_for) ? card.trip_meta.best_for.slice(0, 2) : []
+  const avoidFor = Array.isArray(card?.trip_meta?.avoid_for) ? card.trip_meta.avoid_for.slice(0, 2) : []
+  const tags = Array.isArray(card?.tags) ? card.tags.slice(0, 3) : []
+  if (poi?.id) {
+    return buildPoiPlannerPrompt(poi, {
+      bestFor,
+      watchOut: avoidFor,
+      topTags: tags,
+      focusText: bestFor.join(' and ') || tags.join(', ') || poi.category || 'high-quality stops',
+    })
+  }
+  const focus = bestFor.join(' and ') || tags.join(', ') || 'community-backed places'
+  return `Plan a London route inspired by this community story. Prioritize ${focus}, keep detours practical, and preserve a balanced mix of stops.`
+}
+
+const planFromStory = (card) => {
+  const prompt = buildStoryPrompt(card)
+  seedAiPlannerFromContext({
+    userId: auth.user?.id || null,
+    routeStore,
+    prompt,
+    anchorPoi: card?.poi || null,
+    profileSnapshot: buildProfileSnapshot(),
+    source: 'community-feed-card',
+  })
+  router.push('/ai-planner')
 }
 
 const contentEl = ref(null)
@@ -1094,9 +1150,28 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--badge) 95%, transparent);
 }
 
+.story-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, #4f8cff 48%, transparent);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, #4f8cff 12%, transparent);
+  color: #4f8cff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.story-ai-btn.subtle {
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+}
+
 .card-footer {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   color: var(--muted);
   font-size: 13px;
@@ -1192,6 +1267,14 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.list-link-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .metric-group {
