@@ -597,6 +597,7 @@ const buildRouteContextSnapshot = () => ({
   })),
   interest_weight: interestWeight.value,
   explore_weight: exploreWeight.value,
+  detour_tolerance: routeStore.recoDetourTolerance ?? 0.5,
 })
 
 const buildProfileSnapshot = () => {
@@ -610,6 +611,7 @@ const buildProfileSnapshot = () => {
     source: String(profile?.source || ''),
     interest_weight: interestWeight.value,
     explore_weight: exploreWeight.value,
+    detour_tolerance: routeStore.recoDetourTolerance ?? 0.5,
   }
 }
 
@@ -642,6 +644,9 @@ const applyRouteContextSnapshot = (context) => {
   }
   if (Number.isFinite(Number(context?.explore_weight))) {
     exploreWeightPct.value = Math.round(clamp(Number(context.explore_weight), 0, 1) * 100)
+  }
+  if (Number.isFinite(Number(context?.detour_tolerance))) {
+    routeStore.setRecoDetourTolerance(Number(context.detour_tolerance))
   }
 
   const startLat = Number(context?.start?.lat)
@@ -1168,6 +1173,7 @@ const submitPrompt = async () => {
         user_id: auth.user?.id || null,
         interest_weight: interestWeight.value,
         explore_weight: exploreWeight.value,
+        detour_tolerance: routeStore.recoDetourTolerance ?? 0.5,
         limit: 8,
         start: { lng: routeStore.startLng, lat: routeStore.startLat },
         end: { lng: routeStore.endLng, lat: routeStore.endLat },

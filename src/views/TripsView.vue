@@ -58,6 +58,8 @@
             <span>{{ formatRelativeTime(trip.updated_at) }}</span>
             <span>{{ trip.stop_count }} stops</span>
             <span>{{ trip.via_count }} via</span>
+            <span>{{ trip.saved_poi_count || 0 }} POIs</span>
+            <span>{{ trip.linked_post_count || 0 }} stories</span>
           </div>
           <div class="trip-list-meta trip-list-meta-wrap">
             <span v-if="trip.source_plan_title">{{ trip.source_plan_title }}</span>
@@ -145,7 +147,7 @@
           <article class="summary-card">
             <span>Stops</span>
             <strong>{{ tripDetail.stop_count }}</strong>
-            <small>{{ tripDetail.via_count }} via points</small>
+            <small>{{ tripDetail.saved_poi_count || 0 }} saved POIs · {{ tripDetail.via_count }} via points</small>
           </article>
           <article class="summary-card">
             <span>Prompt</span>
@@ -156,6 +158,11 @@
             <span>Source</span>
             <strong>{{ tripDetail.source_plan_title || (tripDetail.source_plan_id ? `AI Plan #${tripDetail.source_plan_id}` : 'Manual workspace') }}</strong>
             <small>{{ tripDetail.is_starred ? 'Starred workspace' : 'Standard workspace' }}</small>
+          </article>
+          <article class="summary-card">
+            <span>Linked stories</span>
+            <strong>{{ linkedPosts.length }}</strong>
+            <small>{{ linkedPosts.length ? 'Community context attached to this trip.' : 'No linked community evidence stored.' }}</small>
           </article>
           <article class="summary-card">
             <span>Profile</span>
@@ -253,22 +260,56 @@
         <section class="workspace-card">
           <div class="card-head">
             <div>
-              <span class="card-kicker">Stops</span>
-              <h3>Recommended Stops Snapshot</h3>
+              <span class="card-kicker">POIs</span>
+              <h3>Saved POIs</h3>
             </div>
           </div>
-          <div v-if="!recommendationList.length" class="card-empty">No recommendation snapshot was saved for this workspace.</div>
+          <div v-if="!savedPois.length" class="card-empty">No POIs have been attached to this workspace yet.</div>
           <div v-else class="saved-stop-list">
-            <article v-for="(stop, index) in recommendationList.slice(0, 8)" :key="`${stop.id || index}_${index}`" class="saved-stop-card">
+            <article v-for="(stop, index) in savedPois" :key="`${stop.id || index}_${index}`" class="saved-stop-card">
               <div class="saved-stop-rank">#{{ index + 1 }}</div>
               <div class="saved-stop-copy">
                 <h4>{{ stop.name || 'POI' }}</h4>
-                <p>{{ stop.reason || 'Saved from AI route-aware recommendation output.' }}</p>
+                <p>{{ stop.reason || (stop.source === 'via' ? 'Captured from the stored route context.' : 'Saved from AI route-aware recommendation output.') }}</p>
                 <div class="saved-stop-meta">
                   <span>{{ stop.category || 'poi' }}</span>
-                  <span>{{ formatKm(stop.distance_m) }}</span>
-                  <span>{{ formatMin(stop.detour_duration_s) }}</span>
+                  <span>{{ stop.source === 'via' ? 'Route context' : 'AI pick' }}</span>
+                  <span v-if="stop.distance_m !== null">{{ formatKm(stop.distance_m) }}</span>
+                  <span v-if="stop.detour_duration_s !== null">{{ formatMin(stop.detour_duration_s) }}</span>
                 </div>
+                <div class="saved-stop-actions">
+                  <button class="btn ghost small" type="button" @click="focusPoiInMap(stop)">Map</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="workspace-card">
+          <div class="card-head">
+            <div>
+              <span class="card-kicker">Community</span>
+              <h3>Linked Stories</h3>
+            </div>
+          </div>
+          <div v-if="!linkedPosts.length" class="card-empty">No linked posts were extracted into this workspace yet.</div>
+          <div v-else class="story-list">
+            <article v-for="story in linkedPosts" :key="`${story.post_id || story.title}_${story.source_type}`" class="story-card">
+              <div class="story-card-copy">
+                <div class="story-topline">
+                  <span class="story-type">{{ story.source_type }}</span>
+                  <span v-if="story.poi_name">{{ story.poi_name }}</span>
+                </div>
+                <h4>{{ story.title }}</h4>
+                <p>{{ story.snippet || 'Community evidence linked to this trip.' }}</p>
+                <div class="story-meta-row">
+                  <span>{{ story.author || 'Traveler' }}</span>
+                  <span>{{ formatLinkedStoryMetrics(story) }}</span>
+                </div>
+              </div>
+              <div class="story-actions">
+                <button v-if="story.post_id" class="btn ghost small" type="button" @click="openLinkedPost(story)">Open Post</button>
+                <button v-if="story.poi_id" class="btn ghost small" type="button" @click="openStoriesForPoi(story)">POI Feed</button>
               </div>
             </article>
           </div>
@@ -317,6 +358,15 @@ const routeContext = computed(() => tripDetail.value?.route_context || null)
 const plannerSnapshot = computed(() => tripDetail.value?.planner_snapshot || null)
 const recommendationList = computed(() => {
   const list = plannerSnapshot.value?.recommendations
+  return Array.isArray(list) ? list : []
+})
+const savedPois = computed(() => {
+  const list = tripDetail.value?.saved_pois
+  if (Array.isArray(list) && list.length) return list
+  return recommendationList.value.slice(0, 8)
+})
+const linkedPosts = computed(() => {
+  const list = tripDetail.value?.linked_posts
   return Array.isArray(list) ? list : []
 })
 const itinerarySegments = computed(() => {
@@ -395,6 +445,14 @@ const formatPercent = (value) => {
   const num = Number(value)
   if (!Number.isFinite(num)) return '--'
   return `${Math.round(num * 100)}%`
+}
+
+const formatLinkedStoryMetrics = (story) => {
+  const metrics = story?.metrics && typeof story.metrics === 'object' ? story.metrics : {}
+  if (story?.source_type === 'comment') {
+    return `${Number(metrics.likes || 0)} likes · ${Number(metrics.replies || 0)} replies`
+  }
+  return `${Number(metrics.likes || 0)} likes · ${Number(metrics.favorites || 0)} saves`
 }
 
 const statusToneClass = (status) => {
@@ -534,6 +592,17 @@ const continueInMap = () => {
   router.push({ path: '/map' })
 }
 
+const focusPoiInMap = (poi) => {
+  if (!poi) return
+  applyTripRouteToStore()
+  const query = {}
+  if (poi?.name) query.poi_name = String(poi.name)
+  if (Number.isFinite(Number(poi?.lat))) query.poi_lat = String(Number(poi.lat))
+  if (Number.isFinite(Number(poi?.lng))) query.poi_lng = String(Number(poi.lng))
+  if (poi?.id !== null && poi?.id !== undefined && poi?.id !== '') query.poi_id = String(poi.id)
+  router.push({ path: '/map', query })
+}
+
 const openInPlanner = () => {
   if (!tripDetail.value?.planner_snapshot || !auth.user?.id) return
   const payload = {
@@ -549,6 +618,24 @@ const openInPlanner = () => {
     // ignore storage failures
   }
   router.push({ path: '/ai-planner' })
+}
+
+const openLinkedPost = (story) => {
+  const postId = Number(story?.post_id || 0)
+  if (!postId) return
+  router.push(`/posts/postsid=${postId}`)
+}
+
+const openStoriesForPoi = (story) => {
+  const poiId = Number(story?.poi_id || 0)
+  if (!poiId) return
+  router.push({
+    path: '/posts',
+    query: {
+      poi_id: String(poiId),
+      poi_name: story?.poi_name || '',
+    },
+  })
 }
 
 const patchTrip = async (body, busyKey, successText) => {
@@ -1310,6 +1397,81 @@ onMounted(() => {
   color: var(--muted);
 }
 
+.saved-stop-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.story-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.story-card {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.story-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.story-topline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.story-type {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #356fe0;
+  background: color-mix(in srgb, #4d8cff 14%, transparent);
+}
+
+.story-card h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.story-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.story-meta-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.story-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
 .card-empty {
   margin-top: 12px;
   color: var(--muted);
@@ -1368,6 +1530,17 @@ onMounted(() => {
   .detail-hero-panel {
     max-width: none;
     width: 100%;
+  }
+
+  .story-card {
+    flex-direction: column;
+  }
+
+  .story-actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 </style>

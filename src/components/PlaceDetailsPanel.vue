@@ -134,6 +134,21 @@
             <div class="reason-text">{{ detailDescription }}</div>
           </div>
 
+          <div v-if="hubSummaryText" class="reason">
+            <div class="section-title">Hub summary</div>
+            <div class="reason-text">{{ hubSummaryText }}</div>
+          </div>
+
+          <div v-if="routeFitSummaryText || routeFitHighlights.length" class="hub-block route-fit-block">
+            <div class="section-title">Why this place fits your route</div>
+            <div v-if="routeFitSummaryText" class="reason-text">{{ routeFitSummaryText }}</div>
+            <div v-if="routeFitHighlights.length" class="hub-chip-row compact">
+              <span v-for="item in routeFitHighlights" :key="`route-fit-${item}`" class="hub-chip route-fit">
+                {{ item }}
+              </span>
+            </div>
+          </div>
+
           <div v-if="hasScores" class="scores">
             <div class="score-row">
               <span>Interest match</span>
@@ -664,6 +679,13 @@ const explanationLabel = (tag) => {
   return key || 'Factor'
 }
 
+const shortenText = (value, limit = 180) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  if (text.length <= limit) return text
+  return `${text.slice(0, Math.max(0, limit - 3)).trim()}...`
+}
+
 const coordsText = computed(() => {
   if (!poi.value) return ''
   const lat = Number(poi.value.lat)
@@ -675,6 +697,55 @@ const coordsText = computed(() => {
 const detailDescription = computed(() => {
   const text = String(poi.value?.description || '').trim()
   return text || ''
+})
+
+const hubSummaryText = computed(() => {
+  const explicit = String(poi.value?.hub_summary || '').trim()
+  if (explicit) return explicit
+  const tags = communityTopTags.value.slice(0, 3)
+  const bestFor = bestForList.value.slice(0, 2)
+  const highlights = communityHighlights.value.slice(0, 1)
+  const lead = bestFor.length
+    ? `${poi.value?.name || 'This place'} is strongest for ${bestFor.join(' and ')}.`
+    : tags.length
+      ? `${poi.value?.name || 'This place'} is frequently associated with ${tags.join(', ')}.`
+      : ''
+  return [lead, highlights[0]].filter(Boolean).join(' ')
+})
+
+const routeFitSummaryText = computed(() => {
+  const lines = []
+  const reason = shortenText(poi.value?.reason, 160)
+  if (reason) lines.push(reason)
+
+  if (Number.isFinite(distanceKm.value)) {
+    lines.push(`${poi.value?.name || 'This stop'} sits about ${formatDistance(distanceKm.value)} from the active route.`)
+  }
+
+  const extraDuration = Number(impact.value?.extraDurationMin)
+  if (Number.isFinite(extraDuration)) {
+    lines.push(
+      extraDuration <= 5
+        ? `The detour stays light at about ${formatDuration(extraDuration)}.`
+        : `Expect about ${formatDuration(extraDuration)} of extra travel from the current route.`
+    )
+  }
+
+  if (!lines.length && explanationItems.value.length) {
+    lines.push(`Top fit factors currently lean on ${explanationItems.value.slice(0, 2).map((item) => explanationLabel(item.tag).toLowerCase()).join(' and ')}.`)
+  }
+
+  return lines.slice(0, 3).join(' ')
+})
+
+const routeFitHighlights = computed(() => {
+  const chips = []
+  if (Number.isFinite(startKm.value)) chips.push(`${formatDistance(startKm.value)} to start`)
+  if (Number.isFinite(endKm.value)) chips.push(`${formatDistance(endKm.value)} to end`)
+  explanationItems.value.slice(0, 3).forEach((item) => {
+    chips.push(`${explanationLabel(item.tag)} ${Math.round(Number(item.contribution || 0))}%`)
+  })
+  return [...new Set(chips)].slice(0, 4)
 })
 
 const openingHoursText = computed(() => {
@@ -1816,6 +1887,16 @@ watch(
   background: color-mix(in srgb, var(--badge) 80%, transparent);
 }
 
+.route-fit-block {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, #f59e0b 14%, transparent), transparent 48%),
+    color-mix(in srgb, var(--badge) 80%, transparent);
+}
+
+.route-fit-block .reason-text {
+  -webkit-line-clamp: 4;
+}
+
 .pulse-block {
   background:
     radial-gradient(circle at top left, color-mix(in srgb, #60a5fa 16%, transparent), transparent 46%),
@@ -1907,6 +1988,11 @@ watch(
 
 .hub-chip.caution {
   border-color: color-mix(in srgb, #f59e0b 36%, var(--map-overlay-border) 64%);
+  background: color-mix(in srgb, #f59e0b 10%, var(--map-overlay-bg) 90%);
+}
+
+.hub-chip.route-fit {
+  border-color: color-mix(in srgb, #f59e0b 34%, var(--map-overlay-border) 66%);
   background: color-mix(in srgb, #f59e0b 10%, var(--map-overlay-bg) 90%);
 }
 

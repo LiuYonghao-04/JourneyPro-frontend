@@ -6,10 +6,11 @@ import { apiUrl } from '../config/api'
 const STORAGE_KEY = 'jp_via_points'
 const RECO_WEIGHT_KEY = 'jp_reco_interest_weight'
 const RECO_EXPLORE_WEIGHT_KEY = 'jp_reco_explore_weight'
+const RECO_DETOUR_TOLERANCE_KEY = 'jp_reco_detour_tolerance'
 const RECO_MODE_KEY = 'jp_reco_mode'
 const RECO_DEBUG_KEY = 'jp_reco_debug'
 const RECO_SESSION_KEY = 'jp_reco_session_id'
-const INTEREST_PROFILE_CACHE_PREFIX = 'jp_interest_profile_v1_'
+const INTEREST_PROFILE_CACHE_PREFIX = 'jp_interest_profile_v2_'
 const INTEREST_PROFILE_TTL_MS = 30 * 60 * 1000
 const POI_API_BASE = apiUrl('/api/poi')
 const SAVED_POI_KEY = 'jp_saved_pois'
@@ -88,6 +89,28 @@ function saveRecoExploreWeight(weight) {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(RECO_EXPLORE_WEIGHT_KEY, String(weight))
+  } catch (e) {
+    // ignore
+  }
+}
+
+function loadRecoDetourTolerance() {
+  if (typeof window === 'undefined') return 0.5
+  try {
+    const raw = localStorage.getItem(RECO_DETOUR_TOLERANCE_KEY)
+    const num = Number(raw)
+    if (!Number.isFinite(num)) return 0.5
+    const normalized = num > 1 ? num / 100 : num
+    return clamp(normalized, 0, 1)
+  } catch (e) {
+    return 0.5
+  }
+}
+
+function saveRecoDetourTolerance(weight) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(RECO_DETOUR_TOLERANCE_KEY, String(weight))
   } catch (e) {
     // ignore
   }
@@ -409,6 +432,7 @@ export const useRouteStore = defineStore('route', {
     recommendationProfile: null,
     recoInterestWeight: loadRecoInterestWeight(),
     recoExploreWeight: loadRecoExploreWeight(),
+    recoDetourTolerance: loadRecoDetourTolerance(),
     recoMode: loadRecoMode(),
     recoDebugEnabled: loadRecoDebugFlag(),
     recoSessionId: loadRecoSessionId(),
@@ -785,6 +809,21 @@ export const useRouteStore = defineStore('route', {
       }, 500)
     },
 
+    setRecoDetourTolerance(weight) {
+      const num = Number(weight)
+      if (!Number.isFinite(num)) return
+      this.recoDetourTolerance = clamp(num, 0, 1)
+      saveRecoDetourTolerance(this.recoDetourTolerance)
+
+      const auth = useAuthStore()
+      if (!auth.user?.id) return
+      if (recoSettingsSaveTimer) clearTimeout(recoSettingsSaveTimer)
+      recoSettingsSaveTimer = setTimeout(() => {
+        recoSettingsSaveTimer = null
+        this.saveRecoSettingsToServer(auth.user.id)
+      }, 500)
+    },
+
     setRecoMode(mode) {
       const next = normalizeRecoMode(mode)
       if (next === this.recoMode) return
@@ -814,11 +853,17 @@ export const useRouteStore = defineStore('route', {
         const normalizedExplore = Number.isFinite(rawExplore)
           ? clamp(rawExplore > 1 ? rawExplore / 100 : rawExplore, 0, 1)
           : this.recoExploreWeight
+        const rawDetourTolerance = Number(data.detour_tolerance)
+        const normalizedDetourTolerance = Number.isFinite(rawDetourTolerance)
+          ? clamp(rawDetourTolerance > 1 ? rawDetourTolerance / 100 : rawDetourTolerance, 0, 1)
+          : this.recoDetourTolerance
         // Apply server value without scheduling a save back.
         this.recoInterestWeight = clamp(normalized, 0, 1)
         this.recoExploreWeight = normalizedExplore
+        this.recoDetourTolerance = normalizedDetourTolerance
         saveRecoInterestWeight(this.recoInterestWeight)
         saveRecoExploreWeight(this.recoExploreWeight)
+        saveRecoDetourTolerance(this.recoDetourTolerance)
         this.reorderRecommendedPois()
       } catch (e) {
         // ignore
@@ -840,6 +885,7 @@ export const useRouteStore = defineStore('route', {
             user_id: uid,
             interest_weight: this.recoInterestWeight ?? 0.5,
             explore_weight: this.recoExploreWeight ?? 0.15,
+            detour_tolerance: this.recoDetourTolerance ?? 0.5,
           }),
         })
       } catch (e) {
@@ -1048,6 +1094,7 @@ export const useRouteStore = defineStore('route', {
         if (auth.user?.id) params.set('user_id', auth.user.id)
         params.set('interest_weight', String(this.recoInterestWeight ?? 0.5))
         params.set('explore_weight', String(this.recoExploreWeight ?? 0.15))
+        params.set('detour_tolerance', String(this.recoDetourTolerance ?? 0.5))
         params.set('mode', String(this.recoMode || 'driving'))
         params.set('candidate_limit', '180')
         params.set('debug', this.recoDebugEnabled ? '1' : '0')

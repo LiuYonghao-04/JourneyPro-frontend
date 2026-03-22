@@ -114,6 +114,156 @@
         </div>
       </section>
 
+      <div v-if="tripAttachFlash || tripAttachError" class="workspace-toast" :class="{ error: !!tripAttachError }">
+        {{ tripAttachError || tripAttachFlash }}
+      </div>
+
+      <section v-if="spotlightLoading || hasSpotlightContent" class="spotlight-shell">
+        <div class="spotlight-head">
+          <div>
+            <div class="spotlight-kicker">Community Lanes</div>
+            <h2 class="spotlight-title">Route-linked stories and structured travel context.</h2>
+            <p class="spotlight-copy">{{ spotlightSummary }}</p>
+          </div>
+          <div v-if="spotlight?.meta?.trip_style" class="spotlight-pill">
+            {{ humanizeTripMetaValue(spotlight.meta.trip_style) }}
+          </div>
+        </div>
+        <div v-if="spotlightError" class="spotlight-error">{{ spotlightError }}</div>
+
+        <div v-if="spotlightLoading && !hasSpotlightContent" class="spotlight-skeleton-grid">
+          <div class="spotlight-skeleton hero" />
+          <div class="spotlight-skeleton" />
+          <div class="spotlight-skeleton" />
+        </div>
+
+        <article
+          v-else-if="spotlight.featured"
+          class="featured-story"
+          @click="openDetail(spotlight.featured)"
+        >
+          <div
+            class="featured-cover"
+            v-if="cardCoverImage(spotlight.featured)"
+            :data-card-id="spotlight.featured.id"
+            :ref="observeImageHost"
+          >
+            <div v-if="!isImageVisible(spotlight.featured.id) || !loadedMap[spotlight.featured.id]" class="img-skeleton" />
+            <CroppedImage
+              v-if="isImageVisible(spotlight.featured.id)"
+              :src="cardCoverImage(spotlight.featured)"
+              :alt="spotlight.featured.title"
+              class="cover-img"
+              loading="lazy"
+              @load="() => markLoaded(spotlight.featured)"
+            />
+            <div class="featured-chip">Featured story</div>
+          </div>
+          <div class="featured-body">
+            <div class="signal-row">
+              <span
+                v-for="signal in travelSignals(spotlight.featured).slice(0, 4)"
+                :key="signal"
+                class="signal-pill"
+              >
+                {{ signal }}
+              </span>
+            </div>
+            <h3 class="featured-title">{{ spotlight.featured.title }}</h3>
+            <p class="featured-text">{{ summarize(spotlight.featured.content) }}</p>
+            <div class="featured-meta">
+              <span>{{ spotlight.featured.user?.nickname || 'Guest' }}</span>
+              <span v-if="spotlight.featured.poi?.name">&middot; {{ spotlight.featured.poi.name }}</span>
+              <span v-if="spotlight.featured.poi?.category">&middot; {{ spotlight.featured.poi.category }}</span>
+            </div>
+            <div class="featured-actions">
+              <button v-if="spotlight.featured.poi?.id" class="poi-link" @click.stop="openPoiFromFeed(spotlight.featured)">
+                <el-icon><Location /></el-icon>
+                <span>{{ spotlight.featured.poi?.name || 'Linked place' }}</span>
+              </button>
+              <button v-if="spotlight.featured.poi?.id" class="story-ai-btn" @click.stop="planFromStory(spotlight.featured)">
+                Plan with AI
+              </button>
+              <button
+                v-if="auth.user?.id"
+                class="trip-link-btn"
+                type="button"
+                :disabled="isTripAttachBusy(spotlight.featured)"
+                @click.stop="attachStoryToTrip(spotlight.featured)"
+              >
+                {{ isStoryAttached(spotlight.featured) ? 'Added to Trip' : isTripAttachBusy(spotlight.featured) ? 'Adding...' : 'Add to Trip' }}
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <div v-if="spotlightSections.length" class="spotlight-grid">
+          <section v-for="section in spotlightSections" :key="section.key" class="spotlight-lane">
+            <div class="lane-head">
+              <div>
+                <div class="lane-title">{{ section.title }}</div>
+                <div class="lane-copy">{{ section.copy }}</div>
+              </div>
+              <div class="lane-count">{{ section.cards.length }}</div>
+            </div>
+            <div class="lane-track">
+              <article
+                v-for="card in section.cards"
+                :key="`${section.key}-${card.id}`"
+                class="lane-card"
+                @click="openDetail(card)"
+              >
+                <div
+                  v-if="cardCoverImage(card)"
+                  class="lane-cover"
+                  :data-card-id="card.id"
+                  :ref="observeImageHost"
+                >
+                  <div v-if="!isImageVisible(card.id) || !loadedMap[card.id]" class="img-skeleton" />
+                  <CroppedImage
+                    v-if="isImageVisible(card.id)"
+                    :src="cardCoverImage(card)"
+                    :alt="card.title"
+                    class="cover-img"
+                    loading="lazy"
+                    @load="() => markLoaded(card)"
+                  />
+                </div>
+                <div class="lane-body">
+                  <div class="lane-card-topline">
+                    <span>{{ card.poi?.name || card.user?.nickname || 'Story' }}</span>
+                    <span v-if="section.key === 'nearby' && card.distance_km !== null">{{ formatDistanceKm(card.distance_km) }}</span>
+                  </div>
+                  <h4 class="lane-card-title">{{ card.title }}</h4>
+                  <div v-if="travelSignals(card).length" class="signal-row compact">
+                    <span v-for="signal in travelSignals(card).slice(0, 2)" :key="signal" class="signal-pill">{{ signal }}</span>
+                  </div>
+                  <p class="lane-card-text">{{ summarize(card.content) }}</p>
+                  <div class="lane-card-actions">
+                    <button v-if="card.poi?.id" class="poi-link small" @click.stop="openPoiFromFeed(card)">
+                      <el-icon><Location /></el-icon>
+                      <span>{{ card.poi?.name || 'POI' }}</span>
+                    </button>
+                    <button v-if="card.poi?.id" class="story-ai-btn mini" @click.stop="planFromStory(card)">
+                      Plan
+                    </button>
+                    <button
+                      v-if="auth.user?.id"
+                      class="trip-link-btn small"
+                      type="button"
+                      :disabled="isTripAttachBusy(card)"
+                      @click.stop="attachStoryToTrip(card)"
+                    >
+                      {{ isStoryAttached(card) ? 'Added' : isTripAttachBusy(card) ? 'Adding...' : 'Trip' }}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section class="feed">
         <div v-if="loading && posts.length === 0" class="skeleton-list">
           <div v-for="n in 8" :key="n" class="skeleton-card" />
@@ -146,6 +296,9 @@
 
             <div class="card-body">
               <h3 class="card-title">{{ card.title }}</h3>
+              <div v-if="card._collapsed_count" class="cluster-note">
+                +{{ card._collapsed_count }} similar {{ card._collapsed_count === 1 ? 'story' : 'stories' }} folded
+              </div>
               <div v-if="travelSignals(card).length" class="signal-row">
                 <span v-for="signal in travelSignals(card).slice(0, 3)" :key="signal" class="signal-pill">{{ signal }}</span>
               </div>
@@ -162,6 +315,15 @@
               <div class="card-footer">
                 <button v-if="card.poi?.id" class="story-ai-btn" @click.stop="planFromStory(card)">
                   Plan with AI
+                </button>
+                <button
+                  v-if="auth.user?.id"
+                  class="trip-link-btn"
+                  type="button"
+                  :disabled="isTripAttachBusy(card)"
+                  @click.stop="attachStoryToTrip(card)"
+                >
+                  {{ isStoryAttached(card) ? 'Added to Trip' : isTripAttachBusy(card) ? 'Adding...' : 'Add to Trip' }}
                 </button>
                 <button class="icon-btn" @click.stop="toggleLike(card)">
                   <el-icon :class="['stat-icon', { liked: card._liked }]">
@@ -210,6 +372,9 @@
                 <span>&middot;</span>
                 <span>{{ formatTime(card.created_at) }}</span>
               </div>
+              <div v-if="card._collapsed_count" class="cluster-note list">
+                +{{ card._collapsed_count }} similar {{ card._collapsed_count === 1 ? 'story' : 'stories' }} folded
+              </div>
               <div class="list-actions">
                 <div class="list-link-group">
                   <button v-if="card.poi?.id" class="poi-link" @click.stop="openPoiFromFeed(card)">
@@ -218,6 +383,15 @@
                   </button>
                   <button v-if="card.poi?.id" class="story-ai-btn subtle" @click.stop="planFromStory(card)">
                     Plan with AI
+                  </button>
+                  <button
+                    v-if="auth.user?.id"
+                    class="trip-link-btn subtle"
+                    type="button"
+                    :disabled="isTripAttachBusy(card)"
+                    @click.stop="attachStoryToTrip(card)"
+                  >
+                    {{ isStoryAttached(card) ? 'Added to Trip' : isTripAttachBusy(card) ? 'Adding...' : 'Add to Trip' }}
                   </button>
                 </div>
                 <div class="metric-group">
@@ -291,6 +465,21 @@ const onlyPoi = ref(false)
 const structuredOnly = ref(false)
 const minLikes = ref(0)
 const viewMode = ref(localStorage.getItem('jp_post_view_mode') || 'masonry')
+const createEmptySpotlight = () => ({
+  featured: null,
+  route_linked: [],
+  nearby: [],
+  same_style: [],
+  meta: {},
+})
+const spotlight = ref(createEmptySpotlight())
+const spotlightLoading = ref(false)
+const spotlightError = ref('')
+const tripAttachFlash = ref('')
+const tripAttachError = ref('')
+const attachedStoryIds = ref(new Set())
+const tripAttachBusyMap = ref({})
+let spotlightRequestSeq = 0
 const poiFilterId = computed(() => {
   const raw = route.query.poi_id
   const num = Number(raw)
@@ -298,6 +487,70 @@ const poiFilterId = computed(() => {
 })
 const activeTagParam = computed(() => (activeTab.value === 'Recommended' ? '' : activeTab.value))
 const isCursorSort = computed(() => sort.value === 'latest')
+const routeContextPoiIds = computed(() => {
+  const ids = new Set()
+  if (poiFilterId.value) ids.add(Number(poiFilterId.value))
+  ;(routeStore.viaPoints || []).forEach((poi) => {
+    const id = Number(poi?.id ?? poi?.poi_id)
+    if (Number.isFinite(id) && id > 0) ids.add(id)
+  })
+  ;(routeStore.recommendedPOIs || []).slice(0, 8).forEach((poi) => {
+    const id = Number(poi?.id ?? poi?.poi_id)
+    if (Number.isFinite(id) && id > 0) ids.add(id)
+  })
+  const selectedId = Number(routeStore.selectedPoi?.id ?? routeStore.selectedPoi?.poi_id)
+  if (Number.isFinite(selectedId) && selectedId > 0) ids.add(selectedId)
+  return [...ids].slice(0, 12)
+})
+const dominantTripStyle = computed(() => {
+  const counts = new Map()
+  posts.value.forEach((post) => {
+    const style = String(post?.trip_meta?.trip_style || '').trim()
+    if (!style) return
+    counts.set(style, (counts.get(style) || 0) + 1)
+  })
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+})
+const spotlightSections = computed(() => {
+  const data = spotlight.value || createEmptySpotlight()
+  return [
+    {
+      key: 'route_linked',
+      title: 'Along your route',
+      copy: 'Stories attached to current waypoints and recommended stops.',
+      cards: data.route_linked || [],
+    },
+    {
+      key: 'nearby',
+      title: 'Nearby now',
+      copy: 'Posts clustered around the current map anchor.',
+      cards: data.nearby || [],
+    },
+    {
+      key: 'same_style',
+      title: 'Same trip style',
+      copy: 'Structured stories that match the dominant travel pattern.',
+      cards: data.same_style || [],
+    },
+  ].filter((section) => section.cards.length > 0)
+})
+const hasSpotlightContent = computed(() => !!spotlight.value?.featured || spotlightSections.value.length > 0)
+const spotlightRouteSignature = computed(() =>
+  JSON.stringify({
+    routePoiIds: routeContextPoiIds.value,
+    selectedPoiId: routeStore.selectedPoi?.id ?? routeStore.selectedPoi?.poi_id ?? null,
+    dominantTripStyle: dominantTripStyle.value,
+    onlyPoi: onlyPoi.value,
+  })
+)
+const spotlightSummary = computed(() => {
+  const meta = spotlight.value?.meta || {}
+  const parts = []
+  if (Number(meta.route_poi_count) > 0) parts.push(`${meta.route_poi_count} route-linked POIs`)
+  if (meta.trip_style) parts.push(`${humanizeTripMetaValue(meta.trip_style)} stories`)
+  if (activeTagParam.value) parts.push(`tagged ${activeTagParam.value}`)
+  return parts.length ? parts.join(' · ') : 'Pulling stories from route context, POI links, and structured trip metadata.'
+})
 
 const markWithReactions = (list) =>
   list.map((item) => ({
@@ -362,10 +615,165 @@ const fetchPosts = async (reset = false) => {
     }
     await nextTick()
     refreshImageObservers()
+    if (reset) {
+      void fetchSpotlightSections()
+    }
   } catch {
     // ignore
   } finally {
     loading.value = false
+  }
+}
+
+const fetchSpotlightSections = async () => {
+  const seq = ++spotlightRequestSeq
+  spotlightLoading.value = true
+  spotlightError.value = ''
+  try {
+    const focusPoi = poiFilterId.value || routeContextPoiIds.value[0] || undefined
+    const anchorPoi =
+      routeStore.selectedPoi ||
+      routeStore.viaPoints?.[0] ||
+      routeStore.recommendedPOIs?.[0] ||
+      null
+    const params = {
+      viewer_id: auth.user?.id || undefined,
+      focus_poi_id: focusPoi,
+      route_poi_ids: routeContextPoiIds.value.length ? routeContextPoiIds.value.join(',') : undefined,
+      trip_style: dominantTripStyle.value || undefined,
+      structured_only: structuredOnly.value ? 1 : undefined,
+      poi_only: onlyPoi.value ? 1 : undefined,
+      tag: activeTagParam.value || undefined,
+      lat: Number.isFinite(Number(anchorPoi?.lat)) ? Number(anchorPoi.lat) : undefined,
+      lng: Number.isFinite(Number(anchorPoi?.lng)) ? Number(anchorPoi.lng) : undefined,
+      limit: 4,
+    }
+    const res = await axios.get(`${API_BASE}/sections/spotlight`, { params })
+    if (seq !== spotlightRequestSeq) return
+    spotlight.value = res.data?.data || createEmptySpotlight()
+  } catch {
+    if (seq !== spotlightRequestSeq) return
+    spotlight.value = createEmptySpotlight()
+    spotlightError.value = 'Failed to load spotlight lanes.'
+  } finally {
+    if (seq === spotlightRequestSeq) {
+      spotlightLoading.value = false
+    }
+  }
+}
+
+let tripAttachFlashTimer = null
+const setTripAttachFeedback = (value = '', isError = false) => {
+  if (tripAttachFlashTimer) {
+    clearTimeout(tripAttachFlashTimer)
+    tripAttachFlashTimer = null
+  }
+  tripAttachFlash.value = isError ? '' : String(value || '')
+  tripAttachError.value = isError ? String(value || '') : ''
+  if (!value) return
+  tripAttachFlashTimer = setTimeout(() => {
+    tripAttachFlash.value = ''
+    tripAttachError.value = ''
+    tripAttachFlashTimer = null
+  }, 2600)
+}
+
+const buildCurrentRouteContext = () => ({
+  start:
+    Number.isFinite(Number(routeStore.startLat)) && Number.isFinite(Number(routeStore.startLng))
+      ? { lat: Number(routeStore.startLat), lng: Number(routeStore.startLng), name: routeStore.startAddress || '' }
+      : null,
+  end:
+    Number.isFinite(Number(routeStore.endLat)) && Number.isFinite(Number(routeStore.endLng))
+      ? { lat: Number(routeStore.endLat), lng: Number(routeStore.endLng), name: routeStore.endAddress || '' }
+      : null,
+  via: Array.isArray(routeStore.viaPoints) ? routeStore.viaPoints.slice(0, 16) : [],
+  interest_weight: Number(routeStore.recoInterestWeight || 0.5),
+  explore_weight: Number(routeStore.recoExploreWeight || 0.15),
+  detour_tolerance: Number(routeStore.recoDetourTolerance || 0.5),
+})
+
+const buildTripAttachPayload = (card) => ({
+  user_id: auth.user?.id,
+  post: {
+    post_id: card?.id,
+    poi_id: card?.poi?.id || card?.poi_id || null,
+    title: card?.title || '',
+    snippet: summarize(card?.content || ''),
+    author: card?.user?.nickname || 'Traveler',
+    poi_name: card?.poi?.name || '',
+    image_url: cardCoverImage(card) || '',
+    source_type: 'post',
+    created_at: card?.created_at || null,
+    metrics: {
+      likes: Number(card?.like_count || 0),
+      favorites: Number(card?.favorite_count || 0),
+      views: Number(card?.view_count || 0),
+    },
+  },
+  poi: card?.poi
+    ? {
+        id: card.poi.id || card.poi_id || null,
+        name: card.poi.name || '',
+        category: card.poi.category || '',
+        image_url: card.poi.image_url || cardCoverImage(card) || '',
+        lat: card.poi.lat,
+        lng: card.poi.lng,
+        reason: `Attached from community story: ${card?.title || 'Community story'}`,
+        source: 'community-story',
+      }
+    : null,
+  title: card?.poi?.name ? `${card.poi.name} community workspace` : truncateTitle(card?.title || 'Community workspace'),
+  summary: summarize(card?.content || ''),
+  prompt_preview: card?.title || '',
+  route_context: buildCurrentRouteContext(),
+})
+
+const truncateTitle = (value) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!text) return 'Community workspace'
+  return text.length > 140 ? `${text.slice(0, 137).trim()}...` : text
+}
+
+const storyAttachKey = (card) => {
+  const id = Number(card?.id)
+  if (Number.isFinite(id) && id > 0) return `post:${id}`
+  const poiId = Number(card?.poi?.id || card?.poi_id)
+  if (Number.isFinite(poiId) && poiId > 0) return `poi:${poiId}`
+  return `title:${String(card?.title || '').trim().toLowerCase()}`
+}
+
+const isTripAttachBusy = (card) => !!tripAttachBusyMap.value[storyAttachKey(card)]
+const isStoryAttached = (card) => attachedStoryIds.value.has(storyAttachKey(card))
+
+const attachStoryToTrip = async (card) => {
+  if (!auth.user?.id) {
+    router.push('/login')
+    return
+  }
+  const key = storyAttachKey(card)
+  if (!key || isTripAttachBusy(card)) return
+  tripAttachBusyMap.value = { ...tripAttachBusyMap.value, [key]: true }
+  setTripAttachFeedback('')
+  try {
+    const res = await fetch(apiUrl('/api/trips/attach-community'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildTripAttachPayload(card)),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.success || !data?.item?.id) {
+      throw new Error(data?.message || 'Failed to attach story to trip workspace.')
+    }
+    attachedStoryIds.value = new Set([...attachedStoryIds.value, key])
+    const tripTitle = data?.item?.title || 'trip workspace'
+    setTripAttachFeedback(`${data?.created ? 'Created' : 'Updated'} "${tripTitle}" from this story.`)
+  } catch (err) {
+    setTripAttachFeedback(String(err?.message || 'Failed to attach story to trip workspace.'), true)
+  } finally {
+    const next = { ...tripAttachBusyMap.value }
+    delete next[key]
+    tripAttachBusyMap.value = next
   }
 }
 
@@ -537,6 +945,51 @@ const dedupePostsByPrimaryImage = (list) => {
   })
 }
 
+const buildFeedEntries = (list) => {
+  const imageOwners = new Map()
+  const poiCounts = new Map()
+  const poiOwners = new Map()
+  const visible = []
+
+  ;(list || []).forEach((post) => {
+    const imageKey = String(post?.cover_image || post?.images?.[0] || '').trim().toLowerCase()
+    const poiKey = !poiFilterId.value && post?.poi_id ? String(post.poi_id) : ''
+    let owner = null
+
+    if (imageKey && imageOwners.has(imageKey)) {
+      owner = imageOwners.get(imageKey)
+    } else if (poiKey) {
+      const currentPoiCount = poiCounts.get(poiKey) || 0
+      if (currentPoiCount >= 2 && poiOwners.has(poiKey)) {
+        owner = poiOwners.get(poiKey)
+      }
+    }
+
+    if (owner) {
+      owner._collapsed_count = Number(owner._collapsed_count || 0) + 1
+      if (!owner._collapsed_titles) owner._collapsed_titles = []
+      if (post?.title && owner._collapsed_titles.length < 3) {
+        owner._collapsed_titles.push(post.title)
+      }
+      return
+    }
+
+    const next = {
+      ...post,
+      _collapsed_count: 0,
+      _collapsed_titles: [],
+    }
+    visible.push(next)
+    if (imageKey) imageOwners.set(imageKey, next)
+    if (poiKey) {
+      poiCounts.set(poiKey, (poiCounts.get(poiKey) || 0) + 1)
+      if (!poiOwners.has(poiKey)) poiOwners.set(poiKey, next)
+    }
+  })
+
+  return visible
+}
+
 const filteredPosts = computed(() => {
   const kw = search.value.trim().toLowerCase()
   const filtered = posts.value.filter((p) => {
@@ -571,7 +1024,7 @@ const filteredPosts = computed(() => {
     const inLikes = (Number(p.like_count) || 0) >= minLikes.value
     return inPoi && inTab && inKw && inPoiToggle && inStructured && inLikes
   })
-  return dedupePostsByPrimaryImage(filtered)
+  return buildFeedEntries(dedupePostsByPrimaryImage(filtered))
 })
 
 const avgLikes = computed(() => {
@@ -620,6 +1073,12 @@ const summarize = (text) => {
 const formatTime = (time) => {
   if (!time) return ''
   return new Date(time).toLocaleDateString()
+}
+
+const formatDistanceKm = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return 'Nearby'
+  return num < 1 ? `${Math.round(num * 1000)} m` : `${num.toFixed(1)} km`
 }
 
 const markLoaded = (card) => {
@@ -713,6 +1172,16 @@ const openCreator = (id) => {
 watch(sort, () => fetchPosts(true))
 watch(activeTagParam, () => fetchPosts(true))
 watch(structuredOnly, () => fetchPosts(true))
+watch(onlyPoi, () => {
+  if (posts.value.length) {
+    void fetchSpotlightSections()
+  }
+})
+watch(spotlightRouteSignature, () => {
+  if (posts.value.length) {
+    void fetchSpotlightSections()
+  }
+})
 watch(
   () => route.query.poi_name,
   (name) => {
@@ -750,6 +1219,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (tripAttachFlashTimer) {
+    clearTimeout(tripAttachFlashTimer)
+    tripAttachFlashTimer = null
+  }
   document.removeEventListener('scroll', onAnyScroll, true)
   window.removeEventListener('scroll', onAnyScroll)
   if (observer.value) observer.value.disconnect()
@@ -960,6 +1433,277 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
 }
 
+.workspace-toast {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #4f8cff 24%, transparent);
+  background: color-mix(in srgb, #4f8cff 10%, var(--panel));
+  color: #4f8cff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workspace-toast.error {
+  color: #d65a5a;
+  border-color: color-mix(in srgb, #d65a5a 28%, transparent);
+  background: color-mix(in srgb, #d65a5a 8%, var(--panel));
+}
+
+.spotlight-shell {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #7ea6ff 8%, var(--panel)) 0%, color-mix(in srgb, var(--panel) 95%, transparent) 48%),
+    color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.spotlight-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.spotlight-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4f8cff;
+  margin-bottom: 4px;
+}
+
+.spotlight-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.spotlight-copy {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.spotlight-pill {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #4f8cff 10%, var(--panel));
+  border: 1px solid color-mix(in srgb, #4f8cff 36%, transparent);
+  color: #4f8cff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.spotlight-error {
+  color: #d65a5a;
+  font-size: 12px;
+}
+
+.spotlight-skeleton-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 12px;
+}
+
+.spotlight-skeleton {
+  min-height: 220px;
+  border-radius: 18px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--badge) 92%, #fff) 18%,
+    color-mix(in srgb, var(--badge) 78%, #fff) 50%,
+    color-mix(in srgb, var(--badge) 92%, #fff) 82%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+.spotlight-skeleton.hero {
+  min-height: 280px;
+}
+
+.featured-story {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 16px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.featured-story:hover {
+  border-color: color-mix(in srgb, #4f8cff 55%, var(--panel-border));
+}
+
+.featured-cover {
+  position: relative;
+  min-height: 260px;
+  background: var(--badge);
+}
+
+.featured-chip {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.featured-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 18px 20px 18px 4px;
+}
+
+.featured-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.featured-text {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.featured-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.featured-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.spotlight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.spotlight-lane {
+  min-width: 0;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  padding: 12px;
+}
+
+.lane-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.lane-title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.lane-copy {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.lane-count {
+  flex-shrink: 0;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge) 88%, transparent);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.lane-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.lane-card {
+  min-width: 250px;
+  max-width: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  cursor: pointer;
+}
+
+.lane-card:hover {
+  border-color: color-mix(in srgb, #4f8cff 52%, var(--panel-border));
+}
+
+.lane-cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--badge);
+}
+
+.lane-body {
+  padding: 10px;
+}
+
+.lane-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.lane-card-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.lane-card-text {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.lane-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -1150,6 +1894,12 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--badge) 95%, transparent);
 }
 
+.poi-link.small {
+  margin-bottom: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .story-ai-btn {
   display: inline-flex;
   align-items: center;
@@ -1166,6 +1916,57 @@ onBeforeUnmount(() => {
 
 .story-ai-btn.subtle {
   background: color-mix(in srgb, var(--panel) 86%, transparent);
+}
+
+.story-ai-btn.mini {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.trip-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--badge) 88%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.trip-link-btn.small {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.trip-link-btn.subtle {
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+}
+
+.trip-link-btn:disabled {
+  opacity: 0.68;
+  cursor: default;
+}
+
+.cluster-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #4f8cff 10%, var(--panel));
+  border: 1px solid color-mix(in srgb, #4f8cff 28%, transparent);
+  color: #4f8cff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cluster-note.list {
+  margin-bottom: 2px;
 }
 
 .card-footer {
@@ -1330,6 +2131,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1450px) {
   .waterfall { column-count: 3; }
+  .spotlight-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1160px) {
@@ -1340,11 +2142,18 @@ onBeforeUnmount(() => {
   .list-cover { min-height: 180px; }
   .list-body { padding: 12px; }
   .toggles { grid-template-columns: 1fr; }
+  .featured-story { grid-template-columns: 1fr; }
+  .featured-body { padding: 14px; }
+  .spotlight-skeleton-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
   .waterfall { column-count: 1; }
   .topbar { flex-direction: column; align-items: stretch; }
   .top-actions { justify-content: flex-start; }
+  .spotlight-head { flex-direction: column; }
+  .spotlight-title { font-size: 20px; }
+  .featured-title { font-size: 22px; }
+  .lane-card { min-width: 220px; }
 }
 </style>

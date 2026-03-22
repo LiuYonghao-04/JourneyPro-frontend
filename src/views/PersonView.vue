@@ -92,6 +92,13 @@
             </div>
             <el-slider v-model="exploreSlider" :min="0" :max="100" />
           </div>
+          <div class="slider-wrap">
+            <div class="slider-labels">
+              <span>Tight route {{ tightRoutePercent }}%</span>
+              <span>Flexible detour {{ detourPercent }}%</span>
+            </div>
+            <el-slider v-model="detourSlider" :min="0" :max="100" />
+          </div>
           <div class="preset-row">
             <button class="preset-btn" :class="{ active: currentPreset === 'balanced' }" type="button" @click="applyPreferencePreset('balanced')">
               Balanced
@@ -115,6 +122,10 @@
             <div class="mini-stat">
               <span>Profile source</span>
               <strong>{{ profileSourceLabel }}</strong>
+            </div>
+            <div class="mini-stat">
+              <span>Detour window</span>
+              <strong>{{ detourModeLabel }}</strong>
             </div>
           </div>
         </article>
@@ -276,6 +287,99 @@
                 </div>
               </div>
             </template>
+          </template>
+        </article>
+
+        <article class="panel trend-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Interest Evolution</h3>
+              <p class="panel-copy">See how category and tag preference moved across the last 90 days, plus the latest shifts.</p>
+            </div>
+            <button class="collapse-btn" type="button" @click="trendCollapsed = !trendCollapsed">
+              {{ trendCollapsed ? 'Expand' : 'Collapse' }}
+            </button>
+          </div>
+          <div v-if="trendCollapsed" class="summary-strip">
+            <div class="summary-tile">
+              <span>Detour style</span>
+              <strong>{{ detourModeLabel }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Rising</span>
+              <strong>{{ topRisingShiftLabel }}</strong>
+            </div>
+            <div class="summary-tile">
+              <span>Cooling</span>
+              <strong>{{ topCoolingShiftLabel }}</strong>
+            </div>
+          </div>
+          <template v-else>
+            <p class="trend-summary">{{ preferenceShiftSummary }}</p>
+            <div class="evolution-grid">
+              <div class="evolution-column">
+                <div class="interest-column-title">Category evolution</div>
+                <div v-if="!evolutionCategories.length" class="muted">No recent category movement yet.</div>
+                <div v-else class="evolution-stack">
+                  <article v-for="item in evolutionCategories" :key="item.key" class="evolution-card">
+                    <div class="evolution-card-head">
+                      <span>{{ item.name }}</span>
+                      <strong class="delta-badge" :class="item.trend">{{ formatShiftDelta(item.delta) }}</strong>
+                    </div>
+                    <div class="evolution-points">
+                      <div v-for="point in item.points" :key="point.key" class="evolution-point">
+                        <span>{{ point.short_label }}</span>
+                        <div class="evolution-bar"><i :style="{ width: `${Math.max(point.percent, point.percent > 0 ? 6 : 0)}%` }"></i></div>
+                        <strong>{{ point.percent }}%</strong>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </div>
+
+              <div class="evolution-column">
+                <div class="interest-column-title">Tag evolution</div>
+                <div v-if="!evolutionTags.length" class="muted">No recent tag movement yet.</div>
+                <div v-else class="evolution-stack">
+                  <article v-for="item in evolutionTags" :key="item.key" class="evolution-card">
+                    <div class="evolution-card-head">
+                      <span>#{{ item.name }}</span>
+                      <strong class="delta-badge" :class="item.trend">{{ formatShiftDelta(item.delta) }}</strong>
+                    </div>
+                    <div class="evolution-points">
+                      <div v-for="point in item.points" :key="point.key" class="evolution-point">
+                        <span>{{ point.short_label }}</span>
+                        <div class="evolution-bar"><i :style="{ width: `${Math.max(point.percent, point.percent > 0 ? 6 : 0)}%` }"></i></div>
+                        <strong>{{ point.percent }}%</strong>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+            <div class="shift-grid">
+              <div class="shift-card">
+                <div class="interest-column-title">Rising now</div>
+                <div v-if="!risingShifts.length" class="muted">No rising preference yet.</div>
+                <div v-else class="shift-stack">
+                  <div v-for="item in risingShifts" :key="item.key" class="shift-pill up">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ formatShiftDelta(item.delta) }}</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="shift-card">
+                <div class="interest-column-title">Cooling off</div>
+                <div v-if="!coolingShifts.length" class="muted">No cooling preference yet.</div>
+                <div v-else class="shift-stack">
+                  <div v-for="item in coolingShifts" :key="item.key" class="shift-pill down">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ formatShiftDelta(item.delta) }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </template>
         </article>
       </section>
@@ -541,6 +645,15 @@ const avatarCropBaseUrl = ref('')
 const interestCollapsed = ref(true)
 const explanationCollapsed = ref(false)
 const signalCollapsed = ref(false)
+const trendCollapsed = ref(false)
+
+const detourLabelFor = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 'Balanced detours'
+  if (num <= 0.3) return 'Tight route'
+  if (num >= 0.7) return 'Flexible detours'
+  return 'Balanced detours'
+}
 
 const toUid = (raw) => {
   const n = Number(raw)
@@ -927,10 +1040,21 @@ const exploreSlider = computed({
   },
 })
 
+const detourSlider = computed({
+  get() {
+    return Math.round((routeStore.recoDetourTolerance ?? Number(profileSettings.value?.detour_tolerance) ?? 0.5) * 100)
+  },
+  set(val) {
+    routeStore.setRecoDetourTolerance(Number(val) / 100)
+  },
+})
+
 const interestPercent = computed(() => interestSlider.value)
 const distancePercent = computed(() => 100 - interestSlider.value)
 const explorePercent = computed(() => exploreSlider.value)
 const safePercent = computed(() => 100 - exploreSlider.value)
+const detourPercent = computed(() => detourSlider.value)
+const tightRoutePercent = computed(() => 100 - detourSlider.value)
 
 const interestProfile = computed(() => routeStore.userInterestProfile || null)
 const interestLoading = computed(() => routeStore.interestProfileLoading)
@@ -967,6 +1091,17 @@ const dominantSignalLabel = computed(() => profileStory.value?.dominant_signal?.
 const recentActivity7d = computed(() => Number(recentActivity.value?.last_7d || 0))
 const recentActivity30d = computed(() => Number(recentActivity.value?.last_30d || 0))
 const recentMomentumLabel = computed(() => recentActivity.value?.momentum_label || 'Cold start')
+const interestEvolution = computed(() => interestProfile.value?.interest_evolution || null)
+const evolutionTags = computed(() => interestEvolution.value?.tags || [])
+const evolutionCategories = computed(() => interestEvolution.value?.categories || [])
+const preferenceShifts = computed(() => interestProfile.value?.preference_shifts || null)
+const risingShifts = computed(() => preferenceShifts.value?.rising || [])
+const coolingShifts = computed(() => preferenceShifts.value?.cooling || [])
+const preferenceShiftSummary = computed(
+  () => preferenceShifts.value?.summary || 'JourneyPro has not detected a meaningful preference swing yet.'
+)
+const topRisingShiftLabel = computed(() => risingShifts.value?.[0]?.label || 'Stable')
+const topCoolingShiftLabel = computed(() => coolingShifts.value?.[0]?.label || 'Stable')
 const profileSourceLabel = computed(() => {
   const source = String(interestProfile.value?.source || '').toLowerCase()
   if (source === 'user_interest_agg') return 'learned'
@@ -984,6 +1119,7 @@ const profileExploreMode = computed(() => {
   if (safePercent.value >= 60) return 'Stable picks'
   return 'Balanced'
 })
+const detourModeLabel = computed(() => detourLabelFor((routeStore.recoDetourTolerance ?? profileSettings.value?.detour_tolerance ?? 0.5)))
 const collapsedInterestItems = computed(() => {
   const tagItems = (interestTags.value || []).map((item) => ({
     key: `tag-${item.name}`,
@@ -1003,9 +1139,9 @@ const collapsedInterestItems = computed(() => {
 const near = (value, target) => Math.abs(Number(value || 0) - Number(target || 0)) <= 6
 
 const currentPreset = computed(() => {
-  if (near(interestPercent.value, 50) && near(explorePercent.value, 50)) return 'balanced'
-  if (interestPercent.value <= 42 && explorePercent.value <= 28) return 'route'
-  if (interestPercent.value >= 62 && explorePercent.value >= 62) return 'discovery'
+  if (near(interestPercent.value, 50) && near(explorePercent.value, 50) && near(detourPercent.value, 50)) return 'balanced'
+  if (interestPercent.value <= 42 && explorePercent.value <= 28 && detourPercent.value <= 34) return 'route'
+  if (interestPercent.value >= 62 && explorePercent.value >= 62 && detourPercent.value >= 66) return 'discovery'
   return 'custom'
 })
 
@@ -1013,20 +1149,30 @@ const applyPreferencePreset = (preset) => {
   if (preset === 'balanced') {
     routeStore.setRecoInterestWeight(0.5)
     routeStore.setRecoExploreWeight(0.5)
+    routeStore.setRecoDetourTolerance(0.5)
     return
   }
   if (preset === 'route') {
     routeStore.setRecoInterestWeight(0.35)
     routeStore.setRecoExploreWeight(0.2)
+    routeStore.setRecoDetourTolerance(0.22)
     return
   }
   if (preset === 'discovery') {
     routeStore.setRecoInterestWeight(0.68)
     routeStore.setRecoExploreWeight(0.72)
+    routeStore.setRecoDetourTolerance(0.74)
   }
 }
 
 const resetPreferencePreset = () => applyPreferencePreset('balanced')
+
+const formatShiftDelta = (value) => {
+  const num = Number(value) || 0
+  if (num > 0) return `+${num.toFixed(1)}%`
+  if (num < 0) return `${num.toFixed(1)}%`
+  return '0.0%'
+}
 
 const formatRelativeTimeShort = (value) => {
   const ts = new Date(value || '').getTime()
@@ -1067,6 +1213,7 @@ const applyRouteContextToStore = (context, fallbackStops = []) => {
   routeStore.replaceViaPoints(normalizedVia)
   if (Number.isFinite(Number(context?.interest_weight))) routeStore.setRecoInterestWeight(Number(context.interest_weight))
   if (Number.isFinite(Number(context?.explore_weight))) routeStore.setRecoExploreWeight(Number(context.explore_weight))
+  if (Number.isFinite(Number(context?.detour_tolerance))) routeStore.setRecoDetourTolerance(Number(context.detour_tolerance))
 }
 
 const openPlannerPage = () => {
@@ -1476,8 +1623,13 @@ watch(
 .preference-panel,
 .story-panel,
 .signal-panel,
-.interest-panel {
+.interest-panel,
+.trend-panel {
   min-height: 100%;
+}
+
+.trend-panel {
+  grid-column: 1 / -1;
 }
 
 .preset-row {
@@ -1511,6 +1663,10 @@ watch(
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.control-matrix {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .mini-stat,
@@ -1782,6 +1938,132 @@ watch(
   gap: 8px;
 }
 
+.trend-summary {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.evolution-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.evolution-column {
+  min-width: 0;
+}
+
+.evolution-stack,
+.shift-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.evolution-card,
+.shift-card {
+  border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 12px;
+}
+
+.evolution-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.delta-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.delta-badge.up {
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  color: #15803d;
+}
+
+.delta-badge.down {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #dc2626;
+}
+
+.delta-badge.flat {
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--muted);
+}
+
+.evolution-points {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.evolution-point {
+  display: grid;
+  grid-template-columns: 48px 1fr 52px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.evolution-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.evolution-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4f8cff, #78d8ff);
+}
+
+.shift-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shift-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.shift-pill.up {
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+  color: #15803d;
+}
+
+.shift-pill.down {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #dc2626;
+}
+
 .bar-block {
   border: 1px solid color-mix(in srgb, var(--panel-border) 76%, transparent);
   border-radius: 10px;
@@ -2019,12 +2301,18 @@ watch(
   .personalization-grid,
   .workflow-grid,
   .interest-columns,
-  .explanation-grid {
+  .explanation-grid,
+  .evolution-grid,
+  .shift-grid {
     grid-template-columns: 1fr;
   }
 
   .kpi-row-wide {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .control-matrix {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
