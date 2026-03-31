@@ -1250,7 +1250,10 @@ onBeforeUnmount(() => {
 .page {
   display: grid;
   grid-template-columns: 290px 1fr;
+  height: calc(100vh - 56px);
   min-height: calc(100vh - 56px);
+  overflow: hidden;
+  align-items: stretch;
   background:
     radial-gradient(circle at 8% 6%, color-mix(in srgb, #7ea6ff 10%, transparent), transparent 30%),
     radial-gradient(circle at 92% 0%, color-mix(in srgb, #8de8ff 8%, transparent), transparent 26%),
@@ -1259,6 +1262,11 @@ onBeforeUnmount(() => {
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
   background: color-mix(in srgb, var(--panel) 94%, transparent);
   border-right: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
   padding: 18px 14px;
@@ -1381,7 +1389,10 @@ onBeforeUnmount(() => {
 }
 
 .content {
+  height: calc(100vh - 56px);
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 20px 28px;
 }
 
@@ -2147,8 +2158,9 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1160px) {
-  .page { grid-template-columns: 1fr; }
+  .page { grid-template-columns: 1fr; height: auto; min-height: calc(100vh - 56px); }
   .sidebar { display: none; }
+  .content { height: auto; min-height: calc(100vh - 56px); }
   .waterfall { column-count: 2; }
   .list-card { grid-template-columns: 1fr; }
   .list-cover { min-height: 180px; }
