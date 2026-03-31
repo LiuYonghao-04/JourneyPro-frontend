@@ -10,6 +10,8 @@ const RECO_DETOUR_TOLERANCE_KEY = 'jp_reco_detour_tolerance'
 const RECO_MODE_KEY = 'jp_reco_mode'
 const RECO_DEBUG_KEY = 'jp_reco_debug'
 const RECO_SESSION_KEY = 'jp_reco_session_id'
+const MAP_POI_SOURCE_MODE_KEY = 'jp_map_poi_source_mode'
+const MAP_AI_POIS_KEY = 'jp_map_ai_pois'
 const INTEREST_PROFILE_CACHE_PREFIX = 'jp_interest_profile_v2_'
 const INTEREST_PROFILE_TTL_MS = 30 * 60 * 1000
 const POI_API_BASE = apiUrl('/api/poi')
@@ -21,6 +23,14 @@ const CATEGORY_COLORS = ['#2563eb', '#10b981', '#f97316', '#a855f7', '#f59e0b', 
 const PANEL_MODES = ['collapsed', 'half', 'full']
 const RECO_MODES = ['driving']
 const EXECUTION_STATUSES = ['pending', 'current', 'visited', 'skipped']
+export const DEFAULT_ROUTE_ENDPOINTS = {
+  startAddress: 'Wembley Park',
+  endAddress: 'Chelsea F.C.',
+  startLat: 51.5601,
+  startLng: -0.2806,
+  endLat: 51.4821,
+  endLng: -0.1902,
+}
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 const normalizePanelMode = (mode) => (PANEL_MODES.includes(mode) ? mode : 'half')
@@ -175,6 +185,45 @@ function loadSavedPois() {
     return Array.isArray(list) ? list : []
   } catch (e) {
     return []
+  }
+}
+
+function loadMapPoiSourceMode() {
+  if (typeof window === 'undefined') return 'default'
+  try {
+    const raw = String(localStorage.getItem(MAP_POI_SOURCE_MODE_KEY) || '').trim().toLowerCase()
+    return raw === 'ai' ? 'ai' : 'default'
+  } catch (e) {
+    return 'default'
+  }
+}
+
+function saveMapPoiSourceMode(mode) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(MAP_POI_SOURCE_MODE_KEY, mode === 'ai' ? 'ai' : 'default')
+  } catch (e) {
+    // ignore
+  }
+}
+
+function loadAiMapPois() {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(MAP_AI_POIS_KEY)
+    const list = raw ? JSON.parse(raw) : []
+    return Array.isArray(list) ? list : []
+  } catch (e) {
+    return []
+  }
+}
+
+function saveAiMapPois(list) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(MAP_AI_POIS_KEY, JSON.stringify(Array.isArray(list) ? list : []))
+  } catch (e) {
+    // ignore
   }
 }
 
@@ -345,6 +394,38 @@ function buildPoiSummary(poi) {
   }
 }
 
+function normalizeAiMapPoiList(list) {
+  const source = Array.isArray(list) ? list : []
+  const seen = new Set()
+  const next = []
+  source.forEach((poi, index) => {
+    if (!poi || typeof poi !== 'object') return
+    const lat = Number(poi.lat)
+    const lng = Number(poi.lng)
+    const id = poi.id ?? poi.poi_id ?? null
+    const key =
+      id !== null && id !== undefined && id !== ''
+        ? `id:${id}`
+        : Number.isFinite(lat) && Number.isFinite(lng)
+          ? `ll:${lat.toFixed(6)},${lng.toFixed(6)}`
+          : ''
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    next.push({
+      id: id !== null && id !== undefined && id !== '' ? Number(id) || id : null,
+      name: poi.name || `AI Stop ${index + 1}`,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      category: poi.category || '',
+      image_url: poi.image_url || '',
+      reason: poi.reason || '',
+      popularity: Number.isFinite(Number(poi.popularity)) ? Number(poi.popularity) : 0,
+      source: 'ai_planner',
+    })
+  })
+  return next
+}
+
 function buildExecutionTargetKey(kind, target) {
   const base =
     target?.id !== undefined && target?.id !== null && target?.id !== ''
@@ -390,6 +471,10 @@ function normalizeRecoMode(mode) {
   return RECO_MODES.includes(value) ? value : 'driving'
 }
 
+function createDefaultRouteEndpoints() {
+  return { ...DEFAULT_ROUTE_ENDPOINTS }
+}
+
 function buildRouteHash({ startLat, startLng, endLat, endLng, viaPoints, mode }) {
   const via = (viaPoints || [])
     .filter((poi) => typeof poi?.lat === 'number' && typeof poi?.lng === 'number')
@@ -403,19 +488,22 @@ function buildRouteHash({ startLat, startLng, endLat, endLng, viaPoints, mode })
 export const useRouteStore = defineStore('route', {
   state: () => {
     const executionState = loadExecutionState()
+    const defaults = createDefaultRouteEndpoints()
     return ({
-    startAddress: 'London_center',
-    endAddress: 'Grosvenor Square',
-    startLat: 51.5074,
-    startLng: -0.1278,
-    endLat: 51.5113,
-    endLng: -0.1502,
+    startAddress: defaults.startAddress,
+    endAddress: defaults.endAddress,
+    startLat: defaults.startLat,
+    startLng: defaults.startLng,
+    endLat: defaults.endLat,
+    endLng: defaults.endLng,
     routeGeojson: null,
     steps: [],
     totalDistance: null,
     totalDuration: null,
     legs: [],
     recommendedPOIs: [],
+    aiMapPois: loadAiMapPois(),
+    mapPoiSourceMode: loadMapPoiSourceMode(),
     poiCategoryFilter: [],
     poiCategoryColors: {},
     selectedPoi: null,
@@ -464,11 +552,28 @@ export const useRouteStore = defineStore('route', {
   },
 
   getters: {
+    activePoiPool(state) {
+      if (state.mapPoiSourceMode === 'ai' && Array.isArray(state.aiMapPois) && state.aiMapPois.length) {
+        return state.aiMapPois
+      }
+      return Array.isArray(state.recommendedPOIs) ? state.recommendedPOIs : []
+    },
     filteredRecommendedPOIs(state) {
-      const list = Array.isArray(state.recommendedPOIs) ? state.recommendedPOIs : []
+      const list =
+        state.mapPoiSourceMode === 'ai' && Array.isArray(state.aiMapPois) && state.aiMapPois.length
+          ? state.aiMapPois
+          : Array.isArray(state.recommendedPOIs)
+            ? state.recommendedPOIs
+            : []
       const filter = Array.isArray(state.poiCategoryFilter) ? state.poiCategoryFilter : []
       if (filter.length === 0) return list
       return list.filter((poi) => filter.includes(normalizeCategory(poi?.category)))
+    },
+    mapOverlayPOIs(state) {
+      if (state.mapPoiSourceMode === 'ai' && Array.isArray(state.aiMapPois) && state.aiMapPois.length) {
+        return []
+      }
+      return this.filteredRecommendedPOIs || []
     },
     executionCurrentTarget(state) {
       return (state.executionTargets || []).find((target) => target.status === 'current') || null
@@ -497,6 +602,20 @@ export const useRouteStore = defineStore('route', {
   },
 
   actions: {
+    resetStartToDefault() {
+      this.startAddress = DEFAULT_ROUTE_ENDPOINTS.startAddress
+      this.startLat = DEFAULT_ROUTE_ENDPOINTS.startLat
+      this.startLng = DEFAULT_ROUTE_ENDPOINTS.startLng
+      this.syncExecutionTargets()
+    },
+
+    resetEndToDefault() {
+      this.endAddress = DEFAULT_ROUTE_ENDPOINTS.endAddress
+      this.endLat = DEFAULT_ROUTE_ENDPOINTS.endLat
+      this.endLng = DEFAULT_ROUTE_ENDPOINTS.endLng
+      this.syncExecutionTargets()
+    },
+
     setStart(lat, lng) {
       this.startLat = lat
       this.startLng = lng
@@ -836,6 +955,34 @@ export const useRouteStore = defineStore('route', {
       saveRecoDebugFlag(this.recoDebugEnabled)
     },
 
+    setAiMapPois(list) {
+      this.aiMapPois = normalizeAiMapPoiList(list)
+      saveAiMapPois(this.aiMapPois)
+      this.mapPoiSourceMode = this.aiMapPois.length ? 'ai' : 'default'
+      saveMapPoiSourceMode(this.mapPoiSourceMode)
+      this.refreshPoiCategoryColors()
+    },
+
+    enterAiMapMode(list) {
+      this.setAiMapPois(list)
+      this.recommendedPOIs = []
+      this.recommendationProfile = null
+      this.recommendationRequestId = null
+      this.recommendationBucket = null
+      this.recommendationVersion = null
+      this.recommendationDiagnostics = null
+    },
+
+    exitAiMapMode({ clearAiPois = false } = {}) {
+      this.mapPoiSourceMode = 'default'
+      saveMapPoiSourceMode(this.mapPoiSourceMode)
+      if (clearAiPois) {
+        this.aiMapPois = []
+        saveAiMapPois([])
+      }
+      this.refreshPoiCategoryColors()
+    },
+
     async fetchRecoSettingsFromServer(userId) {
       const uid = Number(userId)
       if (!Number.isFinite(uid) || !uid) return
@@ -933,7 +1080,11 @@ export const useRouteStore = defineStore('route', {
     refreshPoiCategoryColors() {
       const colors = { ...(this.poiCategoryColors || {}) }
       const seen = new Set()
-      const categories = (this.recommendedPOIs || [])
+      const sourceList =
+        this.mapPoiSourceMode === 'ai' && Array.isArray(this.aiMapPois) && this.aiMapPois.length
+          ? this.aiMapPois
+          : this.recommendedPOIs || []
+      const categories = sourceList
         .map((poi) => normalizeCategory(poi?.category))
         .filter(Boolean)
       categories.forEach((cat) => seen.add(cat))
@@ -1080,6 +1231,11 @@ export const useRouteStore = defineStore('route', {
     },
 
     async fetchRecommendedPois() {
+      if (this.mapPoiSourceMode === 'ai' && Array.isArray(this.aiMapPois) && this.aiMapPois.length) {
+        this.isLoading = false
+        this.refreshPoiCategoryColors()
+        return this.aiMapPois
+      }
       this.isLoading = true
       try {
         const auth = useAuthStore()
@@ -1280,7 +1436,7 @@ export const useRouteStore = defineStore('route', {
     },
 
     selectAdjacentPoi(step = 1) {
-      const list = this.filteredRecommendedPOIs || this.recommendedPOIs || []
+      const list = this.filteredRecommendedPOIs || this.activePoiPool || this.recommendedPOIs || []
       if (!Array.isArray(list) || list.length === 0) return
       const currentKey = getPoiKey(this.selectedPoi)
       let idx = currentKey

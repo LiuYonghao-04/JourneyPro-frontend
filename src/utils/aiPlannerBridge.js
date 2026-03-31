@@ -54,11 +54,22 @@ export const buildRouteContextSnapshotFromStore = (routeStore, anchorPoi = null)
   const mergedVia = normalizedAnchor && !anchorExists ? [normalizedAnchor, ...via].slice(0, 12) : via.slice(0, 12)
 
   return {
-    start: { lng: routeStore?.startLng, lat: routeStore?.startLat },
-    end: { lng: routeStore?.endLng, lat: routeStore?.endLat },
+    start: {
+      lng: routeStore?.startLng,
+      lat: routeStore?.startLat,
+      name: String(routeStore?.startAddress || '').trim(),
+      address: String(routeStore?.startAddress || '').trim(),
+    },
+    end: {
+      lng: routeStore?.endLng,
+      lat: routeStore?.endLat,
+      name: String(routeStore?.endAddress || '').trim(),
+      address: String(routeStore?.endAddress || '').trim(),
+    },
     via: mergedVia,
     interest_weight: clamp(routeStore?.recoInterestWeight ?? 0.5, 0, 1),
     explore_weight: clamp(routeStore?.recoExploreWeight ?? 0.15, 0, 1),
+    detour_tolerance: clamp(routeStore?.recoDetourTolerance ?? 0.5, 0, 1),
   }
 }
 

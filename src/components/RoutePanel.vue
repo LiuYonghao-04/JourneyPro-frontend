@@ -7,6 +7,7 @@ import axios from 'axios'
 import logoLight from '../assets/logo.png'
 import logoDark from '../assets/logo_dark.png'
 import { apiUrl } from '../config/api'
+import { DEFAULT_ROUTE_ENDPOINTS } from '../store/routeStore'
 
 const routeStore = useRouteStore()
 const { startAddress, endAddress, startLat, startLng, endLat, endLng } = storeToRefs(routeStore)
@@ -228,10 +229,12 @@ const handleDrop = (idx) => {
 }
 
 const clearStart = () => {
-  startAddress.value = ''
+  routeStore.resetStartToDefault()
+  startAddress.value = DEFAULT_ROUTE_ENDPOINTS.startAddress
 }
 const clearEnd = () => {
-  endAddress.value = ''
+  routeStore.resetEndToDefault()
+  endAddress.value = DEFAULT_ROUTE_ENDPOINTS.endAddress
 }
 const clearPoiQuery = () => {
   poiQuery.value = ''

@@ -585,8 +585,18 @@ const sanitizeMessages = (list) => {
 }
 
 const buildRouteContextSnapshot = () => ({
-  start: { lng: routeStore.startLng, lat: routeStore.startLat },
-  end: { lng: routeStore.endLng, lat: routeStore.endLat },
+  start: {
+    lng: routeStore.startLng,
+    lat: routeStore.startLat,
+    name: String(routeStore.startAddress || '').trim(),
+    address: String(routeStore.startAddress || '').trim(),
+  },
+  end: {
+    lng: routeStore.endLng,
+    lat: routeStore.endLat,
+    name: String(routeStore.endAddress || '').trim(),
+    address: String(routeStore.endAddress || '').trim(),
+  },
   via: (routeStore.viaPoints || []).map((point) => ({
     id: point?.id ?? null,
     name: point?.name || 'POI',
@@ -653,12 +663,16 @@ const applyRouteContextSnapshot = (context) => {
   const startLng = Number(context?.start?.lng)
   if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
     routeStore.setStart(startLat, startLng)
+    const startName = String(context?.start?.name || context?.start?.address || '').trim()
+    if (startName) routeStore.startAddress = startName
   }
 
   const endLat = Number(context?.end?.lat)
   const endLng = Number(context?.end?.lng)
   if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
     routeStore.setEnd(endLat, endLng)
+    const endName = String(context?.end?.name || context?.end?.address || '').trim()
+    if (endName) routeStore.endAddress = endName
   }
 
   const via = Array.isArray(context?.via) ? context.via : []

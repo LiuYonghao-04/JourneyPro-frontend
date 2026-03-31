@@ -1193,11 +1193,15 @@ const applyRouteContextToStore = (context, fallbackStops = []) => {
   const startLng = Number(context?.start?.lng)
   if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
     routeStore.setStart(startLat, startLng)
+    const startName = String(context?.start?.name || context?.start?.address || '').trim()
+    if (startName) routeStore.startAddress = startName
   }
   const endLat = Number(context?.end?.lat)
   const endLng = Number(context?.end?.lng)
   if (Number.isFinite(endLat) && Number.isFinite(endLng)) {
     routeStore.setEnd(endLat, endLng)
+    const endName = String(context?.end?.name || context?.end?.address || '').trim()
+    if (endName) routeStore.endAddress = endName
   }
   const via = Array.isArray(context?.via) ? context.via : []
   const normalizedVia = (via.length ? via : fallbackStops)
