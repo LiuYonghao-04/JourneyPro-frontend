@@ -1309,6 +1309,7 @@ const applyItineraryToMap = () => {
 
   if (!stops.length) return
   routeStore.replaceViaPoints(stops)
+  routeStore.enterAiMapMode(stops)
   routeStore.selectPoi(stops[0])
   routeStore.requestFocusPoint(stops[0].lat, stops[0].lng, 15)
   savePlannerStateNow()

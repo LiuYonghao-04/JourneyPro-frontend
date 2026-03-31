@@ -166,6 +166,7 @@ const handleSelectPoi = (item) => {
 const updateFromAddress = async () => {
   try {
     routeStore.clearParkingSearchResult()
+    routeStore.exitAiMapMode()
     const start = await geocode(startAddress.value)
     const end = await geocode(endAddress.value)
     routeStore.setStart(start.lat, start.lng)

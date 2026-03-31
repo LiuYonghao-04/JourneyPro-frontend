@@ -1,7 +1,7 @@
 <template>
   <div class="poi-panel" :class="[theme, panelMode]" :style="panelStyle">
     <div class="panel-head">
-      <h3 class="title">Recommended POIs</h3>
+      <h3 class="title">{{ panelTitle }}</h3>
       <button class="collapse-btn" @click="togglePanelMode">
         {{ modeActionLabel }}
       </button>
@@ -21,6 +21,11 @@
         <div v-if="profileHint" class="profile-hint">
           <span class="hint-label">For you</span>
           <span class="hint-tags">{{ profileHint }}</span>
+        </div>
+
+        <div v-else-if="isAiMapMode && allPois.length" class="profile-hint ai-mode">
+          <span class="hint-label">AI route</span>
+          <span class="hint-tags">Showing planner-synced stops only. Native map recommendations are hidden.</span>
         </div>
 
         <div class="tuning">
@@ -90,7 +95,7 @@
         </div>
 
         <div v-if="allPois.length === 0" class="empty">
-          No recommendations yet. Plan a route first.
+          {{ isAiMapMode ? 'No AI route stops synced yet.' : 'No recommendations yet. Plan a route first.' }}
         </div>
         <div v-else-if="pois.length === 0" class="empty">
           No POIs match your filters.
@@ -185,9 +190,11 @@ watch(
   }
 )
 
-const allPois = computed(() => routeStore.recommendedPOIs || [])
+const isAiMapMode = computed(() => routeStore.mapPoiSourceMode === 'ai' && (routeStore.aiMapPois || []).length > 0)
+const allPois = computed(() => routeStore.activePoiPool || [])
 const pois = computed(() => routeStore.filteredRecommendedPOIs || [])
-const loading = computed(() => routeStore.isLoading)
+const loading = computed(() => (isAiMapMode.value ? false : routeStore.isLoading))
+const panelTitle = computed(() => (isAiMapMode.value ? 'AI Route Stops' : 'Recommended POIs'))
 const profile = computed(() => routeStore.recommendationProfile || null)
 const recommendationVersion = computed(() => routeStore.recommendationVersion)
 const recommendationBucket = computed(() => routeStore.recommendationBucket)
@@ -198,6 +205,7 @@ const diagnosticCount = computed(() => {
   return Number.isFinite(Number(value)) ? Number(value) : null
 })
 const profileHint = computed(() => {
+  if (isAiMapMode.value) return ''
   if (!profile.value?.personalized) return ''
   const tags = Array.isArray(profile.value.tags) ? profile.value.tags : []
   const categories = Array.isArray(profile.value.categories) ? profile.value.categories : []

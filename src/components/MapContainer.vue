@@ -971,7 +971,7 @@ onMounted(() => {
   poiLayer = L.layerGroup()
   let updateTimeout = null
   watch(
-    () => [routeStore.filteredRecommendedPOIs, routeStore.selectedPoi, routeStore.poiCategoryColors],
+    () => [routeStore.mapOverlayPOIs, routeStore.selectedPoi, routeStore.poiCategoryColors],
     ([pois]) => {
       if (!map.value) return
       clearTimeout(updateTimeout)
