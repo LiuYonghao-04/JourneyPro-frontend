@@ -439,6 +439,7 @@ import CroppedImage from './CroppedImage.vue'
 import { proxiedImageSrc } from '../utils/imageProxy'
 import { apiUrl } from '../config/api'
 import { buildPoiPlannerPrompt, seedAiPlannerFromContext } from '../utils/aiPlannerBridge'
+import { seedPostDetailPreview } from '../utils/postDetailBridge'
 
 const API_BASE = apiUrl('/api/posts')
 const auth = useAuthStore()
@@ -800,6 +801,7 @@ const toggleFav = async (card) => {
 }
 
 const openDetail = (card) => {
+  seedPostDetailPreview(card)
   router.push(`/posts/postsid=${card.id}`)
 }
 

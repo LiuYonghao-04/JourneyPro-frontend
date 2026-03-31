@@ -510,7 +510,7 @@
 
       <section v-if="filteredList.length" class="feed">
         <div v-if="viewMode === 'grid'" class="card-grid">
-          <article v-for="card in filteredList" :key="card._dupKey || card.id" class="card" @click="goDetail(card.id)">
+          <article v-for="card in filteredList" :key="card._dupKey || card.id" class="card" @click="goDetail(card)">
             <CroppedImage :src="card.cover_image || card.images?.[0] || 'https://placehold.co/640x420'" class="cover" />
             <div class="body">
               <h4>{{ card.title }}</h4>
@@ -524,7 +524,7 @@
         </div>
 
         <div v-else class="list-view">
-          <article v-for="card in filteredList" :key="card._dupKey || card.id" class="list-card" @click="goDetail(card.id)">
+          <article v-for="card in filteredList" :key="card._dupKey || card.id" class="list-card" @click="goDetail(card)">
             <CroppedImage :src="card.cover_image || card.images?.[0] || 'https://placehold.co/240x160'" class="list-cover" />
             <div class="list-body">
               <h4>{{ card.title }}</h4>
@@ -594,6 +594,7 @@ import { buildUrlWithCrop, parseUrlWithCrop } from '../utils/cropUrl'
 import { proxiedImageSrc } from '../utils/imageProxy'
 import { apiUrl } from '../config/api'
 import { buildPlannerStorageKey } from '../utils/aiPlannerBridge'
+import { seedPostDetailPreview } from '../utils/postDetailBridge'
 
 const API_BASE = apiUrl('/api/posts')
 const FOLLOW_API = apiUrl('/api/follow')
@@ -1268,7 +1269,14 @@ const continueTripInMap = async (trip) => {
   }
 }
 
-const goDetail = (id) => router.push(`/posts/postsid=${id}`)
+const goDetail = (postOrId) => {
+  const postId = Number(typeof postOrId === 'object' ? postOrId?.id : postOrId)
+  if (!postId) return
+  if (postOrId && typeof postOrId === 'object') {
+    seedPostDetailPreview(postOrId)
+  }
+  router.push(`/posts/postsid=${postId}`)
+}
 const openFollowers = async () => {
   if (!isSelf.value) return
   followerDialog.value = true

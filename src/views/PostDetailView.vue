@@ -1,5 +1,5 @@
 ﻿<template>
-  <div class="page" v-if="post">
+  <div class="page">
     <aside class="sidebar">
       <div class="brand">Community</div>
       <RouterLink to="/posts" class="nav-link">Discover</RouterLink>
@@ -23,7 +23,7 @@
       </header>
 
       <div class="detail-shell">
-        <section class="hero-grid">
+        <section class="hero-grid" :class="{ 'hero-grid-loading': postLoading && !post?._preview }">
           <article class="hero-media card">
             <div class="media-top">
               <div class="media-title">Photo Story</div>
@@ -77,8 +77,10 @@
               </el-button>
             </div>
 
-            <h1 class="post-title">{{ post.title }}</h1>
-            <p class="post-text">{{ post.content }}</p>
+            <h1 class="post-title" :class="{ 'skeleton-line': postLoading && !post?.title }">{{ post?.title || 'Loading story...' }}</h1>
+            <p class="post-text" :class="{ 'skeleton-copy': postLoading && !post?.content }">
+              {{ post?.content || 'Preparing post details and route context...' }}
+            </p>
 
             <div v-if="post.tags?.length" class="tags">
               <span v-for="tag in post.tags" :key="tag" class="tag">#{{ tag }}</span>
@@ -89,13 +91,13 @@
             </div>
 
             <div class="post-actions">
-              <button class="pill" @click="toggleLikePost">
+              <button class="pill" :disabled="!postLoaded" @click="toggleLikePost">
                 <el-icon :class="{ active: post._liked }">
                   <component :is="post._liked ? CircleCheckFilled : CircleCheck" />
                 </el-icon>
                 <span>{{ post.like_count || 0 }}</span>
               </button>
-              <button class="pill" @click="toggleFavPost">
+              <button class="pill" :disabled="!postLoaded" @click="toggleFavPost">
                 <el-icon :class="{ active: post._fav }">
                   <component :is="post._fav ? StarFilled : Star" />
                 </el-icon>
@@ -125,6 +127,16 @@
             </div>
 
             <div class="comment-list">
+              <div v-if="commentsLoading" class="comments-loading">
+                <div v-for="idx in 4" :key="`comment-skeleton-${idx}`" class="comment-skeleton">
+                  <span class="comment-skeleton-avatar"></span>
+                  <div class="comment-skeleton-body">
+                    <span class="comment-skeleton-line short"></span>
+                    <span class="comment-skeleton-line"></span>
+                    <span class="comment-skeleton-line medium"></span>
+                  </div>
+                </div>
+              </div>
               <article v-for="item in filteredComments" :key="item.id" class="comment-item">
                 <div class="comment-header">
                   <CroppedImage :src="item.user?.avatar_url || defaultAvatar" class="comment-avatar" :aspect-ratio="1" />
@@ -170,7 +182,7 @@
                 </div>
               </article>
 
-              <div v-if="filteredComments.length === 0" class="empty">No comments match your filter.</div>
+              <div v-if="!commentsLoading && filteredComments.length === 0" class="empty">No comments match your filter.</div>
             </div>
           </section>
 
@@ -280,6 +292,7 @@ import { useRouteStore } from '../store/routeStore'
 import CroppedImage from '../components/CroppedImage.vue'
 import { apiUrl } from '../config/api'
 import { buildPoiPlannerPrompt, seedAiPlannerFromContext } from '../utils/aiPlannerBridge'
+import { readPostDetailPreview, seedPostDetailPreview } from '../utils/postDetailBridge'
 
 const API_BASE = apiUrl('/api/posts')
 const FOLLOW_API = apiUrl('/api/follow')
@@ -290,8 +303,31 @@ const router = useRouter()
 const auth = useAuthStore()
 const routeStore = useRouteStore()
 
-const post = ref(null)
+const createPostShell = (id, preview = null) => ({
+  id: Number(id || preview?.id || 0) || null,
+  poi_id: Number(preview?.poi_id || preview?.poi?.id || 0) || null,
+  title: String(preview?.title || '').trim(),
+  content: String(preview?.content || '').trim(),
+  cover_image: String(preview?.cover_image || '').trim() || null,
+  images: Array.isArray(preview?.images) ? preview.images.filter(Boolean).slice(0, 8) : [],
+  tags: Array.isArray(preview?.tags) ? preview.tags.filter(Boolean).slice(0, 8) : [],
+  like_count: Number(preview?.like_count || 0),
+  favorite_count: Number(preview?.favorite_count || 0),
+  view_count: Number(preview?.view_count || 0),
+  created_at: preview?.created_at || null,
+  trip_meta: preview?.trip_meta || null,
+  _liked: !!preview?._liked,
+  _fav: !!preview?._fav,
+  _preview: !!preview,
+  user: preview?.user || null,
+  poi: preview?.poi || null,
+})
+
+const post = ref(createPostShell())
+const postLoading = ref(true)
+const postLoaded = ref(false)
 const comments = ref([])
+const commentsLoading = ref(false)
 const relatedPosts = ref([])
 const commentText = ref('')
 const replyText = ref('')
@@ -301,8 +337,6 @@ const commentSort = ref('new')
 const mediaIndex = ref(0)
 
 const defaultAvatar = 'https://placehold.co/80x80'
-const likedIds = ref(new Set())
-const favIds = ref(new Set())
 const following = ref(false)
 const poiDetail = ref(null)
 const alertMessage = ref('')
@@ -415,46 +449,39 @@ const normalizeReplies = (replies = []) =>
     replies: normalizeReplies(item.replies || []),
   }))
 
-const loadReactions = async () => {
-  if (!auth.user?.id) {
-    likedIds.value = new Set()
-    favIds.value = new Set()
-    return
-  }
-  try {
-    const [likedRes, favRes] = await Promise.all([
-      axios.get(API_BASE, { params: { liked_by: auth.user.id, limit: 300 } }),
-      axios.get(API_BASE, { params: { favorited_by: auth.user.id, limit: 300 } }),
-    ])
-    likedIds.value = new Set((likedRes.data?.data || []).map((item) => Number(item.id)))
-    favIds.value = new Set((favRes.data?.data || []).map((item) => Number(item.id)))
-  } catch {
-    likedIds.value = new Set()
-    favIds.value = new Set()
-  }
-}
-
 const fetchPost = async () => {
-  await loadReactions()
-  const res = await axios.get(`${API_BASE}/${postId.value}`, { params: { user_id: auth.user?.id } })
-  const data = res.data?.data
-  post.value = {
-    ...data,
-    _liked: likedIds.value.has(postId.value),
-    _fav: favIds.value.has(postId.value),
+  postLoading.value = true
+  try {
+    const res = await axios.get(`${API_BASE}/${postId.value}`, { params: { user_id: auth.user?.id } })
+    const data = res.data?.data
+    post.value = {
+      ...data,
+      _preview: false,
+    }
+    seedPostDetailPreview(post.value)
+    mediaIndex.value = 0
+    postLoaded.value = true
+    void fetchFollowStatus()
+    void fetchPoiDetail()
+    void fetchRelatedPosts()
+  } finally {
+    postLoading.value = false
   }
-  mediaIndex.value = 0
-  await Promise.all([fetchFollowStatus(), fetchPoiDetail(), fetchRelatedPosts()])
 }
 
 const fetchComments = async () => {
-  const res = await axios.get(`${API_BASE}/${postId.value}/comments`, { params: { user_id: auth.user?.id } })
-  comments.value = (res.data?.data || []).map((item) => ({
-    ...item,
-    _liked: !!item.liked_by_user,
-    _expanded: true,
-    replies: normalizeReplies(item.replies || []),
-  }))
+  commentsLoading.value = true
+  try {
+    const res = await axios.get(`${API_BASE}/${postId.value}/comments`, { params: { user_id: auth.user?.id } })
+    comments.value = (res.data?.data || []).map((item) => ({
+      ...item,
+      _liked: !!item.liked_by_user,
+      _expanded: true,
+      replies: normalizeReplies(item.replies || []),
+    }))
+  } finally {
+    commentsLoading.value = false
+  }
 }
 
 const fetchRelatedPosts = async () => {
@@ -492,23 +519,23 @@ const canDeleteComment = (item) =>
   !!auth.user?.id && Number(auth.user.id) === Number(item?.user_id) && !item?._deleting && !item?.is_deleted
 
 const toggleLikePost = async () => {
-  if (!post.value) return
+  if (!postLoaded.value || !post.value?.id) return
   const res = await axios.post(`${API_BASE}/${postId.value}/like`, { user_id: auth.user?.id })
   const updated = res.data?.data
   if (!updated) return
   const liked = !!res.data?.liked
-  likedIds.value = liked ? new Set([...likedIds.value, postId.value]) : new Set([...likedIds.value].filter((id) => id !== postId.value))
   post.value = { ...updated, _liked: liked, _fav: post.value._fav }
+  seedPostDetailPreview(post.value)
 }
 
 const toggleFavPost = async () => {
-  if (!post.value) return
+  if (!postLoaded.value || !post.value?.id) return
   const res = await axios.post(`${API_BASE}/${postId.value}/favorite`, { user_id: auth.user?.id })
   const updated = res.data?.data
   if (!updated) return
   const favored = !!res.data?.favorited
-  favIds.value = favored ? new Set([...favIds.value, postId.value]) : new Set([...favIds.value].filter((id) => id !== postId.value))
   post.value = { ...updated, _fav: favored, _liked: post.value._liked }
+  seedPostDetailPreview(post.value)
 }
 
 const submitComment = async (parent) => {
@@ -689,7 +716,13 @@ const planWithAi = () => {
 }
 
 const goBack = () => router.back()
-const openPost = (id) => id && router.push(`/posts/postsid=${id}`)
+const openPost = (id) => {
+  const targetId = Number(id || 0)
+  if (!targetId) return
+  const preview = relatedPosts.value.find((item) => Number(item.id) === targetId)
+  if (preview) seedPostDetailPreview(preview)
+  router.push(`/posts/postsid=${targetId}`)
+}
 
 const copyPostLink = async () => {
   try {
@@ -729,7 +762,21 @@ const onPhotoViewerKeydown = (event) => {
 
 const init = async () => {
   if (!postId.value) return
-  await Promise.all([fetchPost(), fetchComments()])
+  commentText.value = ''
+  replyText.value = ''
+  replyTarget.value = null
+  alertMessage.value = ''
+  comments.value = []
+  relatedPosts.value = []
+  poiDetail.value = null
+  following.value = false
+  commentsLoading.value = false
+  postLoaded.value = false
+  const preview = readPostDetailPreview(postId.value)
+  post.value = createPostShell(postId.value, preview)
+  mediaIndex.value = 0
+  void fetchPost()
+  void fetchComments()
 }
 
 onMounted(() => {
@@ -744,10 +791,6 @@ onBeforeUnmount(() => {
 watch(
   () => route.params.id,
   () => {
-    commentText.value = ''
-    replyText.value = ''
-    replyTarget.value = null
-    alertMessage.value = ''
     init()
   }
 )
@@ -879,6 +922,96 @@ watch(
     color-mix(in srgb, #ffffff 12%, transparent)
   );
   pointer-events: none;
+}
+
+.hero-grid-loading .card,
+.skeleton-line,
+.skeleton-copy,
+.comment-skeleton-line,
+.comment-skeleton-avatar {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-line,
+.skeleton-copy,
+.comment-skeleton-line {
+  color: transparent;
+}
+
+.skeleton-line::after,
+.skeleton-copy::after,
+.comment-skeleton-line::after,
+.comment-skeleton-avatar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--badge) 78%, transparent),
+    color-mix(in srgb, #ffffff 22%, transparent),
+    color-mix(in srgb, var(--badge) 78%, transparent)
+  );
+  background-size: 220% 100%;
+  animation: postDetailShimmer 1.35s linear infinite;
+}
+
+.skeleton-copy {
+  min-height: 68px;
+  border-radius: 14px;
+}
+
+.comments-loading {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.comment-skeleton {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.comment-skeleton-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+}
+
+.comment-skeleton-body {
+  display: grid;
+  gap: 8px;
+}
+
+.comment-skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.comment-skeleton-line.short {
+  width: 32%;
+}
+
+.comment-skeleton-line.medium {
+  width: 68%;
+}
+
+.pill:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+@keyframes postDetailShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
 }
 
 .hero-grid {

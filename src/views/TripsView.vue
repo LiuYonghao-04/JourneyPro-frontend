@@ -332,6 +332,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { apiUrl } from '../config/api'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
+import { seedPostDetailPreview } from '../utils/postDetailBridge'
 
 const router = useRouter()
 const route = useRoute()
@@ -627,6 +628,27 @@ const openInPlanner = () => {
 const openLinkedPost = (story) => {
   const postId = Number(story?.post_id || 0)
   if (!postId) return
+  seedPostDetailPreview({
+    id: postId,
+    title: story?.title || '',
+    content: story?.excerpt || '',
+    cover_image: story?.cover_image || '',
+    like_count: Number(story?.like_count || 0),
+    favorite_count: Number(story?.favorite_count || 0),
+    view_count: Number(story?.view_count || 0),
+    created_at: story?.created_at || null,
+    user: {
+      nickname: story?.author_name || 'Traveler',
+      avatar_url: story?.author_avatar || null,
+    },
+    poi_id: Number(story?.poi_id || 0) || null,
+    poi: story?.poi_id
+      ? {
+          id: Number(story.poi_id),
+          name: story?.poi_name || null,
+        }
+      : null,
+  })
   router.push(`/posts/postsid=${postId}`)
 }
 
