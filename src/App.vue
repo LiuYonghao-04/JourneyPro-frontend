@@ -46,7 +46,7 @@
         <template v-else>
           <div class="jp-user">
             <RouterLink :to="`/person?userid=${auth.user.id}`" class="nickname">{{ auth.user.nickname }}</RouterLink>
-            <button class="jp-btn ghost" @click="auth.logout">Logout</button>
+            <button class="jp-btn ghost" @click="handleLogout">Logout</button>
           </div>
         </template>
       </div>
@@ -59,7 +59,7 @@
 </template>
 
 <script setup>
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { computed, ref, watchEffect, watch } from 'vue'
 import { useAuthStore } from './store/authStore'
 import { useRouteStore } from './store/routeStore'
@@ -67,6 +67,7 @@ import { useRouteStore } from './store/routeStore'
 const auth = useAuthStore()
 const routeStore = useRouteStore()
 const route = useRoute()
+const router = useRouter()
 const isPostsActive = computed(() => route.path.startsWith('/posts') || route.path.startsWith('/notifications'))
 const isLoginPage = computed(() => route.name === 'login')
 const isRegisterPage = computed(() => route.name === 'register')
@@ -83,6 +84,13 @@ watchEffect(() => {
 })
 const toggleTheme = () => {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
+}
+
+const handleLogout = async () => {
+  auth.logout()
+  if (route.path !== '/home') {
+    await router.replace('/home')
+  }
 }
 
 watch(

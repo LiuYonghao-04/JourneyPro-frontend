@@ -109,7 +109,7 @@
           </button>
           <div class="likes-filter">
             <span>Min likes {{ minLikes }}</span>
-            <el-slider v-model="minLikes" :min="0" :max="30" :show-tooltip="false" style="width: 300px"/>
+            <el-slider v-model="minLikes" :min="0" :max="150" :show-tooltip="false" style="width: 300px"/>
           </div>
         </div>
       </section>
