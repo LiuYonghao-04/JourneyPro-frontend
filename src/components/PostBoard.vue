@@ -109,7 +109,7 @@
           </button>
           <div class="likes-filter">
             <span>Min likes {{ minLikes }}</span>
-            <el-slider v-model="minLikes" :min="0" :max="120" :show-tooltip="false" />
+            <el-slider v-model="minLikes" :min="0" :max="30" :show-tooltip="false" style="width: 300px"/>
           </div>
         </div>
       </section>
@@ -404,7 +404,6 @@
           </article>
         </div>
 
-        <div ref="sentinel" class="sentinel" />
         <div v-if="loading && posts.length > 0" class="loading-more">Loading more...</div>
         <div v-if="noMore" class="no-more">No more posts</div>
       </section>
@@ -455,8 +454,6 @@ const posts = ref([])
 const loadedMap = ref({})
 const loading = ref(false)
 const noMore = ref(false)
-const sentinel = ref(null)
-const observer = ref(null)
 const imageObserver = ref(null)
 const limit = 12
 const offset = ref(0)
@@ -580,6 +577,7 @@ const fetchPosts = async (reset = false) => {
       offset.value = 0
       cursor.value = null
       noMore.value = false
+      lastContentScrollTop.value = 0
     }
     const params = {
       limit,
@@ -878,6 +876,8 @@ const planFromStory = (card) => {
 const contentEl = ref(null)
 const showBackTop = ref(false)
 const lastScrollEl = ref(null)
+const lastContentScrollTop = ref(0)
+const LOAD_MORE_THRESHOLD_PX = 220
 
 const isInContentScope = (el) => {
   const root = contentEl.value
@@ -889,15 +889,32 @@ const pickScrollableEl = (el) => {
   if (!(el instanceof HTMLElement)) return null
   if (!isInContentScope(el)) return null
   if (el === document.body || el === document.documentElement) return null
+  const style = window.getComputedStyle(el)
+  const overflowY = String(style?.overflowY || '').toLowerCase()
+  if (!['auto', 'scroll', 'overlay'].includes(overflowY)) return null
   if (el.scrollHeight <= el.clientHeight + 2) return null
   return el
+}
+
+const getDocumentScrollEl = () => document.scrollingElement || document.documentElement || document.body
+
+const getFeedLoadContainer = (preferredTarget = null) => {
+  const preferred = pickScrollableEl(preferredTarget)
+  if (preferred) return preferred
+  const lastActive = pickScrollableEl(lastScrollEl.value)
+  if (lastActive) return lastActive
+  const scopedContent = pickScrollableEl(contentEl.value)
+  if (scopedContent) return scopedContent
+  const docEl = getDocumentScrollEl()
+  if (docEl && docEl.scrollHeight > docEl.clientHeight + 2) return docEl
+  return null
 }
 
 const getDocumentScrollTop = () =>
   window.scrollY || document.documentElement?.scrollTop || document.body?.scrollTop || 0
 
 const getActiveScrollTop = () => {
-  const active = pickScrollableEl(lastScrollEl.value) || pickScrollableEl(contentEl.value)
+  const active = getFeedLoadContainer()
   return active ? active.scrollTop : getDocumentScrollTop()
 }
 
@@ -905,14 +922,30 @@ const onAnyScroll = (e) => {
   const targetEl = pickScrollableEl(e?.target)
   if (targetEl) lastScrollEl.value = targetEl
   showBackTop.value = getActiveScrollTop() > 360
+  maybeLoadMoreOnScroll(e?.target)
+}
+
+const maybeLoadMoreOnScroll = (preferredTarget = null) => {
+  const container = getFeedLoadContainer(preferredTarget)
+  if (!container || loading.value || noMore.value) return
+  const currentTop = Number(container.scrollTop || 0)
+  const isScrollingDown = currentTop > lastContentScrollTop.value
+  lastContentScrollTop.value = currentTop
+  if (!isScrollingDown) return
+  const remaining = container.scrollHeight - currentTop - container.clientHeight
+  if (remaining <= LOAD_MORE_THRESHOLD_PX) {
+    fetchPosts()
+  }
 }
 
 const scrollToTop = () => {
   const active = pickScrollableEl(lastScrollEl.value) || pickScrollableEl(contentEl.value)
   if (active) {
+    lastContentScrollTop.value = 0
     active.scrollTo({ top: 0, behavior: 'smooth' })
     return
   }
+  lastContentScrollTop.value = 0
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -1125,21 +1158,6 @@ const refreshImageObservers = () => {
   hosts.forEach((el) => imageObserver.value.observe(el))
 }
 
-const setupInfiniteScroll = () => {
-  if (observer.value) observer.value.disconnect()
-  observer.value = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting && !noMore.value) {
-          fetchPosts()
-        }
-      })
-    },
-    { root: contentEl.value || null, threshold: 0.01, rootMargin: '280px 0px' }
-  )
-  if (sentinel.value) observer.value.observe(sentinel.value)
-}
-
 const setupImageObserver = () => {
   if (imageObserver.value) imageObserver.value.disconnect()
   imageObserver.value = new IntersectionObserver(
@@ -1211,7 +1229,6 @@ watch(
 onMounted(() => {
   fetchTags()
   fetchPosts(true)
-  setupInfiniteScroll()
   setupImageObserver()
   document.addEventListener('scroll', onAnyScroll, { passive: true, capture: true })
   window.addEventListener('scroll', onAnyScroll, { passive: true })
@@ -1225,7 +1242,6 @@ onBeforeUnmount(() => {
   }
   document.removeEventListener('scroll', onAnyScroll, true)
   window.removeEventListener('scroll', onAnyScroll)
-  if (observer.value) observer.value.disconnect()
   if (imageObserver.value) imageObserver.value.disconnect()
 })
 </script>
@@ -2083,10 +2099,6 @@ onBeforeUnmount(() => {
   gap: 10px;
   color: var(--muted);
   font-size: 12px;
-}
-
-.sentinel {
-  height: 1px;
 }
 
 .loading-more,
