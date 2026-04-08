@@ -15,6 +15,7 @@ const AIPlannerView = () => import('../views/AIPlannerView.vue')
 const AdminView = () => import('../views/AdminView.vue')
 const TripsView = () => import('../views/TripsView.vue')
 const AdsView = () => import('../views/AdsView.vue')
+const MembershipView = () => import('../views/MembershipView.vue')
 
 const routes = [
     {
@@ -46,6 +47,11 @@ const routes = [
         name: 'ads',
         component: AdsView,
         meta: { requiresAdAccess: true },
+    },
+    {
+        path: '/membership',
+        name: 'membership',
+        component: MembershipView,
     },
     {
         path: '/posts',
@@ -114,7 +120,8 @@ const needAuth = (path) => {
         path.startsWith('/person') ||
         path.startsWith('/posts/postsid') ||
         path.startsWith('/trips') ||
-        path.startsWith('/ads')
+        path.startsWith('/ads') ||
+        path.startsWith('/membership')
     )
 }
 

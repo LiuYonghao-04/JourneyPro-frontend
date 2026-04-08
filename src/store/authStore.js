@@ -7,14 +7,30 @@ const normalizeRole = (value) => String(value || 'USER').trim().toUpperCase() ||
 const normalizeUser = (user) => {
   if (!user) return null
   const role = normalizeRole(user.role || (user.is_admin ? 'ADMIN' : 'USER'))
+  const storedRole = normalizeRole(user.stored_role || user.role || (user.is_admin ? 'ADMIN' : 'USER'))
   const aiLimit =
     user.ai_monthly_limit === null || user.ai_monthly_limit === undefined ? null : Number(user.ai_monthly_limit)
   const adLimit =
     user.ad_monthly_limit === null || user.ad_monthly_limit === undefined ? null : Number(user.ad_monthly_limit)
+  const membershipDaysLeft =
+    user.membership_days_left === null || user.membership_days_left === undefined
+      ? null
+      : Number(user.membership_days_left)
+  const balanceCny =
+    user.balance_cny === null || user.balance_cny === undefined ? null : Number(user.balance_cny)
   return {
     ...user,
+    stored_role: storedRole,
+    stored_role_label: user.stored_role_label || storedRole,
     role,
     role_label: user.role_label || role,
+    role_expires_at: user.role_expires_at || user.membership_expires_at || null,
+    membership_expires_at: user.membership_expires_at || user.role_expires_at || null,
+    membership_active: !!user.membership_active,
+    membership_status: user.membership_status || (['VIP', 'SVIP'].includes(storedRole) ? 'active' : 'none'),
+    membership_days_left: Number.isFinite(membershipDaysLeft) ? membershipDaysLeft : null,
+    membership_updated_at: user.membership_updated_at || null,
+    balance_cny: Number.isFinite(balanceCny) ? balanceCny : 20,
     ai_monthly_limit: Number.isFinite(aiLimit) ? aiLimit : null,
     ad_monthly_limit: Number.isFinite(adLimit) ? adLimit : null,
     can_manage_ads: !!user.can_manage_ads,
@@ -36,8 +52,11 @@ export const useAuthStore = defineStore('auth', {
     isSvip: (state) => ['SVIP', 'ADMIN'].includes(normalizeRole(state.user?.role)),
     canManageAds: (state) => !!state.user?.can_manage_ads || ['SVIP', 'ADMIN'].includes(normalizeRole(state.user?.role)),
     roleLabel: (state) => state.user?.role_label || state.user?.role || 'Guest',
+    storedRoleLabel: (state) => state.user?.stored_role_label || state.user?.stored_role || state.user?.role || 'Guest',
     aiMonthlyLimit: (state) => state.user?.ai_monthly_limit ?? null,
     hasUnlimitedAi: (state) => !!state.user?.ai_unlimited || ['SVIP', 'ADMIN'].includes(normalizeRole(state.user?.role)),
+    canBuyMembership: (state) => !!state.user && normalizeRole(state.user?.role) !== 'ADMIN',
+    walletBalance: (state) => Number(state.user?.balance_cny ?? 20),
   },
   actions: {
     setUser(user) {

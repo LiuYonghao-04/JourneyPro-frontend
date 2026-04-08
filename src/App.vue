@@ -49,6 +49,13 @@
             <span class="jp-role-badge" :class="`role-${String(auth.user?.role || '').toLowerCase()}`">
               {{ auth.roleLabel }}
             </span>
+            <RouterLink
+              v-if="auth.canBuyMembership"
+              to="/membership"
+              class="jp-membership-link"
+            >
+              {{ auth.isVip ? 'Renew' : 'Upgrade' }}
+            </RouterLink>
             <RouterLink :to="`/person?userid=${auth.user.id}`" class="nickname">{{ auth.user.nickname }}</RouterLink>
             <button class="jp-btn ghost" @click="handleLogout">Logout</button>
           </div>
@@ -357,6 +364,22 @@ body.jp-home.jp-home-scrolled .jp-header {
   color: #2563eb;
   border-color: color-mix(in srgb, #2563eb 42%, transparent);
   background: color-mix(in srgb, #2563eb 12%, transparent);
+}
+
+.jp-membership-link {
+  border-radius: 999px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, #1677ff 38%, transparent);
+  background: color-mix(in srgb, #1677ff 10%, transparent);
+  color: #1677ff;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.jp-membership-link:hover {
+  background: color-mix(in srgb, #1677ff 15%, transparent);
 }
 
 .nickname {
