@@ -9,6 +9,7 @@
         <RouterLink to="/map" class="jp-nav-link">Map</RouterLink>
         <RouterLink to="/ai-planner" class="jp-nav-link">AI Planner</RouterLink>
         <RouterLink v-if="auth.user" to="/trips" class="jp-nav-link">Trips</RouterLink>
+        <RouterLink v-if="auth.canManageAds" to="/ads" class="jp-nav-link">Ads</RouterLink>
         <RouterLink v-if="auth.isAdmin" to="/admin" class="jp-nav-link">Admin</RouterLink>
         <RouterLink
           to="/posts"
@@ -45,6 +46,9 @@
         </template>
         <template v-else>
           <div class="jp-user">
+            <span class="jp-role-badge" :class="`role-${String(auth.user?.role || '').toLowerCase()}`">
+              {{ auth.roleLabel }}
+            </span>
             <RouterLink :to="`/person?userid=${auth.user.id}`" class="nickname">{{ auth.user.nickname }}</RouterLink>
             <button class="jp-btn ghost" @click="handleLogout">Logout</button>
           </div>
@@ -97,6 +101,7 @@ watch(
   () => auth.user?.id,
   (uid) => {
     if (!uid) return
+    auth.refreshUser()
     routeStore.fetchRecoSettingsFromServer(uid)
   },
   { immediate: true }
@@ -322,6 +327,36 @@ body.jp-home.jp-home-scrolled .jp-header {
   align-items: center;
   gap: 8px;
   color: var(--fg);
+}
+
+.jp-role-badge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: color-mix(in srgb, var(--fg) 86%, transparent);
+}
+
+.jp-role-badge.role-admin {
+  color: #7c3aed;
+  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+}
+
+.jp-role-badge.role-svip {
+  color: #d97706;
+  border-color: color-mix(in srgb, #f59e0b 42%, transparent);
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+}
+
+.jp-role-badge.role-vip {
+  color: #2563eb;
+  border-color: color-mix(in srgb, #2563eb 42%, transparent);
+  background: color-mix(in srgb, #2563eb 12%, transparent);
 }
 
 .nickname {

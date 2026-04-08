@@ -14,6 +14,7 @@ const FastUxView = () => import('../views/FastUxView.vue')
 const AIPlannerView = () => import('../views/AIPlannerView.vue')
 const AdminView = () => import('../views/AdminView.vue')
 const TripsView = () => import('../views/TripsView.vue')
+const AdsView = () => import('../views/AdsView.vue')
 
 const routes = [
     {
@@ -39,6 +40,12 @@ const routes = [
         path: '/trips',
         name: 'trips',
         component: TripsView,
+    },
+    {
+        path: '/ads',
+        name: 'ads',
+        component: AdsView,
+        meta: { requiresAdAccess: true },
     },
     {
         path: '/posts',
@@ -106,17 +113,25 @@ const needAuth = (path) => {
         path.startsWith('/notifications') ||
         path.startsWith('/person') ||
         path.startsWith('/posts/postsid') ||
-        path.startsWith('/trips')
+        path.startsWith('/trips') ||
+        path.startsWith('/ads')
     )
 }
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
     const auth = useAuthStore()
+    if (auth.user?.id && !auth.user?.role) {
+        await auth.refreshUser()
+    }
     if (needAuth(to.path) && !auth.user) {
         next({ path: '/login', query: { redirect: to.fullPath } })
         return
     }
     if (to.meta?.requiresAdmin && !auth.isAdmin) {
+        next({ path: '/home' })
+        return
+    }
+    if (to.meta?.requiresAdAccess && !auth.canManageAds) {
         next({ path: '/home' })
         return
     }

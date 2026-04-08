@@ -9,7 +9,7 @@
       <div class="rail-note">
         <div>Viewer</div>
         <strong>{{ auth.user?.nickname || 'Admin' }}</strong>
-        <span>{{ auth.user?.username || 'test' }}</span>
+        <span>{{ auth.user?.role_label || auth.user?.role || 'ADMIN' }}</span>
       </div>
     </aside>
 

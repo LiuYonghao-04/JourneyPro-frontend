@@ -35,6 +35,23 @@
         <p v-if="engineHintText" class="engine-hint">{{ engineHintText }}</p>
       </section>
 
+      <section class="quota-card">
+        <div class="quota-top">
+          <div>
+            <div class="quota-title">AI access</div>
+            <div class="quota-sub">{{ quotaSubline }}</div>
+          </div>
+          <span class="quota-badge" :class="`role-${quotaRoleClass}`">{{ quotaRoleLabel }}</span>
+        </div>
+        <div class="quota-metrics">
+          <span>{{ quotaPrimaryText }}</span>
+          <span v-if="quotaSecondaryText">{{ quotaSecondaryText }}</span>
+        </div>
+        <div v-if="quotaProgressValue !== null" class="quota-track">
+          <span class="quota-fill" :style="{ width: `${quotaProgressValue}%` }" />
+        </div>
+      </section>
+
       <section class="plan-library-card fold-card">
         <button class="fold-head" type="button" @click="togglePanel('library')">
           <div class="fold-copy">
@@ -471,6 +488,7 @@ import { apiUrl } from '../config/api'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import { buildPoiPlannerPrompt } from '../utils/aiPlannerBridge'
+import { getClientSessionKey } from '../utils/clientSession'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -502,6 +520,7 @@ const plannerInsights = ref([])
 const plannerLlm = ref(null)
 const plannerRetrieval = ref(null)
 const plannerScope = ref({ supported: true, supported_city: 'London' })
+const plannerQuota = ref(null)
 const planLibrary = ref([])
 const planLibraryLoading = ref(false)
 const planLibraryError = ref('')
@@ -542,6 +561,7 @@ const distancePct = computed(() => 100 - interestPct.value)
 const explorePct = computed(() => Math.round(exploreWeight.value * 100))
 const safePct = computed(() => 100 - explorePct.value)
 const plannerStorageKey = computed(() => `${AI_PLANNER_CACHE_PREFIX}${auth.user?.id || 'guest'}`)
+const clientSessionKey = getClientSessionKey()
 
 const detailPhotos = computed(() => {
   const photos = Array.isArray(detailPoi.value?.photos) ? detailPoi.value.photos : []
@@ -554,6 +574,32 @@ const detailStoryPosts = computed(() => (Array.isArray(detailPoi.value?.related_
 const detailStoryTags = computed(() => (Array.isArray(detailCommunity.value?.top_tags) ? detailCommunity.value.top_tags.slice(0, 4) : []))
 const detailBestFor = computed(() => (Array.isArray(detailCommunity.value?.best_for) ? detailCommunity.value.best_for.slice(0, 3) : []))
 const detailWatchOut = computed(() => (Array.isArray(detailCommunity.value?.watch_out_for) ? detailCommunity.value.watch_out_for.slice(0, 3) : []))
+
+const quotaRoleLabel = computed(() => String(plannerQuota.value?.role_label || auth.roleLabel || 'Guest'))
+const quotaRoleClass = computed(() => String(plannerQuota.value?.role || auth.user?.role || 'user').toLowerCase())
+const quotaSubline = computed(() => {
+  if (!plannerQuota.value) return 'Checking your monthly planner quota...'
+  if (plannerQuota.value.ai_unlimited) return 'Unlimited planner runs for your current role.'
+  return `Monthly planner limit resets each calendar month.`
+})
+const quotaPrimaryText = computed(() => {
+  const quota = plannerQuota.value
+  if (!quota) return 'Quota status unavailable'
+  if (quota.ai_unlimited) return 'Unlimited AI planner access'
+  return `${quota.remaining ?? 0} of ${quota.ai_monthly_limit ?? 0} runs remaining`
+})
+const quotaSecondaryText = computed(() => {
+  const quota = plannerQuota.value
+  if (!quota || quota.ai_unlimited) return ''
+  return `${quota.used ?? 0} used this month`
+})
+const quotaProgressValue = computed(() => {
+  const quota = plannerQuota.value
+  const limit = Number(quota?.ai_monthly_limit)
+  const used = Number(quota?.used)
+  if (!Number.isFinite(limit) || limit <= 0 || !Number.isFinite(used)) return null
+  return clamp((used / limit) * 100, 0, 100)
+})
 
 const visibleMessages = computed(() =>
   (messages.value || []).filter((msg) => msg?.role === 'user' || String(msg?.content || '').trim().length > 0)
@@ -789,6 +835,7 @@ watch(
     poiDetailCache.clear()
     restorePlannerState()
     fetchSavedPlans()
+    fetchPlannerQuota()
     nextTick(() => scheduleScrollToBottom())
   }
 )
@@ -960,6 +1007,20 @@ const togglePanel = (key) => {
   panelOpen.value = {
     ...panelOpen.value,
     [key]: !panelOpen.value[key],
+  }
+}
+
+const fetchPlannerQuota = async () => {
+  try {
+    const query = new URLSearchParams()
+    if (auth.user?.id) query.set('user_id', String(auth.user.id))
+    else query.set('session_key', clientSessionKey)
+    const res = await fetch(apiUrl(`/api/ai/planner/quota?${query.toString()}`))
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.success) throw new Error(data?.message || 'Failed to load planner quota')
+    plannerQuota.value = data.quota || null
+  } catch (err) {
+    console.error('fetch planner quota error', err)
   }
 }
 
@@ -1185,6 +1246,7 @@ const submitPrompt = async () => {
       body: JSON.stringify({
         prompt,
         user_id: auth.user?.id || null,
+        session_key: clientSessionKey,
         interest_weight: interestWeight.value,
         explore_weight: exploreWeight.value,
         detour_tolerance: routeStore.recoDetourTolerance ?? 0.5,
@@ -1229,6 +1291,7 @@ const submitPrompt = async () => {
           plannerMeta.value = data || null
           if (data?.intent) plannerIntent.value = { ...(plannerIntent.value || {}), ...data.intent }
           if (data?.scope) plannerScope.value = data.scope
+          if (data?.quota) plannerQuota.value = data.quota
           return
         }
         if (event === 'itinerary') {
@@ -1245,12 +1308,14 @@ const submitPrompt = async () => {
           plannerLlm.value = data?.llm || null
           plannerRetrieval.value = data?.retrieval || null
           if (data?.scope) plannerScope.value = data.scope
+          if (data?.quota) plannerQuota.value = data.quota
           latestStage.value = 'ready'
           typingHint.value = ''
           return
         }
         if (event === 'error') {
           streamError.value = String(data?.message || 'Failed to generate plan.')
+          if (data?.quota) plannerQuota.value = data.quota
           patchMessage(assistantMessageId, (current) => ({
             content: String(current?.content || '').trim() ? String(current?.content || '') : streamError.value,
           }))
@@ -1280,6 +1345,7 @@ const submitPrompt = async () => {
   } finally {
     isStreaming.value = false
     streamController = null
+    fetchPlannerQuota()
     await nextTick()
     scheduleScrollToBottom()
   }
@@ -1704,6 +1770,7 @@ const deleteSavedPlan = async (plan) => {
 onMounted(() => {
   restorePlannerState()
   fetchSavedPlans()
+  fetchPlannerQuota()
   window.addEventListener('beforeunload', onWindowBeforeUnload)
   window.addEventListener('keydown', onWindowKeydown)
   nextTick(() => scheduleScrollToBottom())
@@ -1850,6 +1917,89 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.quota-card {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, transparent);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.quota-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quota-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: color-mix(in srgb, var(--fg) 92%, transparent);
+}
+
+.quota-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.quota-badge {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: color-mix(in srgb, var(--fg) 86%, transparent);
+}
+
+.quota-badge.role-admin {
+  color: #7c3aed;
+  border-color: color-mix(in srgb, #7c3aed 42%, transparent);
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+}
+
+.quota-badge.role-svip {
+  color: #d97706;
+  border-color: color-mix(in srgb, #f59e0b 42%, transparent);
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+}
+
+.quota-badge.role-vip {
+  color: #2563eb;
+  border-color: color-mix(in srgb, #2563eb 42%, transparent);
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+}
+
+.quota-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--fg) 86%, transparent);
+}
+
+.quota-track {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-border) 55%, transparent);
+  overflow: hidden;
+}
+
+.quota-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4d8cff, #74d8ff);
 }
 
 .library-toolbar {

@@ -58,6 +58,7 @@
     <PlaceDetailsPanel />
     <PoiShelfDrawer />
     <POIPanel />
+    <AdPopupModal placement="map" />
   </div>
 </template>
 
@@ -69,6 +70,7 @@ import RouteDirections from '../components/RouteDirections.vue'
 import POIPanel from '../components/POIPanel.vue'
 import PlaceDetailsPanel from '../components/PlaceDetailsPanel.vue'
 import PoiShelfDrawer from '../components/PoiShelfDrawer.vue'
+import AdPopupModal from '../components/AdPopupModal.vue'
 import { useRouteStore } from '../store/routeStore'
 import { ElMessageBox } from 'element-plus'
 import { apiUrl } from '../config/api'
