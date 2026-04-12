@@ -21,7 +21,8 @@
     <div v-if="errorText" class="flash error">{{ errorText }}</div>
 
     <section class="layout">
-      <article class="panel current-panel">
+      <div class="lane">
+        <article class="panel current-panel">
         <div class="panel-head">
           <div>
             <div class="eyebrow">Current Access</div>
@@ -61,9 +62,60 @@
             <span>{{ item }}</span>
           </div>
         </div>
-      </article>
 
-      <article class="panel plans-panel">
+        <div v-if="membershipReminderText" class="reminder-card">
+          <span class="metric-label">Reminder</span>
+          <strong>{{ membershipReminderText }}</strong>
+        </div>
+
+        </article>
+
+        <article class="panel quota-panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">Usage</div>
+              <h2>AI quota and activity</h2>
+            </div>
+          </div>
+
+          <div v-if="aiQuota" class="quota-strip">
+            <div class="quota-overview">
+              <span class="metric-label">AI quota details</span>
+              <strong>{{ aiQuotaOverview }}</strong>
+              <small>{{ aiQuotaHistoryHint }}</small>
+            </div>
+            <div class="quota-badges">
+              <span class="quota-pill">{{ aiQuota.role_label }}</span>
+              <span class="quota-pill">{{ aiQuota.used }} used</span>
+              <span class="quota-pill" :class="{ warn: !aiQuota.ai_unlimited && Number(aiQuota.remaining || 0) <= 2 }">
+                {{ aiQuota.ai_unlimited ? 'Unlimited' : `${aiQuota.remaining} left` }}
+              </span>
+            </div>
+          </div>
+
+          <div class="quota-history-block">
+            <div class="panel-subhead">
+              <span class="metric-label">Recent AI usage</span>
+              <strong>{{ aiQuotaHistory.length ? 'Last 6 months' : 'No usage history yet' }}</strong>
+            </div>
+            <div v-if="aiQuotaHistory.length" class="quota-history-list">
+              <div v-for="item in aiQuotaHistory" :key="item.usage_month" class="quota-history-item">
+                <div>
+                  <strong>{{ item.usage_month }}</strong>
+                  <small>{{ item.last_called_at ? `Last call ${formatDate(item.last_called_at)}` : 'No calls yet' }}</small>
+                </div>
+                <div class="quota-history-metrics">
+                  <span>{{ item.used }} used</span>
+                  <span>{{ item.ai_unlimited ? 'Unlimited' : `${item.remaining} left` }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="lane">
+        <article class="panel plans-panel">
         <div class="panel-head">
           <div>
             <div class="eyebrow">Plans</div>
@@ -114,10 +166,9 @@
             </div>
           </article>
         </div>
-      </article>
-    </section>
+        </article>
 
-    <section class="panel history-panel">
+        <section class="panel history-panel">
       <div class="panel-head">
         <div>
           <div class="eyebrow">Orders</div>
@@ -140,6 +191,8 @@
             <span>{{ order.status }}</span>
           </div>
         </article>
+      </div>
+        </section>
       </div>
     </section>
 
@@ -230,6 +283,9 @@ const errorText = ref('')
 const flashText = ref('')
 const plans = ref([])
 const orders = ref([])
+const aiQuota = ref(null)
+const aiQuotaHistory = ref([])
+const reminders = ref(null)
 const checkoutOffer = ref(null)
 
 const resetMessages = () => {
@@ -280,6 +336,18 @@ const aiQuotaSubline = computed(() => {
   return 'Base AI quota for standard users'
 })
 
+const aiQuotaOverview = computed(() => {
+  if (!aiQuota.value) return aiQuotaLabel.value
+  if (aiQuota.value.ai_unlimited) return 'Unlimited monthly access'
+  return `${aiQuota.value.used}/${aiQuota.value.ai_monthly_limit} used this month`
+})
+
+const aiQuotaHistoryHint = computed(() => {
+  if (!aiQuota.value) return 'AI usage history will appear here once loaded.'
+  if (aiQuota.value.ai_unlimited) return 'Unlimited roles still keep a usage trail for audit and analytics.'
+  return `${aiQuota.value.remaining} runs remaining this month.`
+})
+
 const roleDescription = computed(() => {
   if (auth.isAdmin) return 'Administrator with full platform access'
   if (auth.isSvip) return 'Top-tier access for creators and advanced users'
@@ -309,6 +377,16 @@ const currentBenefits = computed(() => {
     return ['30 AI plans per month', 'VIP badge and renewal tracking', 'Priority membership status']
   }
   return ['10 AI plans per month', 'Map, community, and trip workspace access', 'Upgrade path to VIP and SVIP']
+})
+
+const membershipReminderText = computed(() => {
+  if (reminders.value?.membership_expiring_soon && auth.user?.membership_expires_at) {
+    return `Membership expires soon: ${formatDate(auth.user.membership_expires_at, { dateOnly: true })}`
+  }
+  if (auth.user?.membership_status === 'expired') {
+    return 'Your paid role has expired. Renew to restore premium access and ad privileges.'
+  }
+  return ''
 })
 
 const checkoutBalanceAfter = computed(() => {
@@ -347,6 +425,9 @@ const fetchSummary = async () => {
     if (!res.ok || !data?.success) throw new Error(data?.message || 'Failed to load membership')
     plans.value = Array.isArray(data.plans) ? data.plans : []
     orders.value = Array.isArray(data.orders) ? data.orders : []
+    aiQuota.value = data.ai_quota || null
+    aiQuotaHistory.value = Array.isArray(data.ai_usage_history) ? data.ai_usage_history : []
+    reminders.value = data.reminders || null
     if (data.user) auth.setUser(data.user)
   } catch (err) {
     errorText.value = String(err?.message || 'Failed to load membership')
@@ -407,6 +488,12 @@ onMounted(() => {
   display: grid;
   gap: 18px;
   background: var(--bg-pattern);
+}
+
+.membership-page :deep(*),
+.membership-page :deep(*::before),
+.membership-page :deep(*::after) {
+  box-sizing: border-box;
 }
 
 .hero-card,
@@ -515,12 +602,22 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.1fr);
   gap: 18px;
+  align-items: start;
+}
+
+.lane {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-width: 0;
 }
 
 .panel {
   padding: 22px;
   display: grid;
   gap: 16px;
+  min-width: 0;
+  align-content: start;
 }
 
 .panel-head {
@@ -578,6 +675,83 @@ onMounted(() => {
   background: linear-gradient(180deg, color-mix(in srgb, #14b8a6 10%, transparent), color-mix(in srgb, var(--surface) 88%, transparent));
 }
 
+.quota-strip,
+.reminder-card,
+.quota-history-block {
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 16px;
+}
+
+.quota-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.quota-overview,
+.panel-subhead {
+  display: grid;
+  gap: 6px;
+}
+
+.quota-overview strong,
+.reminder-card strong,
+.panel-subhead strong {
+  color: var(--fg);
+}
+
+.quota-badges {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.quota-pill {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  padding: 7px 12px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--fg) 84%, transparent);
+}
+
+.quota-pill.warn,
+.reminder-card {
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+}
+
+.quota-history-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.quota-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
+.quota-history-item small {
+  color: var(--muted);
+}
+
+.quota-history-metrics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .metric-label {
   font-size: 12px;
   color: var(--muted);
@@ -618,6 +792,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
 }
 
 .plan-card {
@@ -627,6 +802,8 @@ onMounted(() => {
   padding: 18px;
   display: grid;
   gap: 14px;
+  min-width: 0;
+  align-content: start;
 }
 
 .plan-top {

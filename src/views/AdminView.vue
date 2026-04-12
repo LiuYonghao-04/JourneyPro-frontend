@@ -23,14 +23,23 @@
           <h1>Operations dashboard</h1>
           <p>Platform volume, membership health, ad delivery and community engagement in one control surface.</p>
         </div>
-        <button class="refresh-btn" type="button" :disabled="loading" @click="fetchOverview">
-          {{ loading ? 'Refreshing...' : 'Refresh' }}
-        </button>
+        <div class="hero-actions">
+          <button class="refresh-btn ghost" type="button" :disabled="sweepBusy" @click="runIntegritySweep">
+            {{ sweepBusy ? 'Running sweep...' : 'Run integrity sweep' }}
+          </button>
+          <button class="refresh-btn" type="button" :disabled="loading" @click="fetchOverview">
+            {{ loading ? 'Refreshing...' : 'Refresh' }}
+          </button>
+        </div>
       </header>
 
       <section v-if="error" class="error-card">
         <strong>Failed to load admin metrics.</strong>
         <span>{{ error }}</span>
+      </section>
+      <section v-else-if="actionMessage" class="error-card success-card">
+        <strong>Admin action complete.</strong>
+        <span>{{ actionMessage }}</span>
       </section>
 
       <template v-else>
@@ -38,6 +47,34 @@
           <article v-for="card in totalCards" :key="card.label" class="metric-card">
             <span>{{ card.label }}</span>
             <strong>{{ formatNumber(card.value) }}</strong>
+          </article>
+        </section>
+
+        <section v-if="hasOpsPanel" class="spotlight-grid">
+          <article class="panel spotlight-panel">
+            <div class="panel-head">
+              <h2>System health</h2>
+              <span>{{ opsHealthStatusLabel }}</span>
+            </div>
+            <div class="spotlight-stats">
+              <div v-for="card in opsHealthCards" :key="card.label" class="spotlight-stat">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel spotlight-panel">
+            <div class="panel-head">
+              <h2>Ops metrics</h2>
+              <span>{{ formatNumber(opsMetrics.endpoint_count || 0) }} endpoints tracked</span>
+            </div>
+            <div class="spotlight-stats">
+              <div v-for="card in opsMetricCards" :key="card.label" class="spotlight-stat">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+              </div>
+            </div>
           </article>
         </section>
 
@@ -82,7 +119,27 @@
           </article>
         </section>
 
-        <section class="panel-grid">
+        <section class="panel-grid panel-grid--ops">
+          <article v-if="slowEndpoints.length" class="panel">
+            <div class="panel-head">
+              <h2>Slow endpoints</h2>
+              <span>Top p95 latency samples</span>
+            </div>
+            <div class="list compact">
+              <div v-for="endpoint in slowEndpoints" :key="endpoint.endpoint" class="list-item static">
+                <div>
+                  <strong>{{ endpoint.endpoint }}</strong>
+                  <span>{{ endpoint.count }} requests · {{ endpoint.ok_rate }}% ok</span>
+                </div>
+                <div class="list-metrics stacked">
+                  <span>p95 {{ formatMs(endpoint.p95_ms) }}</span>
+                  <span>p99 {{ formatMs(endpoint.p99_ms) }}</span>
+                  <span>max {{ formatMs(endpoint.max_ms) }}</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
           <article class="panel">
             <div class="panel-head">
               <h2>Last 24 hours</h2>
@@ -118,7 +175,7 @@
           </article>
         </section>
 
-        <section v-if="hasMembershipSection" class="panel-grid">
+        <section v-if="hasMembershipSection" class="panel-grid panel-grid--membership">
           <article class="panel">
             <div class="panel-head">
               <h2>Recent membership orders</h2>
@@ -161,7 +218,35 @@
           </article>
         </section>
 
-        <section class="panel-grid">
+        <section class="panel-grid panel-grid--governance">
+          <article v-if="hasAdReviewQueue" class="panel">
+            <div class="panel-head">
+              <h2>Ad review queue</h2>
+              <span>{{ formatNumber(adReviewQueue.length) }} campaigns need moderation</span>
+            </div>
+            <div v-if="adReviewQueue.length" class="list compact">
+              <div v-for="ad in adReviewQueue" :key="ad.id" class="list-item static action-list-item">
+                <div>
+                  <strong>{{ ad.title }}</strong>
+                  <span>{{ ad.nickname || ad.owner_nickname || 'Advertiser' }} 路 {{ ad.placement }} 路 {{ ad.status }}</span>
+                  <small v-if="ad.review_note">{{ ad.review_note }}</small>
+                </div>
+                <div class="list-metrics stacked action-stack">
+                  <span>{{ formatDateTime(ad.updated_at || ad.created_at) }}</span>
+                  <div class="inline-actions">
+                    <button class="mini-action approve" type="button" :disabled="reviewBusyId === ad.id" @click="reviewAd(ad.id, 'ACTIVE')">
+                      Approve
+                    </button>
+                    <button class="mini-action reject" type="button" :disabled="reviewBusyId === ad.id" @click="reviewAd(ad.id, 'REJECTED')">
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty">No campaigns are waiting for review.</div>
+          </article>
+
           <article v-if="hasAdsSection" class="panel">
             <div class="panel-head">
               <h2>Recent ads</h2>
@@ -222,6 +307,11 @@ const router = useRouter()
 
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
+const sweepBusy = ref(false)
+const reviewBusyId = ref(0)
+const opsHealth = ref(null)
+const opsMetrics = ref(null)
 const overview = ref({
   totals: {},
   recent: {},
@@ -231,6 +321,7 @@ const overview = ref({
   expiring_memberships: [],
   ads_metrics: {},
   recent_ads: [],
+  ad_review_queue: [],
   top_posts: [],
   active_users: [],
   generated_at: '',
@@ -244,11 +335,17 @@ const recentMembershipOrders = computed(() => overview.value?.recent_membership_
 const expiringMemberships = computed(() => overview.value?.expiring_memberships || [])
 const adsMetrics = computed(() => overview.value?.ads_metrics || {})
 const recentAds = computed(() => overview.value?.recent_ads || [])
+const adReviewQueue = computed(() => overview.value?.ad_review_queue || [])
 const topPosts = computed(() => overview.value?.top_posts || [])
 const activeUsers = computed(() => overview.value?.active_users || [])
+const slowEndpoints = computed(() => {
+  const list = Array.isArray(opsMetrics.value?.endpoints) ? opsMetrics.value.endpoints : []
+  return list.slice(0, 8)
+})
 const hasRoleBreakdown = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'role_breakdown'))
 const hasMembershipMetrics = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'membership_metrics'))
 const hasAdsMetrics = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'ads_metrics'))
+const hasAdReviewQueue = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'ad_review_queue'))
 const hasSpotlightPanels = computed(() => hasRoleBreakdown.value || hasMembershipMetrics.value || hasAdsMetrics.value)
 const hasMembershipSection = computed(() =>
   hasMembershipMetrics.value ||
@@ -258,6 +355,7 @@ const hasMembershipSection = computed(() =>
 const hasAdsSection = computed(() =>
   hasAdsMetrics.value || Object.prototype.hasOwnProperty.call(overview.value || {}, 'recent_ads')
 )
+const hasOpsPanel = computed(() => !!opsHealth.value || !!opsMetrics.value)
 
 const totalCards = computed(() => [
   { label: 'Posts', value: totals.value.posts || 0 },
@@ -305,6 +403,8 @@ const adCards = computed(() => [
   { label: 'Campaigns', value: formatNumber(adsMetrics.value.total_campaigns || 0) },
   { label: 'Active', value: formatNumber(adsMetrics.value.active_campaigns || 0) },
   { label: 'Paused', value: formatNumber(adsMetrics.value.paused_campaigns || 0) },
+  { label: 'Pending', value: formatNumber(adsMetrics.value.pending_campaigns || 0) },
+  { label: 'Rejected', value: formatNumber(adsMetrics.value.rejected_campaigns || 0) },
   { label: 'Impressions', value: formatNumber(adsMetrics.value.impression_total || 0) },
 ])
 
@@ -312,6 +412,28 @@ const generatedAtText = computed(() => {
   if (!overview.value?.generated_at) return 'Awaiting snapshot'
   return `Updated ${formatDateTime(overview.value.generated_at)}`
 })
+
+const opsHealthStatusLabel = computed(() => {
+  const status = String(opsHealth.value?.status || '').toLowerCase()
+  if (status === 'ok') return 'Healthy'
+  if (status === 'degraded') return 'Degraded'
+  if (status) return status
+  return 'No live signal'
+})
+
+const opsHealthCards = computed(() => [
+  { label: 'Uptime', value: formatUptime(opsHealth.value?.uptime_sec) },
+  { label: 'DB', value: opsHealth.value?.db?.ok ? 'Connected' : 'Unavailable' },
+  { label: 'RSS', value: formatMb(opsHealth.value?.memory?.rss_mb) },
+  { label: 'Heap used', value: formatMb(opsHealth.value?.memory?.heap_used_mb) },
+])
+
+const opsMetricCards = computed(() => [
+  { label: 'Slow APIs', value: formatNumber(opsMetrics.value?.slow_api_count || 0) },
+  { label: 'Tracked endpoints', value: formatNumber(opsMetrics.value?.endpoint_count || 0) },
+  { label: 'Uptime', value: formatUptime(opsMetrics.value?.uptime_sec) },
+  { label: 'Threshold', value: `${formatNumber(opsMetrics.value?.slow_api_threshold_ms || 0)} ms` },
+])
 
 const formatNumber = (value) => {
   const num = Number(value || 0)
@@ -322,6 +444,26 @@ const formatMoney = (value) => {
   const num = Number(value || 0)
   if (!Number.isFinite(num)) return '¥0'
   return `¥${num.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+}
+
+const formatMb = (value) => {
+  const num = Number(value || 0)
+  if (!Number.isFinite(num)) return '0 MB'
+  return `${num.toFixed(1)} MB`
+}
+
+const formatMs = (value) => {
+  const num = Number(value || 0)
+  if (!Number.isFinite(num)) return '0 ms'
+  return `${num.toFixed(1)} ms`
+}
+
+const formatUptime = (seconds) => {
+  const value = Number(seconds || 0)
+  if (!Number.isFinite(value) || value <= 0) return '0m'
+  if (value < 3600) return `${Math.round(value / 60)}m`
+  if (value < 86400) return `${(value / 3600).toFixed(1)}h`
+  return `${(value / 86400).toFixed(1)}d`
 }
 
 const formatRoleShare = (value) => {
@@ -355,15 +497,90 @@ const openPost = (id) => {
   router.push(`/posts/postsid=${id}`)
 }
 
-const fetchOverview = async () => {
+const reviewAd = async (id, status) => {
+  if (!auth.user?.id || !id || reviewBusyId.value) return
+  reviewBusyId.value = Number(id)
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    const res = await fetch(apiUrl(`/api/ads/${encodeURIComponent(String(id))}/review`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: auth.user.id,
+        status,
+      }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.success) throw new Error(data?.message || 'Review failed')
+    actionMessage.value = `Campaign #${id} moved to ${status}.`
+    await fetchOverview(true, true)
+  } catch (err) {
+    error.value = err?.message || 'Review failed'
+  } finally {
+    reviewBusyId.value = 0
+  }
+}
+
+const runIntegritySweep = async () => {
+  if (!auth.user?.id || sweepBusy.value) return
+  sweepBusy.value = true
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    const res = await fetch(apiUrl('/api/admin/integrity-sweep'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: auth.user.id }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.success) throw new Error(data?.message || 'Integrity sweep failed')
+    const result = data.result || {}
+    actionMessage.value = `Demoted ${formatNumber(result.memberships_demoted)} memberships, paused ${formatNumber(result.active_ads_paused)} active ads, rejected ${formatNumber(result.pending_ads_rejected)} pending ads.`
+    await fetchOverview(true, true)
+  } catch (err) {
+    error.value = err?.message || 'Integrity sweep failed'
+  } finally {
+    sweepBusy.value = false
+  }
+}
+
+const fetchOpsData = async () => {
+  try {
+    const [healthRes, metricsRes] = await Promise.all([
+      fetch(apiUrl('/api/ops/health')),
+      fetch(apiUrl('/api/ops/metrics')),
+    ])
+    if (healthRes.ok) {
+      const healthData = await healthRes.json().catch(() => null)
+      if (healthData?.success) opsHealth.value = healthData
+    }
+    if (metricsRes.ok) {
+      const metricsData = await metricsRes.json().catch(() => null)
+      if (metricsData?.success) opsMetrics.value = metricsData
+    }
+  } catch {
+    // ignore ops fetch failures
+  }
+}
+
+const fetchOverview = async (force = false, preserveActionMessage = false) => {
   if (!auth.user?.id) return
   loading.value = true
   error.value = ''
+  if (!preserveActionMessage) actionMessage.value = ''
   try {
-    const url = `${apiUrl('/api/admin/overview')}?user_id=${encodeURIComponent(auth.user.id)}`
-    const res = await fetch(url)
-    const data = await res.json()
-    if (!res.ok || !data?.success) {
+    const params = new URLSearchParams({
+      user_id: String(auth.user.id),
+    })
+    if (force) params.set('force', '1')
+    const url = `${apiUrl('/api/admin/overview')}?${params.toString()}`
+    const [overviewRes] = await Promise.all([
+      fetch(url),
+      fetchOpsData(),
+    ])
+    const data = await overviewRes.json()
+    if (!overviewRes.ok || !data?.success) {
       throw new Error(data?.message || 'Request failed')
     }
     overview.value = data.data || overview.value
@@ -381,6 +598,7 @@ onMounted(() => {
 
 <style scoped>
 .admin-page {
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   min-height: calc(100vh - 56px);
@@ -389,6 +607,12 @@ onMounted(() => {
     radial-gradient(circle at 8% 4%, color-mix(in srgb, #6f9bff 14%, transparent), transparent 30%),
     radial-gradient(circle at 100% 0%, color-mix(in srgb, #79ddff 14%, transparent), transparent 30%),
     var(--bg-main);
+}
+
+.admin-page :deep(*),
+.admin-page :deep(*::before),
+.admin-page :deep(*::after) {
+  box-sizing: border-box;
 }
 
 .admin-rail {
@@ -441,6 +665,7 @@ onMounted(() => {
   overflow-y: auto;
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .hero,
@@ -458,6 +683,12 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
@@ -490,11 +721,17 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.refresh-btn.ghost {
+  background: transparent;
+  color: var(--fg);
+}
+
 .card-grid,
 .spotlight-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
+  align-items: start;
 }
 
 .metric-card,
@@ -543,11 +780,46 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  align-items: start;
+}
+
+.panel-grid--ops {
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+}
+
+.panel-grid--ops > :first-child {
+  grid-row: 1 / span 2;
+}
+
+.panel-grid--governance {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+}
+
+.panel-grid--governance > :nth-child(1) {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.panel-grid--governance > :nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.panel-grid--governance > :nth-child(3) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 .panel,
 .error-card {
   padding: 18px;
+  min-width: 0;
+}
+
+.success-card {
+  border-color: color-mix(in srgb, #22c55e 28%, transparent);
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  color: #15803d;
 }
 
 .panel-head {
@@ -606,10 +878,27 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   cursor: pointer;
+  min-width: 0;
+}
+
+.list-item > div {
+  min-width: 0;
+}
+
+.list-item strong,
+.list-item span,
+.list-item small {
+  overflow-wrap: anywhere;
 }
 
 .list-item.static {
   cursor: default;
+}
+
+.action-list-item small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
 }
 
 .list-item strong {
@@ -624,12 +913,44 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 8px;
   font-size: 12px;
+  min-width: 0;
 }
 
 .list-metrics.stacked {
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
+}
+
+.action-stack {
+  align-items: flex-end;
+}
+
+.inline-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mini-action {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: transparent;
+  color: var(--fg);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mini-action.approve {
+  border-color: color-mix(in srgb, #22c55e 32%, transparent);
+  color: #15803d;
+}
+
+.mini-action.reject {
+  border-color: color-mix(in srgb, #ef4444 32%, transparent);
+  color: #b91c1c;
 }
 
 .score {

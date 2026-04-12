@@ -174,14 +174,28 @@
               <span v-if="item.linked_post_id">{{ item.linked_post_title || `Post #${item.linked_post_id}` }}</span>
               <span>{{ formatDate(item.created_at) }}</span>
             </div>
+            <div v-if="item.status === 'PENDING' || item.status === 'REJECTED'" class="campaign-review-note" :class="item.status.toLowerCase()">
+              <strong>{{ item.status === 'PENDING' ? 'Awaiting admin review' : 'Review note' }}</strong>
+              <span>{{ item.review_note || (item.status === 'PENDING' ? 'The campaign is queued for approval before it can go live.' : 'No review note provided yet.') }}</span>
+            </div>
             <div class="campaign-actions">
               <button
+                v-if="['ACTIVE', 'PAUSED'].includes(item.status)"
                 class="btn-ghost"
                 type="button"
                 :disabled="busyId === item.id"
                 @click="updateStatus(item, item.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE')"
               >
                 {{ item.status === 'ACTIVE' ? 'Pause' : 'Resume' }}
+              </button>
+              <button
+                v-if="item.status === 'REJECTED'"
+                class="btn-ghost"
+                type="button"
+                :disabled="busyId === item.id"
+                @click="updateStatus(item, 'PENDING')"
+              >
+                Resubmit
               </button>
               <button class="btn-ghost danger" type="button" :disabled="busyId === item.id" @click="deleteCampaign(item)">
                 Delete
@@ -389,7 +403,7 @@ const createCampaign = async () => {
     }
     campaigns.value = [data.item, ...campaigns.value]
     quota.value = data.quota || quota.value
-    flashText.value = 'Popup campaign published.'
+    flashText.value = data?.moderation?.message || (data.item?.status === 'ACTIVE' ? 'Popup campaign is live.' : 'Popup campaign submitted for review.')
     form.value = {
       title: '',
       subtitle: '',
@@ -699,6 +713,28 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.campaign-review-note {
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.campaign-review-note.pending {
+  border-color: color-mix(in srgb, #f59e0b 28%, transparent);
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+}
+
+.campaign-review-note.rejected {
+  border-color: color-mix(in srgb, #ef4444 30%, transparent);
+  background: color-mix(in srgb, #ef4444 10%, transparent);
 }
 
 .btn-primary,
