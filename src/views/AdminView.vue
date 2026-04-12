@@ -5,11 +5,14 @@
       <RouterLink to="/home" class="rail-link">Overview</RouterLink>
       <RouterLink to="/posts" class="rail-link">Community</RouterLink>
       <RouterLink to="/map" class="rail-link">Map</RouterLink>
+      <RouterLink to="/ads" class="rail-link">Ads</RouterLink>
+      <RouterLink to="/membership" class="rail-link">Membership</RouterLink>
       <RouterLink to="/person" class="rail-link">Profile</RouterLink>
       <div class="rail-note">
         <div>Viewer</div>
         <strong>{{ auth.user?.nickname || 'Admin' }}</strong>
         <span>{{ auth.user?.role_label || auth.user?.role || 'ADMIN' }}</span>
+        <small>{{ generatedAtText }}</small>
       </div>
     </aside>
 
@@ -18,7 +21,7 @@
         <div>
           <div class="eyebrow">Platform control</div>
           <h1>Operations dashboard</h1>
-          <p>High-level system volume, recent activity, and current engagement leaders.</p>
+          <p>Platform volume, membership health, ad delivery and community engagement in one control surface.</p>
         </div>
         <button class="refresh-btn" type="button" :disabled="loading" @click="fetchOverview">
           {{ loading ? 'Refreshing...' : 'Refresh' }}
@@ -38,6 +41,47 @@
           </article>
         </section>
 
+        <section v-if="hasSpotlightPanels" class="spotlight-grid">
+          <article v-if="hasRoleBreakdown" class="panel spotlight-panel">
+            <div class="panel-head">
+              <h2>Role mix</h2>
+              <span>{{ formatNumber(roleBreakdown.paying_active) }} active paid accounts</span>
+            </div>
+            <div class="spotlight-stats">
+              <div v-for="card in roleCards" :key="card.label" class="spotlight-stat">
+                <span>{{ card.label }}</span>
+                <strong>{{ formatNumber(card.value) }} <small v-if="card.suffix">{{ card.suffix }}</small></strong>
+              </div>
+            </div>
+          </article>
+
+          <article v-if="hasMembershipMetrics" class="panel spotlight-panel">
+            <div class="panel-head">
+              <h2>Membership</h2>
+              <span>{{ formatMoney(membershipMetrics.revenue_30d) }} in 30d revenue</span>
+            </div>
+            <div class="spotlight-stats">
+              <div v-for="card in membershipCards" :key="card.label" class="spotlight-stat">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article v-if="hasAdsMetrics" class="panel spotlight-panel">
+            <div class="panel-head">
+              <h2>Ads</h2>
+              <span>{{ formatNumber(adsMetrics.viewer_total) }} viewers reached</span>
+            </div>
+            <div class="spotlight-stats">
+              <div v-for="card in adCards" :key="card.label" class="spotlight-stat">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+              </div>
+            </div>
+          </article>
+        </section>
+
         <section class="panel-grid">
           <article class="panel">
             <div class="panel-head">
@@ -47,7 +91,7 @@
             <div class="recent-list">
               <div v-for="item in recentCards" :key="item.label" class="recent-item">
                 <span>{{ item.label }}</span>
-                <strong>{{ formatNumber(item.value) }}</strong>
+                <strong>{{ item.value }}</strong>
               </div>
             </div>
           </article>
@@ -74,27 +118,93 @@
           </article>
         </section>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Active users</h2>
-            <span>Current follower reach</span>
-          </div>
-          <div v-if="activeUsers.length" class="list compact">
-            <div v-for="user in activeUsers" :key="user.id" class="list-item static">
-              <div>
-                <strong>{{ user.nickname || `User ${user.id}` }}</strong>
-                <span>ID {{ user.id }}</span>
-              </div>
-              <div class="user-stats">
-                <span>{{ formatNumber(user.follower_count) }} followers</span>
-                <span v-if="Number(user.post_count) > 0">{{ formatNumber(user.post_count) }} posts</span>
-                <span v-if="Number(user.comment_count) > 0">{{ formatNumber(user.comment_count) }} comments</span>
-                <span v-if="Number(user.like_count) > 0">{{ formatNumber(user.like_count) }} likes</span>
-                <span class="score">score {{ Math.round(user.activity_score || 0) }}</span>
+        <section v-if="hasMembershipSection" class="panel-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Recent membership orders</h2>
+              <span>{{ formatNumber(recentMembershipOrders.length) }} most recent paid orders</span>
+            </div>
+            <div v-if="recentMembershipOrders.length" class="list compact">
+              <div v-for="order in recentMembershipOrders" :key="order.id" class="list-item static">
+                <div>
+                  <strong>{{ order.nickname || `User ${order.user_id}` }}</strong>
+                  <span>{{ order.role_after }} · {{ order.billing_cycle }}</span>
+                </div>
+                <div class="list-metrics stacked">
+                  <span>{{ formatMoney(order.amount_cny) }}</span>
+                  <span>{{ formatDateTime(order.created_at) }}</span>
+                  <span>Expires {{ formatDate(order.expires_after) }}</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div v-else class="empty">No user activity available.</div>
+            <div v-else class="empty">No paid membership orders yet.</div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Expiring memberships</h2>
+              <span>Nearest paid accounts to renew</span>
+            </div>
+            <div v-if="expiringMemberships.length" class="list compact">
+              <div v-for="member in expiringMemberships" :key="member.id" class="list-item static">
+                <div>
+                  <strong>{{ member.nickname || `User ${member.id}` }}</strong>
+                  <span>{{ member.role }}</span>
+                </div>
+                <div class="list-metrics stacked">
+                  <span>{{ formatDate(member.role_expires_at) }}</span>
+                  <span>{{ expiryBadge(member.role_expires_at) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty">No active memberships are approaching expiry.</div>
+          </article>
+        </section>
+
+        <section class="panel-grid">
+          <article v-if="hasAdsSection" class="panel">
+            <div class="panel-head">
+              <h2>Recent ads</h2>
+              <span>{{ formatNumber(adsMetrics.active_campaigns) }} active campaigns</span>
+            </div>
+            <div v-if="recentAds.length" class="list compact">
+              <div v-for="ad in recentAds" :key="ad.id" class="list-item static">
+                <div>
+                  <strong>{{ ad.title }}</strong>
+                  <span>{{ ad.nickname || 'Advertiser' }} · {{ ad.placement }}</span>
+                </div>
+                <div class="list-metrics stacked">
+                  <span>{{ ad.status }}</span>
+                  <span>{{ formatNumber(ad.impression_count) }} impressions</span>
+                  <span>{{ formatNumber(ad.unique_viewer_count) }} viewers</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty">No ad campaigns yet.</div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Active users</h2>
+              <span>Current follower reach</span>
+            </div>
+            <div v-if="activeUsers.length" class="list compact">
+              <div v-for="user in activeUsers" :key="user.id" class="list-item static">
+                <div>
+                  <strong>{{ user.nickname || `User ${user.id}` }}</strong>
+                  <span>ID {{ user.id }}</span>
+                </div>
+                <div class="user-stats">
+                  <span>{{ formatNumber(user.follower_count) }} followers</span>
+                  <span v-if="Number(user.post_count) > 0">{{ formatNumber(user.post_count) }} posts</span>
+                  <span v-if="Number(user.comment_count) > 0">{{ formatNumber(user.comment_count) }} comments</span>
+                  <span v-if="Number(user.like_count) > 0">{{ formatNumber(user.like_count) }} likes</span>
+                  <span class="score">score {{ Math.round(user.activity_score || 0) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty">No user activity available.</div>
+          </article>
         </section>
       </template>
     </main>
@@ -115,14 +225,39 @@ const error = ref('')
 const overview = ref({
   totals: {},
   recent: {},
+  role_breakdown: {},
+  membership_metrics: {},
+  recent_membership_orders: [],
+  expiring_memberships: [],
+  ads_metrics: {},
+  recent_ads: [],
   top_posts: [],
   active_users: [],
+  generated_at: '',
 })
 
 const totals = computed(() => overview.value?.totals || {})
 const recent = computed(() => overview.value?.recent || {})
+const roleBreakdown = computed(() => overview.value?.role_breakdown || {})
+const membershipMetrics = computed(() => overview.value?.membership_metrics || {})
+const recentMembershipOrders = computed(() => overview.value?.recent_membership_orders || [])
+const expiringMemberships = computed(() => overview.value?.expiring_memberships || [])
+const adsMetrics = computed(() => overview.value?.ads_metrics || {})
+const recentAds = computed(() => overview.value?.recent_ads || [])
 const topPosts = computed(() => overview.value?.top_posts || [])
 const activeUsers = computed(() => overview.value?.active_users || [])
+const hasRoleBreakdown = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'role_breakdown'))
+const hasMembershipMetrics = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'membership_metrics'))
+const hasAdsMetrics = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'ads_metrics'))
+const hasSpotlightPanels = computed(() => hasRoleBreakdown.value || hasMembershipMetrics.value || hasAdsMetrics.value)
+const hasMembershipSection = computed(() =>
+  hasMembershipMetrics.value ||
+  Object.prototype.hasOwnProperty.call(overview.value || {}, 'recent_membership_orders') ||
+  Object.prototype.hasOwnProperty.call(overview.value || {}, 'expiring_memberships')
+)
+const hasAdsSection = computed(() =>
+  hasAdsMetrics.value || Object.prototype.hasOwnProperty.call(overview.value || {}, 'recent_ads')
+)
 
 const totalCards = computed(() => [
   { label: 'Posts', value: totals.value.posts || 0 },
@@ -135,16 +270,84 @@ const totalCards = computed(() => [
 ])
 
 const recentCards = computed(() => [
-  { label: 'Posts published', value: recent.value.posts_24h || 0 },
-  { label: 'Active creators', value: recent.value.active_creators_30d || 0 },
-  { label: 'Avg likes / post', value: recent.value.avg_likes_per_post || 0 },
-  { label: 'Avg favorites / post', value: recent.value.avg_favorites_per_post || 0 },
-  { label: 'POI linked rate %', value: recent.value.poi_link_rate || 0 },
+  { label: 'Posts published', value: formatNumber(recent.value.posts_24h || 0) },
+  { label: 'Active creators', value: formatNumber(recent.value.active_creators_30d || 0) },
+  { label: 'Avg likes / post', value: formatNumber(recent.value.avg_likes_per_post || 0) },
+  { label: 'Avg favorites / post', value: formatNumber(recent.value.avg_favorites_per_post || 0) },
+  { label: 'Avg views / post', value: formatNumber(recent.value.avg_views_per_post || 0) },
+  { label: 'POI linked rate', value: `${formatNumber(recent.value.poi_link_rate || 0)}%` },
 ])
+
+const roleCards = computed(() => [
+  { label: 'Admin', value: roleBreakdown.value.admin || 0 },
+  {
+    label: 'SVIP',
+    value: roleBreakdown.value.svip || 0,
+    suffix: formatRoleShare(roleBreakdown.value.svip || 0),
+  },
+  {
+    label: 'VIP',
+    value: roleBreakdown.value.vip || 0,
+    suffix: formatRoleShare(roleBreakdown.value.vip || 0),
+  },
+  { label: 'Standard', value: roleBreakdown.value.standard || 0 },
+  { label: 'Expired', value: roleBreakdown.value.expired_memberships || 0 },
+])
+
+const membershipCards = computed(() => [
+  { label: 'Revenue total', value: formatMoney(membershipMetrics.value.revenue_total || 0) },
+  { label: 'Revenue 30d', value: formatMoney(membershipMetrics.value.revenue_30d || 0) },
+  { label: 'Orders total', value: formatNumber(membershipMetrics.value.orders_total || 0) },
+  { label: 'Orders 30d', value: formatNumber(membershipMetrics.value.orders_30d || 0) },
+])
+
+const adCards = computed(() => [
+  { label: 'Campaigns', value: formatNumber(adsMetrics.value.total_campaigns || 0) },
+  { label: 'Active', value: formatNumber(adsMetrics.value.active_campaigns || 0) },
+  { label: 'Paused', value: formatNumber(adsMetrics.value.paused_campaigns || 0) },
+  { label: 'Impressions', value: formatNumber(adsMetrics.value.impression_total || 0) },
+])
+
+const generatedAtText = computed(() => {
+  if (!overview.value?.generated_at) return 'Awaiting snapshot'
+  return `Updated ${formatDateTime(overview.value.generated_at)}`
+})
 
 const formatNumber = (value) => {
   const num = Number(value || 0)
   return Number.isFinite(num) ? num.toLocaleString() : '0'
+}
+
+const formatMoney = (value) => {
+  const num = Number(value || 0)
+  if (!Number.isFinite(num)) return '¥0'
+  return `¥${num.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+}
+
+const formatRoleShare = (value) => {
+  const totalUsers = Number(totals.value.users || 0)
+  const count = Number(value || 0)
+  if (!Number.isFinite(totalUsers) || totalUsers <= 0 || !Number.isFinite(count) || count <= 0) return '(0%)'
+  return `(${((count / totalUsers) * 100).toFixed(1)}%)`
+}
+
+const formatDate = (value) => {
+  const time = new Date(value || '').getTime()
+  if (!Number.isFinite(time) || time <= 0) return 'Unknown'
+  return new Date(time).toLocaleDateString()
+}
+
+const formatDateTime = (value) => {
+  const time = new Date(value || '').getTime()
+  if (!Number.isFinite(time) || time <= 0) return 'Unknown'
+  return new Date(time).toLocaleString()
+}
+
+const expiryBadge = (value) => {
+  const time = new Date(value || '').getTime()
+  if (!Number.isFinite(time) || time <= 0) return 'Unknown'
+  const diffDays = Math.max(0, Math.ceil((time - Date.now()) / 86400000))
+  return diffDays <= 1 ? 'Ends within 24h' : `${diffDays}d remaining`
 }
 
 const openPost = (id) => {
@@ -163,7 +366,7 @@ const fetchOverview = async () => {
     if (!res.ok || !data?.success) {
       throw new Error(data?.message || 'Request failed')
     }
-    overview.value = data.data || { totals: {}, recent: {}, top_posts: [], active_users: [] }
+    overview.value = data.data || overview.value
   } catch (err) {
     error.value = err?.message || 'Request failed'
   } finally {
@@ -227,7 +430,8 @@ onMounted(() => {
 }
 
 .rail-note div,
-.rail-note span {
+.rail-note span,
+.rail-note small {
   color: var(--muted);
   font-size: 12px;
 }
@@ -286,13 +490,15 @@ onMounted(() => {
   font-weight: 700;
 }
 
-.card-grid {
+.card-grid,
+.spotlight-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
 }
 
-.metric-card {
+.metric-card,
+.spotlight-stat {
   border-radius: 18px;
   padding: 16px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
@@ -303,17 +509,39 @@ onMounted(() => {
 
 .metric-card span,
 .recent-item span,
-.list-item span {
+.list-item span,
+.spotlight-stat span {
   color: var(--muted);
 }
 
-.metric-card strong {
+.metric-card strong,
+.spotlight-stat strong {
   font-size: 28px;
+}
+
+.spotlight-stat strong small {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.spotlight-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.spotlight-panel {
+  padding: 18px;
+}
+
+.spotlight-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .panel-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -338,6 +566,7 @@ onMounted(() => {
 .panel-head span {
   color: var(--muted);
   font-size: 13px;
+  text-align: right;
 }
 
 .recent-list {
@@ -395,6 +624,12 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 8px;
   font-size: 12px;
+}
+
+.list-metrics.stacked {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .score {

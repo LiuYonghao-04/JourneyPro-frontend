@@ -173,6 +173,54 @@
           </article>
         </section>
 
+        <section v-if="tripDetail.completion_summary || completionReport" class="workspace-card completion-card">
+          <div class="card-head">
+            <div>
+              <span class="card-kicker">Archive</span>
+              <h3>Completion Summary</h3>
+            </div>
+            <span class="completion-badge">{{ tripDetail.status === 'COMPLETED' ? 'Completed trip' : 'Saved summary' }}</span>
+          </div>
+          <div class="completion-shell">
+            <div class="completion-copy">
+              <h4>{{ completionReport?.headline || tripDetail.completion_summary }}</h4>
+              <p>{{ completionReport?.overview || tripDetail.completion_summary }}</p>
+              <div v-if="completionReport?.focus_categories?.length" class="completion-tags">
+                <span v-for="tag in completionReport.focus_categories" :key="tag">{{ tag }}</span>
+              </div>
+            </div>
+            <div v-if="completionMetricCards.length" class="completion-metrics">
+              <article v-for="metric in completionMetricCards" :key="metric.label" class="completion-metric-card">
+                <span>{{ metric.label }}</span>
+                <strong>{{ metric.value }}</strong>
+              </article>
+            </div>
+          </div>
+          <div v-if="completionHighlights.length" class="completion-block">
+            <span class="card-kicker">Highlights</span>
+            <ul class="completion-list">
+              <li v-for="line in completionHighlights" :key="line">{{ line }}</li>
+            </ul>
+          </div>
+          <div v-if="completionTopStops.length" class="completion-block">
+            <span class="card-kicker">Top Stops</span>
+            <div class="completion-top-stops">
+              <article v-for="stop in completionTopStops" :key="`${stop.order}_${stop.id || stop.name}`" class="completion-stop-card">
+                <div class="completion-stop-rank">#{{ stop.order }}</div>
+                <div class="completion-stop-copy">
+                  <strong>{{ stop.name }}</strong>
+                  <span>{{ stop.category || 'poi' }}</span>
+                  <small>{{ formatKm(stop.distance_m) }} · {{ formatMin(stop.detour_duration_s) }}</small>
+                </div>
+              </article>
+            </div>
+          </div>
+          <div v-if="completionReport?.note_excerpt" class="completion-note">
+            <span class="card-kicker">Note Excerpt</span>
+            <p>{{ completionReport.note_excerpt }}</p>
+          </div>
+        </section>
+
         <section class="detail-grid">
           <article class="workspace-card">
             <div class="card-head">
@@ -374,6 +422,29 @@ const itinerarySegments = computed(() => {
   const segments = plannerSnapshot.value?.itinerary?.segments
   return Array.isArray(segments) ? segments : []
 })
+const completionReport = computed(() => {
+  const report = tripDetail.value?.completion_report
+  return report && typeof report === 'object' ? report : null
+})
+const completionHighlights = computed(() => {
+  const list = completionReport.value?.highlights
+  return Array.isArray(list) ? list.slice(0, 6) : []
+})
+const completionTopStops = computed(() => {
+  const list = completionReport.value?.top_stops
+  return Array.isArray(list) ? list.slice(0, 4) : []
+})
+const completionMetricCards = computed(() => {
+  const metrics = completionReport.value?.metrics && typeof completionReport.value.metrics === 'object'
+    ? completionReport.value.metrics
+    : {}
+  const cards = []
+  if (Number(metrics.stop_count) > 0) cards.push({ label: 'Stops', value: formatNumber(metrics.stop_count) })
+  if (Number(metrics.linked_story_count) > 0) cards.push({ label: 'Stories', value: formatNumber(metrics.linked_story_count) })
+  if (Number(metrics.route_distance_km) > 0) cards.push({ label: 'Distance', value: `${Number(metrics.route_distance_km).toFixed(1)} km` })
+  if (Number(metrics.route_duration_min) > 0) cards.push({ label: 'Duration', value: `${Math.round(Number(metrics.route_duration_min))} min` })
+  return cards
+})
 const isActionBusy = computed(() => !!actionBusy.value)
 const tripStats = computed(() => ({
   total: tripList.value.length,
@@ -421,6 +492,11 @@ const formatRelativeTime = (value) => {
   const diffDay = Math.round(diffHour / 24)
   if (diffDay < 7) return `${diffDay}d ago`
   return new Date(ts).toLocaleDateString()
+}
+
+const formatNumber = (value) => {
+  const num = Number(value || 0)
+  return Number.isFinite(num) ? num.toLocaleString() : '0'
 }
 
 const formatPoint = (point) => {
@@ -1314,6 +1390,145 @@ onMounted(() => {
   line-height: 1.6;
 }
 
+.completion-card {
+  display: grid;
+  gap: 14px;
+}
+
+.completion-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.completion-copy h4 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.completion-copy p {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.completion-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #356fe0;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: color-mix(in srgb, #4d8cff 12%, transparent);
+  border: 1px solid color-mix(in srgb, #4d8cff 32%, transparent);
+}
+
+.completion-tags {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.completion-tags span,
+.completion-note {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.completion-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.completion-metric-card {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.completion-metric-card span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.completion-metric-card strong {
+  font-size: 20px;
+}
+
+.completion-block {
+  display: grid;
+  gap: 10px;
+}
+
+.completion-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.completion-top-stops {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.completion-stop-card {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 10px;
+}
+
+.completion-stop-rank {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #4d8cff 14%, transparent);
+  color: #356fe0;
+  font-weight: 800;
+}
+
+.completion-stop-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.completion-stop-copy span,
+.completion-stop-copy small {
+  color: var(--muted);
+}
+
+.completion-note {
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.completion-note p {
+  margin: 0;
+  line-height: 1.6;
+}
+
 .segment-grid {
   margin-top: 12px;
   display: grid;
@@ -1545,7 +1760,8 @@ onMounted(() => {
 
   .detail-grid,
   .detail-summary-grid,
-  .segment-grid {
+  .segment-grid,
+  .completion-shell {
     grid-template-columns: 1fr;
   }
 

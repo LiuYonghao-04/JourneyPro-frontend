@@ -297,6 +297,18 @@
             <div class="sources-head">
               <p>Posts, comments and POI evidence retrieved from your own JourneyPro content.</p>
             </div>
+            <div v-if="citationReferences.length" class="citation-strip">
+              <button
+                v-for="source in citationReferences"
+                :key="`citation_${source.source_id || source.citation_label}`"
+                class="citation-pill"
+                type="button"
+                @click="openSourceCard(source)"
+              >
+                <span class="citation-label">{{ formatCitationLabel(source) }}</span>
+                <span class="citation-copy">{{ source.title }}</span>
+              </button>
+            </div>
             <div class="sources-grid">
               <article
                 v-for="source in sourceCards"
@@ -311,7 +323,7 @@
               >
                 <div class="source-topline">
                   <span class="source-type">{{ source.type }}</span>
-                  <span class="source-rank">S{{ source.rank }}</span>
+                  <span class="source-rank">{{ formatCitationLabel(source) }}</span>
                 </div>
                 <h4>{{ source.title }}</h4>
                 <p>{{ source.snippet }}</p>
@@ -871,6 +883,7 @@ const recommendationList = computed(() =>
 )
 
 const sourceCards = computed(() => (Array.isArray(plannerSources.value) ? plannerSources.value : []))
+const citationReferences = computed(() => sourceCards.value.slice(0, 6))
 
 const scopeSupported = computed(() => plannerScope.value?.supported !== false)
 
@@ -1574,6 +1587,13 @@ const openSourceCard = (source) => {
       openPoiDetail(matched)
     }
   }
+}
+
+const formatCitationLabel = (source) => {
+  const explicit = String(source?.citation_label || '').trim()
+  if (explicit) return explicit.toUpperCase()
+  const prefix = source?.type === 'post' ? 'P' : source?.type === 'comment' ? 'C' : source?.type === 'poi' ? 'R' : 'S'
+  return `${prefix}${Number(source?.rank || 0) || 1}`
 }
 
 const formatSourceMetrics = (source) => {
@@ -2571,6 +2591,46 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
+.citation-strip {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.citation-pill {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 74%, transparent);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  color: var(--fg);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.citation-label {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, #4d8cff 18%, transparent);
+  color: #5a8cff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.citation-copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .source-item {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 68%, transparent);
@@ -2607,6 +2667,7 @@ onBeforeUnmount(() => {
 
 .source-rank {
   font-weight: 700;
+  color: color-mix(in srgb, var(--fg) 78%, transparent);
 }
 
 .source-item h4 {
