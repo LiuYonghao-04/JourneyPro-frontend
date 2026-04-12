@@ -157,9 +157,9 @@
 
             <footer class="composer">
               <div class="composer-tools">
-                <el-popover placement="top-start" width="220" trigger="click" v-model:visible="emojiVisible">
+                <el-popover placement="top-start" width="288" trigger="click" v-model:visible="emojiVisible">
                   <template #reference>
-                    <el-button size="small" text>Emoji</el-button>
+                    <el-button size="small" text>😊 Emoji</el-button>
                   </template>
                   <div class="emoji-grid">
                     <span v-for="(em, idx) in emojis" :key="idx" class="emoji" @click="addEmoji(em)">{{ em }}</span>
@@ -238,7 +238,32 @@ const categories = [
   { key: 'chat', label: 'Chat' },
 ]
 
-const emojis = [':)', ':D', '<3', 'wow', 'ok', 'go', 'nice', 'gg', 'lol', 'ty']
+const emojis = [
+  '😀',
+  '😂',
+  '🥹',
+  '😍',
+  '😎',
+  '🤔',
+  '😴',
+  '🥳',
+  '👍',
+  '👀',
+  '👏',
+  '🙏',
+  '🤝',
+  '💯',
+  '🔥',
+  '✨',
+  '🎉',
+  '❤️',
+  '☕',
+  '🍜',
+  '📍',
+  '🗺️',
+  '🚗',
+  '🌧️',
+]
 
 const filteredItems = computed(() =>
   activeType.value === 'all' ? items.value : items.value.filter((it) => it.type === activeType.value)
@@ -697,7 +722,9 @@ const handleIncomingChat = (data) => {
 }
 
 const addEmoji = (emoji) => {
-  chatInput.value = `${chatInput.value || ''}${emoji}`
+  const base = chatInput.value || ''
+  const separator = base && !/\s$/.test(base) ? ' ' : ''
+  chatInput.value = `${base}${separator}${emoji}`
   emojiVisible.value = false
 }
 
@@ -1181,6 +1208,10 @@ watch(
   border-radius: 12px;
   background: color-mix(in srgb, var(--badge) 78%, transparent);
   padding: 8px 10px;
+  font-family: 'Inter', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .bubble.me {
@@ -1215,19 +1246,25 @@ watch(
 
 .emoji-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
 }
 
 .emoji {
   text-align: center;
-  line-height: 26px;
-  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 10px;
   cursor: pointer;
+  padding: 10px 0;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+  user-select: none;
+  transition: transform 0.16s ease, background 0.16s ease;
 }
 
 .emoji:hover {
   background: color-mix(in srgb, var(--badge) 92%, transparent);
+  transform: translateY(-1px) scale(1.04);
 }
 
 .send-row {
