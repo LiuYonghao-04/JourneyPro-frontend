@@ -13,7 +13,7 @@
       <header class="hero">
         <div>
           <h1>Notification Center</h1>
-          <p>Likes, favorites, comments, follows and chats in one streamlined workspace.</p>
+          <p>Likes, favorites, comments, reports, follows and chats in one streamlined workspace.</p>
         </div>
         <div class="hero-actions" v-if="auth.user">
           <el-button @click="refreshAll">Refresh</el-button>
@@ -73,8 +73,8 @@
             </div>
             <div class="notice-body">
               <div class="line">
-                <strong>{{ item.nickname || 'Someone' }}</strong>
-                <span class="muted">{{ actionLabel(item.type) }}</span>
+                <strong>{{ displayActorName(item) }}</strong>
+                <span class="muted">{{ actionLabel(item) }}</span>
                 <RouterLink v-if="item.post_id" :to="`/posts/postsid=${item.post_id}`" class="post-link">
                   {{ item.title }}
                 </RouterLink>
@@ -234,6 +234,7 @@ const categories = [
   { key: 'like', label: 'Likes' },
   { key: 'favorite', label: 'Favorites' },
   { key: 'comment', label: 'Comments' },
+  { key: 'report', label: 'Reports' },
   { key: 'follow', label: 'Follows' },
   { key: 'chat', label: 'Chat' },
 ]
@@ -294,10 +295,28 @@ const unreadByType = computed(() => {
 const unreadTotal = computed(() => unreadByType.value.all + (chatUnread.value || 0))
 
 const formatTime = (ts) => (ts ? new Date(ts).toLocaleString() : '')
-const actionLabel = (type) => {
+const displayActorName = (item) => {
+  const type = String(item?.type || '')
+  if (type === 'report' && String(item?.meta?.event || '').toLowerCase() === 'submitted') {
+    return item?.nickname || 'System'
+  }
+  return item?.nickname || 'Someone'
+}
+const actionLabel = (item) => {
+  const type = String(item?.type || '')
   if (type === 'like') return 'liked your post'
   if (type === 'favorite') return 'favorited your post'
   if (type === 'comment') return 'commented on your post'
+  if (type === 'report') {
+    const event = String(item?.meta?.event || '').toLowerCase()
+    const resolution = String(item?.meta?.resolution || '').toUpperCase()
+    if (event === 'submitted') return 'submitted a report for'
+    if (event === 'reviewed') {
+      return resolution === 'DISMISSED' ? 'dismissed your report on' : 'reviewed your report on'
+    }
+    if (event === 'owner_hidden') return 'hid your post after a report review:'
+    return 'updated a report for'
+  }
   if (type === 'follow') return 'followed you'
   if (type === 'chat') return 'sent you a message'
   return 'activity'
@@ -318,6 +337,23 @@ const makeNotificationKey = (item = {}) =>
     item.created_at || '',
     item.content || '',
   ].join('::')
+
+const parseNotificationMeta = (value) => {
+  if (!value) return null
+  if (typeof value === 'object') return value
+  try {
+    return JSON.parse(String(value))
+  } catch {
+    return null
+  }
+}
+
+const normalizeNotificationItem = (item = {}) => ({
+  ...item,
+  nickname: item.nickname || item.actor_nickname || '',
+  avatar_url: item.avatar_url || item.actor_avatar || '',
+  meta: parseNotificationMeta(item.meta || item.meta_json),
+})
 
 const getCacheKey = (userId) => `${NOTIFICATION_CACHE_PREFIX}${userId}`
 
@@ -429,7 +465,7 @@ const hydrateCache = () => {
     if (parsed?.state) {
       state.value = parsed.state
     }
-    const cached = dedupeSortTrim(parsed.items)
+    const cached = dedupeSortTrim((parsed.items || []).map((item) => normalizeNotificationItem(item)))
     items.value = state.value ? applyUnreadState(cached, state.value) : cached
     const cachedCursor = normalizeCursor(parsed?.latest_cursor || {})
     latestCursor.value = cachedCursor.ts ? cachedCursor : cursorFromTop()
@@ -469,7 +505,8 @@ const fetchData = async ({ incremental = true, forceFull = false } = {}) => {
     const res = await axios.get(API_BASE, { params })
     const incoming = Array.isArray(res.data?.data) ? res.data.data : []
     state.value = res.data?.state || state.value
-    items.value = useDelta ? dedupeSortTrim([...incoming, ...items.value]) : dedupeSortTrim(incoming)
+    const normalizedIncoming = incoming.map((item) => normalizeNotificationItem(item))
+    items.value = useDelta ? dedupeSortTrim([...normalizedIncoming, ...items.value]) : dedupeSortTrim(normalizedIncoming)
     if (state.value) {
       items.value = applyUnreadState(items.value, state.value)
     }
@@ -504,7 +541,7 @@ const loadOlder = async () => {
     const res = await axios.get(API_BASE, { params })
     const incoming = Array.isArray(res.data?.data) ? res.data.data : []
     if (incoming.length) {
-      items.value = dedupeSortTrim([...items.value, ...incoming])
+      items.value = dedupeSortTrim([...items.value, ...incoming.map((item) => normalizeNotificationItem(item))])
       if (state.value) {
         items.value = applyUnreadState(items.value, state.value)
       }
@@ -537,7 +574,7 @@ const hydrateTypeIfNeeded = async (typeKey) => {
     const incoming = Array.isArray(res.data?.data) ? res.data.data : []
     if (!incoming.length) return
     state.value = res.data?.state || state.value
-    items.value = dedupeSortTrim([...incoming, ...items.value])
+    items.value = dedupeSortTrim([...incoming.map((item) => normalizeNotificationItem(item)), ...items.value])
     if (state.value) {
       items.value = applyUnreadState(items.value, state.value)
     }
@@ -588,8 +625,9 @@ const setupStream = () => {
         handleIncomingChat(data)
         return
       }
-      const unread = state.value ? isUnreadByState(data, state.value) : true
-      items.value = dedupeSortTrim([{ ...data, unread }, ...items.value])
+      const normalized = normalizeNotificationItem(data)
+      const unread = state.value ? isUnreadByState(normalized, state.value) : true
+      items.value = dedupeSortTrim([{ ...normalized, unread }, ...items.value])
       syncLatestCursor()
       persistCache()
     } catch {
