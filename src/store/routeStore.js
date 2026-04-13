@@ -279,11 +279,52 @@ function normalizeExecutionTarget(target) {
     key: String(target.key || ''),
     kind: target.kind === 'destination' ? 'destination' : 'waypoint',
     label: String(target.label || '').trim() || 'Stop',
+    id: target.id ?? null,
     lat,
     lng,
+    category: String(target.category || '').trim(),
+    image_url: String(target.image_url || '').trim(),
     sourceIndex: Number.isFinite(Number(target.sourceIndex)) ? Number(target.sourceIndex) : 0,
     status: normalizeExecutionStatus(target.status),
   }
+}
+
+function measurePointDistance(a, b) {
+  const lat1 = Number(a?.lat)
+  const lng1 = Number(a?.lng)
+  const lat2 = Number(b?.lat)
+  const lng2 = Number(b?.lng)
+  if (![lat1, lng1, lat2, lng2].every((value) => Number.isFinite(value))) return Number.POSITIVE_INFINITY
+  const dLat = lat1 - lat2
+  const dLng = lng1 - lng2
+  return dLat * dLat + dLng * dLng
+}
+
+function buildNearestExecutionOrder(targets, anchor) {
+  const pool = Array.isArray(targets) ? targets.map((item) => ({ ...item })) : []
+  const ordered = []
+  let cursor = anchor && Number.isFinite(Number(anchor.lat)) && Number.isFinite(Number(anchor.lng))
+    ? { lat: Number(anchor.lat), lng: Number(anchor.lng) }
+    : null
+
+  while (pool.length) {
+    let nextIndex = 0
+    if (cursor) {
+      let best = Number.POSITIVE_INFINITY
+      pool.forEach((item, index) => {
+        const score = measurePointDistance(cursor, item)
+        if (score < best) {
+          best = score
+          nextIndex = index
+        }
+      })
+    }
+    const [next] = pool.splice(nextIndex, 1)
+    ordered.push(next)
+    cursor = next
+  }
+
+  return ordered
 }
 
 function loadExecutionState() {
@@ -444,8 +485,11 @@ function buildExecutionTargets({ viaPoints, endLat, endLng, endAddress }) {
       key: buildExecutionTargetKey('waypoint', poi),
       kind: 'waypoint',
       label: poi.name || `Waypoint ${index + 1}`,
+      id: poi.id ?? poi.poi_id ?? null,
       lat: Number(poi.lat),
       lng: Number(poi.lng),
+      category: String(poi.category || '').trim(),
+      image_url: String(poi.image_url || '').trim(),
       sourceIndex: index,
       status: 'pending',
     })
@@ -456,8 +500,11 @@ function buildExecutionTargets({ viaPoints, endLat, endLng, endAddress }) {
       key: buildExecutionTargetKey('destination', { lat: endLat, lng: endLng }),
       kind: 'destination',
       label: endAddress || 'Destination',
+      id: null,
       lat: Number(endLat),
       lng: Number(endLng),
+      category: '',
+      image_url: '',
       sourceIndex: targets.length,
       status: 'pending',
     })
@@ -762,17 +809,48 @@ export const useRouteStore = defineStore('route', {
     },
 
     moveExecutionToNext(status) {
+      const options = arguments[1] && typeof arguments[1] === 'object' ? arguments[1] : {}
       if (!this.executionMode) return
       const currentIndex = this.executionTargets.findIndex((target) => target.status === 'current')
       if (currentIndex < 0) return
 
-      const nextTargets = [...this.executionTargets]
+      let nextTargets = [...this.executionTargets]
+      const currentTarget = nextTargets[currentIndex]
       nextTargets[currentIndex] = {
         ...nextTargets[currentIndex],
         status: normalizeExecutionStatus(status),
       }
 
-      let nextIndex = nextTargets.findIndex((target, index) => index > currentIndex && target.status === 'pending')
+      if (String(status) === 'visited' && currentTarget?.id) {
+        this.logRecommendationEvent('navigate', currentTarget)
+      }
+
+      if (String(status) === 'skipped' && currentTarget?.id) {
+        this.logRecommendationEvent('dismiss', currentTarget)
+      }
+
+      if (options.reorderPending && currentTarget?.kind === 'waypoint') {
+        const pendingWaypoints = nextTargets.filter((target) => target.status === 'pending' && target.kind === 'waypoint')
+        const pendingDestinations = nextTargets.filter((target) => target.status === 'pending' && target.kind === 'destination')
+        const settledTargets = nextTargets.filter((target) => target.status === 'visited' || target.status === 'skipped')
+        const reorderedPending = buildNearestExecutionOrder(pendingWaypoints, currentTarget)
+        nextTargets = [...settledTargets, ...reorderedPending, ...pendingDestinations]
+
+        const viaByKey = new Map(
+          (Array.isArray(this.viaPoints) ? this.viaPoints : []).map((poi) => [buildExecutionTargetKey('waypoint', poi), poi])
+        )
+        this.viaPoints = reorderedPending
+          .map((target) => viaByKey.get(target.key))
+          .filter(Boolean)
+          .map((poi) => ({ ...poi }))
+        saveViaPoints(this.viaPoints)
+        this.applyWaypointsToControl()
+        this.requestFitRoute()
+      }
+
+      let nextIndex = options.reorderPending
+        ? nextTargets.findIndex((target) => target.status === 'pending')
+        : nextTargets.findIndex((target, index) => index > currentIndex && target.status === 'pending')
       if (nextIndex < 0) {
         nextIndex = nextTargets.findIndex((target) => target.status === 'pending')
       }
@@ -786,6 +864,7 @@ export const useRouteStore = defineStore('route', {
       }
 
       this.executionTargets = nextTargets
+      this.executionRouteHash = this.getCurrentRouteHash()
       this.persistExecutionState()
 
       if (nextIndex >= 0) {
@@ -798,7 +877,7 @@ export const useRouteStore = defineStore('route', {
     },
 
     skipExecutionTarget() {
-      this.moveExecutionToNext('skipped')
+      this.moveExecutionToNext('skipped', { reorderPending: true })
     },
 
     reorderViaPoints(list) {

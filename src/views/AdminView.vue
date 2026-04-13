@@ -219,6 +219,43 @@
         </section>
 
         <section class="panel-grid panel-grid--governance">
+          <article v-if="hasPostGovernance || hasPostReportQueue" class="panel">
+            <div class="panel-head">
+              <h2>Post governance</h2>
+              <span>{{ formatNumber(postGovernance.open_reports || 0) }} reports need review</span>
+            </div>
+            <div v-if="hasPostGovernance" class="recent-list post-gov-grid">
+              <div v-for="item in postGovernanceCards" :key="item.label" class="recent-item">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
+            </div>
+            <div v-if="postReportQueue.length" class="list compact">
+              <div v-for="item in postReportQueue" :key="item.id" class="list-item static action-list-item">
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.reporter_nickname || 'Reporter' }} · {{ item.reason }}</span>
+                  <small v-if="item.details">{{ item.details }}</small>
+                </div>
+                <div class="list-metrics stacked action-stack">
+                  <span>{{ item.post_status }}<span v-if="item.is_featured"> · featured</span></span>
+                  <div class="inline-actions">
+                    <button class="mini-action approve" type="button" :disabled="reviewBusyId === item.post_id" @click="moderatePostReport(item, { status: 'HIDDEN', reportAction: 'RESOLVED' })">
+                      Hide
+                    </button>
+                    <button class="mini-action" type="button" :disabled="reviewBusyId === item.post_id" @click="moderatePostReport(item, { feature: true })">
+                      Feature
+                    </button>
+                    <button class="mini-action reject" type="button" :disabled="reviewBusyId === item.post_id" @click="moderatePostReport(item, { reportAction: 'DISMISSED' })">
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty">No post reports are waiting for review.</div>
+          </article>
+
           <article v-if="hasAdReviewQueue" class="panel">
             <div class="panel-head">
               <h2>Ad review queue</h2>
@@ -322,6 +359,8 @@ const overview = ref({
   ads_metrics: {},
   recent_ads: [],
   ad_review_queue: [],
+  post_governance: {},
+  post_report_queue: [],
   top_posts: [],
   active_users: [],
   generated_at: '',
@@ -336,6 +375,8 @@ const expiringMemberships = computed(() => overview.value?.expiring_memberships 
 const adsMetrics = computed(() => overview.value?.ads_metrics || {})
 const recentAds = computed(() => overview.value?.recent_ads || [])
 const adReviewQueue = computed(() => overview.value?.ad_review_queue || [])
+const postGovernance = computed(() => overview.value?.post_governance || {})
+const postReportQueue = computed(() => overview.value?.post_report_queue || [])
 const topPosts = computed(() => overview.value?.top_posts || [])
 const activeUsers = computed(() => overview.value?.active_users || [])
 const slowEndpoints = computed(() => {
@@ -346,6 +387,8 @@ const hasRoleBreakdown = computed(() => Object.prototype.hasOwnProperty.call(ove
 const hasMembershipMetrics = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'membership_metrics'))
 const hasAdsMetrics = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'ads_metrics'))
 const hasAdReviewQueue = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'ad_review_queue'))
+const hasPostGovernance = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'post_governance'))
+const hasPostReportQueue = computed(() => Object.prototype.hasOwnProperty.call(overview.value || {}, 'post_report_queue'))
 const hasSpotlightPanels = computed(() => hasRoleBreakdown.value || hasMembershipMetrics.value || hasAdsMetrics.value)
 const hasMembershipSection = computed(() =>
   hasMembershipMetrics.value ||
@@ -406,6 +449,13 @@ const adCards = computed(() => [
   { label: 'Pending', value: formatNumber(adsMetrics.value.pending_campaigns || 0) },
   { label: 'Rejected', value: formatNumber(adsMetrics.value.rejected_campaigns || 0) },
   { label: 'Impressions', value: formatNumber(adsMetrics.value.impression_total || 0) },
+])
+
+const postGovernanceCards = computed(() => [
+  { label: 'Featured', value: formatNumber(postGovernance.value.featured_posts || 0) },
+  { label: 'Hidden', value: formatNumber(postGovernance.value.hidden_posts || 0) },
+  { label: 'Open reports', value: formatNumber(postGovernance.value.open_reports || 0) },
+  { label: 'Total reports', value: formatNumber(postGovernance.value.total_reports || 0) },
 ])
 
 const generatedAtText = computed(() => {
@@ -517,6 +567,33 @@ const reviewAd = async (id, status) => {
     await fetchOverview(true, true)
   } catch (err) {
     error.value = err?.message || 'Review failed'
+  } finally {
+    reviewBusyId.value = 0
+  }
+}
+
+const moderatePostReport = async (post, { status = null, feature = null, reportAction = null } = {}) => {
+  const postId = Number(post?.post_id || post?.id || 0)
+  if (!auth.user?.id || !postId || reviewBusyId.value) return
+  reviewBusyId.value = postId
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    const payload = { user_id: auth.user.id }
+    if (status) payload.status = status
+    if (feature !== null) payload.is_featured = !!feature
+    if (reportAction) payload.report_action = reportAction
+    const res = await fetch(apiUrl(`/api/posts/${encodeURIComponent(String(postId))}/moderate`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.success) throw new Error(data?.message || 'Post moderation failed')
+    actionMessage.value = `Post #${postId} updated.`
+    await fetchOverview(true, true)
+  } catch (err) {
+    error.value = err?.message || 'Post moderation failed'
   } finally {
     reviewBusyId.value = 0
   }

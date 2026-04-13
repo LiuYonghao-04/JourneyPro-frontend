@@ -111,6 +111,27 @@
               </div>
             </div>
           </div>
+
+          <div class="quota-history-block">
+            <div class="panel-subhead">
+              <span class="metric-label">Wallet ledger</span>
+              <strong>{{ walletLedger.length ? 'Recent balance activity' : 'No wallet activity yet' }}</strong>
+            </div>
+            <div v-if="walletLedger.length" class="quota-history-list">
+              <div v-for="entry in walletLedger" :key="entry.id" class="quota-history-item">
+                <div>
+                  <strong>{{ formatLedgerLabel(entry) }}</strong>
+                  <small>{{ entry.note || formatDate(entry.created_at) }}</small>
+                </div>
+                <div class="quota-history-metrics">
+                  <span :class="entry.direction === 'DEBIT' ? 'debit' : 'credit'">
+                    {{ entry.direction === 'DEBIT' ? '-' : '+' }}楼{{ formatMoney(entry.amount_cny) }}
+                  </span>
+                  <span>Balance 楼{{ formatMoney(entry.balance_after_cny) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </article>
       </div>
 
@@ -283,6 +304,7 @@ const errorText = ref('')
 const flashText = ref('')
 const plans = ref([])
 const orders = ref([])
+const walletLedger = ref([])
 const aiQuota = ref(null)
 const aiQuotaHistory = ref([])
 const reminders = ref(null)
@@ -383,11 +405,20 @@ const membershipReminderText = computed(() => {
   if (reminders.value?.membership_expiring_soon && auth.user?.membership_expires_at) {
     return `Membership expires soon: ${formatDate(auth.user.membership_expires_at, { dateOnly: true })}`
   }
+  if (reminders.value?.wallet_low_balance) {
+    return 'Wallet balance is running low. Some plans may stay unavailable until top-up arrives.'
+  }
   if (auth.user?.membership_status === 'expired') {
     return 'Your paid role has expired. Renew to restore premium access and ad privileges.'
   }
   return ''
 })
+
+const formatLedgerLabel = (entry) => {
+  const type = String(entry?.entry_type || '').trim().toUpperCase()
+  if (type === 'MEMBERSHIP_PURCHASE') return 'Membership purchase'
+  return type || 'Wallet entry'
+}
 
 const checkoutBalanceAfter = computed(() => {
   if (!checkoutOffer.value) return walletBalance.value
@@ -425,6 +456,7 @@ const fetchSummary = async () => {
     if (!res.ok || !data?.success) throw new Error(data?.message || 'Failed to load membership')
     plans.value = Array.isArray(data.plans) ? data.plans : []
     orders.value = Array.isArray(data.orders) ? data.orders : []
+    walletLedger.value = Array.isArray(data.wallet_ledger) ? data.wallet_ledger : []
     aiQuota.value = data.ai_quota || null
     aiQuotaHistory.value = Array.isArray(data.ai_usage_history) ? data.ai_usage_history : []
     reminders.value = data.reminders || null
@@ -465,6 +497,7 @@ const confirmPurchase = async () => {
     if (data.user) auth.setUser(data.user)
     plans.value = Array.isArray(data.plans) ? data.plans : plans.value
     orders.value = Array.isArray(data.orders) ? data.orders : orders.value
+    walletLedger.value = Array.isArray(data.wallet_ledger) ? data.wallet_ledger : walletLedger.value
     const planLabel = `${data?.purchased_plan?.role_label || checkoutOffer.value.plan.role} ${data?.purchased_plan?.cycle_label || checkoutOffer.value.price.label}`
     flashText.value = `${planLabel} activated. Remaining balance: ¥${formatMoney(data?.purchased_plan?.balance_after_cny ?? auth.walletBalance)}.`
     checkoutOffer.value = null

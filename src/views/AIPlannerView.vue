@@ -628,7 +628,7 @@ const latestStageLabel = computed(() => {
   return stage
 })
 
-const sanitizeMessages = (list) => {
+const sanitizeMessages = (list, { fallbackSeed = true } = {}) => {
   const rows = Array.isArray(list) ? list : []
   const safe = rows
     .map((item, index) => ({
@@ -638,7 +638,19 @@ const sanitizeMessages = (list) => {
     }))
     .filter((item) => item.content.trim().length > 0)
     .slice(-HISTORY_LIMIT)
-  if (!safe.length) return [buildSeedMessage()]
+  if (!safe.length) return fallbackSeed ? [buildSeedMessage()] : []
+  return safe
+}
+
+const buildConversationPayload = (currentPrompt = '') => {
+  const safe = sanitizeMessages(messages.value, { fallbackSeed: false })
+  if (!safe.length) return []
+  const latestPrompt = String(currentPrompt || '').trim()
+  if (!latestPrompt) return safe
+  const last = safe[safe.length - 1]
+  if (last?.role === 'user' && String(last.content || '').trim() === latestPrompt) {
+    return safe.slice(0, -1)
+  }
   return safe
 }
 
@@ -667,6 +679,43 @@ const buildRouteContextSnapshot = () => ({
   explore_weight: exploreWeight.value,
   detour_tolerance: routeStore.recoDetourTolerance ?? 0.5,
 })
+
+const normalizeTripMemoryPoint = (point) => {
+  if (!point || typeof point !== 'object') return null
+  const lat = Number(point?.lat)
+  const lng = Number(point?.lng)
+  const normalized = {
+    id: point?.id ?? point?.poi_id ?? null,
+    name: String(point?.name || point?.label || point?.poi_name || '').trim(),
+    category: String(point?.category || '').trim(),
+    image_url: String(point?.image_url || '').trim(),
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+  }
+  if (normalized.id === null && !normalized.name && !Number.isFinite(lat) && !Number.isFinite(lng)) {
+    return null
+  }
+  return normalized
+}
+
+const buildTripMemoryPayload = () => {
+  const executionTargets = Array.isArray(routeStore.executionTargets) ? routeStore.executionTargets : []
+  return {
+    execution_mode: !!routeStore.executionMode,
+    execution_completed: !!routeStore.executionCompleted,
+    visited_targets: executionTargets
+      .filter((target) => target?.status === 'visited')
+      .map((target) => normalizeTripMemoryPoint(target))
+      .filter(Boolean),
+    skipped_targets: executionTargets
+      .filter((target) => target?.status === 'skipped')
+      .map((target) => normalizeTripMemoryPoint(target))
+      .filter(Boolean),
+    saved_pois: (routeStore.savedPois || []).map((poi) => normalizeTripMemoryPoint(poi)).filter(Boolean),
+    recent_pois: (routeStore.recentPois || []).map((poi) => normalizeTripMemoryPoint(poi)).filter(Boolean),
+    current_target: normalizeTripMemoryPoint(routeStore.executionCurrentTarget),
+  }
+}
 
 const buildProfileSnapshot = () => {
   const profile = routeStore.userInterestProfile || null
@@ -702,6 +751,7 @@ const buildPersistPayload = () => ({
   scope: plannerScope.value || null,
   profile_snapshot: buildProfileSnapshot(),
   route_context: buildRouteContextSnapshot(),
+  trip_memory: buildTripMemoryPayload(),
   messages: sanitizeMessages(messages.value),
 })
 
@@ -1267,6 +1317,8 @@ const submitPrompt = async () => {
         start: { lng: routeStore.startLng, lat: routeStore.startLat },
         end: { lng: routeStore.endLng, lat: routeStore.endLat },
         via: (routeStore.viaPoints || []).map((p) => ({ lng: p.lng, lat: p.lat })),
+        conversation: buildConversationPayload(prompt),
+        trip_memory: buildTripMemoryPayload(),
       }),
     })
 

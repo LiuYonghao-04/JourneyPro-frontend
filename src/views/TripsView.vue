@@ -129,6 +129,9 @@
             <button class="btn ghost small" type="button" :disabled="!canToggleTripStar" @click="toggleTripStar">
               {{ tripDetail.is_starred ? 'Unstar Workspace' : 'Mark Starred' }}
             </button>
+            <button class="btn ghost small" type="button" :disabled="!canCreatePostDraft" @click="createPostDraft">
+              Create Post Draft
+            </button>
             <button class="btn ghost small" type="button" :disabled="!canOpenInPlanner" @click="openInPlanner">
               Resume in Planner
             </button>
@@ -218,6 +221,11 @@
           <div v-if="completionReport?.note_excerpt" class="completion-note">
             <span class="card-kicker">Note Excerpt</span>
             <p>{{ completionReport.note_excerpt }}</p>
+          </div>
+          <div class="completion-actions">
+            <button class="btn ghost small" type="button" :disabled="!canCreatePostDraft" @click="createPostDraft">
+              Turn this trip into a post draft
+            </button>
           </div>
         </section>
 
@@ -381,6 +389,7 @@ import { apiUrl } from '../config/api'
 import { useAuthStore } from '../store/authStore'
 import { useRouteStore } from '../store/routeStore'
 import { seedPostDetailPreview } from '../utils/postDetailBridge'
+import { seedPostPublishDraftFromTrip } from '../utils/postPublishBridge'
 
 const router = useRouter()
 const route = useRoute()
@@ -462,6 +471,11 @@ const hasRouteMaterial = computed(() => {
 const canToggleTripStar = computed(() => !!tripDetail.value && !detailLoading.value && !isActionBusy.value)
 const canOpenInPlanner = computed(() => !!auth.user?.id && hasPlannerSnapshot.value && !detailLoading.value && !isActionBusy.value)
 const canContinueInMap = computed(() => !!tripDetail.value && hasRouteMaterial.value && !detailLoading.value && !isActionBusy.value)
+const canCreatePostDraft = computed(() => {
+  if (!tripDetail.value || detailLoading.value || isActionBusy.value) return false
+  const status = String(tripDetail.value.status || '').trim().toUpperCase()
+  return status === 'COMPLETED' || !!completionReport.value || !!tripDetail.value.completion_summary
+})
 const actionHintText = computed(() => {
   if (detailLoading.value) return 'Loading workspace data.'
   if (isActionBusy.value) return 'Applying your latest workspace action.'
@@ -738,6 +752,13 @@ const openStoriesForPoi = (story) => {
       poi_name: story?.poi_name || '',
     },
   })
+}
+
+const createPostDraft = () => {
+  if (!canCreatePostDraft.value || !tripDetail.value) return
+  seedPostPublishDraftFromTrip(tripDetail.value)
+  setDetailFlash('Post draft created from completed trip.')
+  router.push('/posts/publish')
 }
 
 const patchTrip = async (body, busyKey, successText) => {
@@ -1527,6 +1548,12 @@ onMounted(() => {
 .completion-note p {
   margin: 0;
   line-height: 1.6;
+}
+
+.completion-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .segment-grid {

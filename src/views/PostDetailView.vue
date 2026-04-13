@@ -19,6 +19,13 @@
         <div class="toolbar-actions">
           <el-button @click="copyPostLink">Copy link</el-button>
           <el-button :disabled="!poiDetail?.id" @click="openPoiPostFeed">Related POI posts</el-button>
+          <el-button v-if="canReportPost" @click="reportPost">Report</el-button>
+          <el-button v-if="canModeratePost" :type="post.is_featured ? 'warning' : 'success'" plain @click="toggleFeaturedPost">
+            {{ post.is_featured ? 'Unfeature' : 'Feature' }}
+          </el-button>
+          <el-button v-if="canModeratePost" :type="isPostHidden ? 'success' : 'danger'" plain @click="toggleHiddenPost">
+            {{ isPostHidden ? 'Restore' : 'Hide' }}
+          </el-button>
         </div>
       </header>
 
@@ -77,7 +84,11 @@
               </el-button>
             </div>
 
-            <h1 class="post-title" :class="{ 'skeleton-line': postLoading && !post?.title }">{{ post?.title || 'Loading story...' }}</h1>
+            <div class="post-title-row">
+              <h1 class="post-title" :class="{ 'skeleton-line': postLoading && !post?.title }">{{ post?.title || 'Loading story...' }}</h1>
+              <span v-if="post.is_featured" class="post-flag featured">Featured</span>
+              <span v-if="isPostHidden" class="post-flag hidden">Hidden</span>
+            </div>
             <p class="post-text" :class="{ 'skeleton-copy': postLoading && !post?.content }">
               {{ post?.content || 'Preparing post details and route context...' }}
             </p>
@@ -126,6 +137,13 @@
               <el-button type="primary" @click="submitComment()">Post</el-button>
             </div>
 
+            <div v-if="lowSignalCommentCount && !commentQuery.trim()" class="comment-fold-banner">
+              <span>{{ lowSignalCommentCount }} low-signal comments folded by default.</span>
+              <button class="mini-btn" @click="showLowSignalComments = !showLowSignalComments">
+                {{ showLowSignalComments ? 'Hide folded comments' : 'Show folded comments' }}
+              </button>
+            </div>
+
             <div class="comment-list">
               <div v-if="commentsLoading" class="comments-loading">
                 <div v-for="idx in 4" :key="`comment-skeleton-${idx}`" class="comment-skeleton">
@@ -137,7 +155,7 @@
                   </div>
                 </div>
               </div>
-              <article v-for="item in filteredComments" :key="item.id" class="comment-item">
+              <article v-for="item in filteredComments" :key="item.id" class="comment-item" :class="{ 'comment-item-low': isLowSignalComment(item) }">
                 <div class="comment-header">
                   <CroppedImage :src="item.user?.avatar_url || defaultAvatar" class="comment-avatar" :aspect-ratio="1" />
                   <div>
@@ -147,6 +165,7 @@
                 </div>
                 <p class="comment-content" :class="{ deleted: item.is_deleted }">{{ item.content }}</p>
                 <div class="comment-actions">
+                  <span v-if="isLowSignalComment(item)" class="comment-badge">Low signal</span>
                   <button v-if="!item.is_deleted" class="mini-btn" @click="likeComment(item)">Like {{ item.like_count || 0 }}</button>
                   <button v-if="!item.is_deleted" class="mini-btn" @click="replyTarget = item.id">Reply</button>
                   <button v-if="canDeleteComment(item)" class="mini-btn danger" @click="deleteComment(item)">Delete</button>
@@ -334,6 +353,7 @@ const replyText = ref('')
 const replyTarget = ref(null)
 const commentQuery = ref('')
 const commentSort = ref('new')
+const showLowSignalComments = ref(false)
 const mediaIndex = ref(0)
 
 const defaultAvatar = 'https://placehold.co/80x80'
@@ -380,6 +400,11 @@ const tripContextChips = computed(() => {
   if (tripBestFor.value.length) chips.push(`Best for ${tripBestFor.value[0]}`)
   return chips
 })
+const isPostHidden = computed(() => String(post.value?.status || '').trim().toUpperCase() === 'HIDDEN')
+const canReportPost = computed(
+  () => !!auth.user?.id && !!postLoaded.value && Number(auth.user.id) !== Number(post.value?.user?.id || post.value?.user_id || 0)
+)
+const canModeratePost = computed(() => !!auth.isAdmin && !!postLoaded.value && !!post.value?.id)
 const poiCommunityTags = computed(() => {
   const list = Array.isArray(poiDetail.value?.community_summary?.top_tags) ? poiDetail.value.community_summary.top_tags : []
   return list.slice(0, 4)
@@ -398,12 +423,27 @@ const hasQueryHit = (item, query) => {
   return (item.replies || []).some((r) => hasQueryHit(r, q))
 }
 
-const filteredComments = computed(() => {
+const isLowSignalComment = (item) => {
+  if (!item || item.is_deleted) return false
+  const likes = Number(item.like_count || 0)
+  const replyCount = Number(item.reply_count || item.replies?.length || 0)
+  const contentLength = String(item.content || '').trim().length
+  return likes <= 0 && replyCount <= 0 && contentLength <= 88
+}
+
+const sortedComments = computed(() => {
   const list = [...comments.value].filter((item) => hasQueryHit(item, commentQuery.value))
   const sorter = commentSort.value === 'hot'
     ? (a, b) => (Number(b.like_count) || 0) - (Number(a.like_count) || 0)
     : (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   return list.sort(sorter)
+})
+
+const lowSignalCommentCount = computed(() => sortedComments.value.filter((item) => isLowSignalComment(item)).length)
+
+const filteredComments = computed(() => {
+  if (commentQuery.value.trim() || showLowSignalComments.value) return sortedComments.value
+  return sortedComments.value.filter((item) => !isLowSignalComment(item))
 })
 
 const formatTime = (time) => (time ? new Date(time).toLocaleString() : '')
@@ -518,6 +558,22 @@ const updateCommentTree = (updated) => {
 const canDeleteComment = (item) =>
   !!auth.user?.id && Number(auth.user.id) === Number(item?.user_id) && !item?._deleting && !item?.is_deleted
 
+const syncPostPreview = () => {
+  seedPostDetailPreview(post.value)
+}
+
+const applyPostUpdate = (data) => {
+  if (!data || typeof data !== 'object') return
+  post.value = {
+    ...post.value,
+    ...data,
+    _preview: false,
+    _liked: data._liked !== undefined ? !!data._liked : !!post.value._liked,
+    _fav: data._fav !== undefined ? !!data._fav : !!post.value._fav,
+  }
+  syncPostPreview()
+}
+
 const toggleLikePost = async () => {
   if (!postLoaded.value || !post.value?.id) return
   const res = await axios.post(`${API_BASE}/${postId.value}/like`, { user_id: auth.user?.id })
@@ -525,7 +581,7 @@ const toggleLikePost = async () => {
   if (!updated) return
   const liked = !!res.data?.liked
   post.value = { ...updated, _liked: liked, _fav: post.value._fav }
-  seedPostDetailPreview(post.value)
+  syncPostPreview()
 }
 
 const toggleFavPost = async () => {
@@ -535,7 +591,69 @@ const toggleFavPost = async () => {
   if (!updated) return
   const favored = !!res.data?.favorited
   post.value = { ...updated, _fav: favored, _liked: post.value._liked }
-  seedPostDetailPreview(post.value)
+  syncPostPreview()
+}
+
+const reportPost = async () => {
+  if (!canReportPost.value) return
+  try {
+    const { value } = await ElMessageBox.prompt(
+      'Describe the issue briefly. This report will be queued for admin review.',
+      'Report post',
+      {
+        confirmButtonText: 'Submit report',
+        cancelButtonText: 'Cancel',
+        inputPlaceholder: 'Spam, misleading content, duplicate, unsafe content...',
+        inputPattern: /.+/,
+        inputErrorMessage: 'Please enter a short reason.',
+      }
+    )
+    await axios.post(`${API_BASE}/${postId.value}/report`, {
+      user_id: auth.user?.id,
+      reason: 'OTHER',
+      details: String(value || '').trim(),
+    })
+    alertType.value = 'success'
+    alertMessage.value = 'Report submitted for admin review.'
+  } catch (err) {
+    if (err === 'cancel' || err === 'close') return
+    alertType.value = 'error'
+    alertMessage.value = err?.response?.data?.message || 'Failed to submit report.'
+  }
+}
+
+const toggleFeaturedPost = async () => {
+  if (!canModeratePost.value) return
+  try {
+    const res = await axios.post(`${API_BASE}/${postId.value}/moderate`, {
+      user_id: auth.user?.id,
+      is_featured: !post.value?.is_featured,
+    })
+    applyPostUpdate(res.data?.data)
+    alertType.value = 'success'
+    alertMessage.value = post.value?.is_featured ? 'Post featured.' : 'Post removed from featured.'
+  } catch (err) {
+    alertType.value = 'error'
+    alertMessage.value = err?.response?.data?.message || 'Failed to update featured state.'
+  }
+}
+
+const toggleHiddenPost = async () => {
+  if (!canModeratePost.value) return
+  try {
+    const nextStatus = isPostHidden.value ? 'NORMAL' : 'HIDDEN'
+    const res = await axios.post(`${API_BASE}/${postId.value}/moderate`, {
+      user_id: auth.user?.id,
+      status: nextStatus,
+      report_action: nextStatus === 'HIDDEN' ? 'RESOLVED' : null,
+    })
+    applyPostUpdate(res.data?.data)
+    alertType.value = 'success'
+    alertMessage.value = nextStatus === 'HIDDEN' ? 'Post hidden from the feed.' : 'Post restored to the feed.'
+  } catch (err) {
+    alertType.value = 'error'
+    alertMessage.value = err?.response?.data?.message || 'Failed to update post visibility.'
+  }
 }
 
 const submitComment = async (parent) => {
@@ -765,6 +883,7 @@ const init = async () => {
   commentText.value = ''
   replyText.value = ''
   replyTarget.value = null
+  showLowSignalComments.value = false
   alertMessage.value = ''
   comments.value = []
   relatedPosts.value = []
@@ -884,7 +1003,39 @@ watch(
 
 .toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.post-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.post-flag {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.post-flag.featured {
+  color: #8a5a00;
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 34%, transparent);
+}
+
+.post-flag.hidden {
+  color: #9f1239;
+  background: color-mix(in srgb, #f43f5e 14%, transparent);
+  border: 1px solid color-mix(in srgb, #f43f5e 26%, transparent);
 }
 
 .detail-shell {
@@ -968,6 +1119,20 @@ watch(
   margin-bottom: 12px;
 }
 
+.comment-fold-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
+  background: color-mix(in srgb, var(--badge) 74%, transparent);
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .comment-skeleton {
   display: grid;
   grid-template-columns: 44px 1fr;
@@ -1003,6 +1168,25 @@ watch(
 .pill:disabled {
   opacity: 0.55;
   cursor: wait;
+}
+
+.comment-item-low {
+  opacity: 0.86;
+}
+
+.comment-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #92400e;
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 26%, transparent);
 }
 
 @keyframes postDetailShimmer {
