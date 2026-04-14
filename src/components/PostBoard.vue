@@ -2002,9 +2002,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 5px;
   color: var(--muted);
   font-size: 13px;
+  margin-top: 6px;
 }
 
 .icon-btn {
