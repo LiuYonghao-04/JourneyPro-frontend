@@ -7,12 +7,17 @@ JourneyPro Frontend is the Vue 3 client for the JourneyPro graduation project. I
 - Premium landing page with scroll-led storytelling and map-first product framing
 - Map workflow with start/end/via points, along-route POI recommendation, details panels, and parking discovery after arrival
 - Community module with large post volume, detail pages, notifications, profile views, and admin entry points
+- Admin ops center:
+  - frontend/runtime/API error inbox for operators
+  - live membership pricing editor for VIP/SVIP monthly and yearly plans
+  - backup freshness, scheduled maintenance status, and maintenance log visibility
 - AI planner:
   - token-streamed itinerary responses
   - route-aware recommended stops
   - community signals and source cards
   - `Write to Map` handoff into via points
   - London-only scope guard for unsupported cities
+- Global error reporting for `window`, Vue component, router, `fetch`, and `axios` failures
 
 ## Tech stack
 
@@ -31,7 +36,7 @@ src/
   router/            app routes
   store/             auth, route, and page state
   views/             page-level screens
-  utils/             HTTP helpers and formatting helpers
+  utils/             HTTP helpers, formatting helpers, and error reporting
 public/
   mv.mp4             homepage media asset
 ```
@@ -86,6 +91,30 @@ The page persists planner history in local storage, so conversations and recomme
 
 The current product scope is London-only. If a user asks for another city, the frontend displays a scoped warning state instead of pretending London results match the request.
 
+### Ops center
+
+The admin operations UI is in `src/views/AdminOpsView.vue`.
+
+It combines four operational surfaces:
+
+1. Live health and slow-API telemetry from the backend ops endpoints
+2. Error inbox data collected from client runtime failures
+3. Live membership pricing controls for VIP/SVIP monthly and yearly plans
+4. Backup freshness and Windows scheduled-maintenance status
+
+### Global client error reporting
+
+`src/utils/errorReporter.js` installs error capture for:
+
+- `window.onerror`
+- `unhandledrejection`
+- Vue component exceptions
+- router navigation failures
+- `fetch` 5xx/network failures
+- `axios` 5xx/network failures
+
+These events are posted to the backend so administrators can see which user hit the error, where it happened, and when it happened.
+
 ## Related backend endpoints
 
 - `POST /api/ai/planner/stream`
@@ -93,9 +122,14 @@ The current product scope is London-only. If a user asks for another city, the f
 - `GET /api/poi/:id`
 - `GET /api/recommendation/settings`
 - `POST /api/recommendation/settings`
+- `POST /api/ops/client-errors`
+- `GET /api/admin/ops/errors`
+- `GET /api/admin/ops/pricing`
+- `GET /api/admin/ops/maintenance`
 
 ## Deployment notes
 
 - Ensure the frontend build points to the correct API origin.
 - Keep the API image proxy enabled for third-party image sources used in posts and POI cards.
 - If external LLM support is enabled on the backend, no frontend changes are required; the page already handles both live-LLM and fallback modes.
+- The admin ops page is most useful when backend scheduled maintenance is installed with `npm run ops:schedule:install`, otherwise backup/task status will show missing automation.
