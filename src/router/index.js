@@ -13,6 +13,7 @@ const PrivacyView = () => import('../views/PrivacyView.vue')
 const FastUxView = () => import('../views/FastUxView.vue')
 const AIPlannerView = () => import('../views/AIPlannerView.vue')
 const AdminView = () => import('../views/AdminView.vue')
+const AdminOpsView = () => import('../views/AdminOpsView.vue')
 const TripsView = () => import('../views/TripsView.vue')
 const AdsView = () => import('../views/AdsView.vue')
 const MembershipView = () => import('../views/MembershipView.vue')
@@ -104,6 +105,12 @@ const routes = [
         path: '/admin',
         name: 'admin',
         component: AdminView,
+        meta: { requiresAdmin: true },
+    },
+    {
+        path: '/admin/ops',
+        name: 'admin-ops',
+        component: AdminOpsView,
         meta: { requiresAdmin: true },
     },
 ]

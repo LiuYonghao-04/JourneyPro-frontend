@@ -3,6 +3,7 @@
     <aside class="admin-rail">
       <div class="rail-brand">Admin</div>
       <RouterLink to="/home" class="rail-link">Overview</RouterLink>
+      <RouterLink to="/admin/ops" class="rail-link">Ops Center</RouterLink>
       <RouterLink to="/posts" class="rail-link">Community</RouterLink>
       <RouterLink to="/map" class="rail-link">Map</RouterLink>
       <RouterLink to="/ads" class="rail-link">Ads</RouterLink>

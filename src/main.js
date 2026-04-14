@@ -6,6 +6,7 @@ import App from './App.vue'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import router from "./router";
+import { initErrorReporting } from './utils/errorReporter'
 
 const DEFAULT_IMAGE_FALLBACK =
   "data:image/svg+xml;utf8," +
@@ -31,4 +32,5 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(ElementPlus)
 app.use(router)
+initErrorReporting({ app, router })
 app.mount('#app')
