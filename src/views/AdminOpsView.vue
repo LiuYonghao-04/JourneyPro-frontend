@@ -232,6 +232,72 @@
         </div>
       </section>
 
+      <section class="maintenance-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Backup automation</h2>
+              <span>{{ backupFreshnessLabel }}</span>
+            </div>
+            <button class="mini-btn" type="button" :disabled="loading" @click="fetchMaintenance">Refresh backup</button>
+          </div>
+
+          <div v-if="latestBackup" class="backup-summary">
+            <div class="signal-card">
+              <span>Latest snapshot</span>
+              <strong>{{ formatDateTime(latestBackup.generated_at) }}</strong>
+            </div>
+            <div class="signal-card">
+              <span>Backup age</span>
+              <strong>{{ formatAgeHours(latestBackup.age_hours) }}</strong>
+            </div>
+            <div class="signal-card">
+              <span>Critical tables</span>
+              <strong>{{ formatNumber(latestBackup.critical_table_count || 0) }}</strong>
+            </div>
+            <div class="signal-card">
+              <span>Folder</span>
+              <strong>{{ latestBackup.folder_name || 'Unknown' }}</strong>
+            </div>
+          </div>
+          <div v-else class="empty">No backup snapshot found yet.</div>
+
+          <div class="task-grid">
+            <article v-for="task in maintenanceTasks" :key="task.key" class="task-card">
+              <div class="task-head">
+                <strong>{{ task.label }}</strong>
+                <span class="status-badge" :class="taskBadgeClass(task)">{{ taskBadgeLabel(task) }}</span>
+              </div>
+              <div class="task-meta">
+                <span>Last run: {{ formatDateTime(task.last_run_time) }}</span>
+                <span>Next run: {{ formatDateTime(task.next_run_time) }}</span>
+                <span>{{ taskResultLabel(task) }}</span>
+              </div>
+            </article>
+          </div>
+
+          <div v-if="missingTaskCount" class="ops-note">
+            <strong>Auto maintenance is not fully installed.</strong>
+            <span>Run {{ maintenance?.install_hint || 'npm run ops:schedule:install' }} on the API host.</span>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Maintenance log</h2>
+              <span>{{ maintenanceLog?.file_name || 'No maintenance log yet' }}</span>
+            </div>
+            <span>{{ formatDateTime(maintenanceLog?.last_write_at) }}</span>
+          </div>
+
+          <div v-if="maintenanceLog?.tail?.length" class="log-box">
+            <pre>{{ maintenanceLog.tail.join('\n') }}</pre>
+          </div>
+          <div v-else class="empty">No maintenance log captured yet.</div>
+        </article>
+      </section>
+
       <section class="pricing-grid">
         <article class="panel">
           <div class="panel-head">
@@ -292,6 +358,7 @@ const summary = ref({})
 const errorEvents = ref([])
 const opsHealth = ref(null)
 const opsMetrics = ref(null)
+const maintenance = ref(null)
 const priceAudit = ref([])
 
 const errorStatusFilter = ref('ALL')
@@ -352,6 +419,23 @@ const slowEndpoints = computed(() => {
   return list.slice(0, 6)
 })
 
+const latestBackup = computed(() => maintenance.value?.latest_backup || null)
+
+const maintenanceTasks = computed(() => (Array.isArray(maintenance.value?.tasks) ? maintenance.value.tasks : []))
+
+const maintenanceLog = computed(() => maintenance.value?.logs?.db_maintenance || null)
+
+const missingTaskCount = computed(
+  () => maintenanceTasks.value.filter((task) => !task.installed || !task.enabled).length
+)
+
+const backupFreshnessLabel = computed(() => {
+  if (!latestBackup.value) return 'No snapshot yet'
+  return latestBackup.value.is_fresh
+    ? `Fresh within ${maintenance.value?.backup_fresh_hours || 48}h`
+    : 'Backup is stale'
+})
+
 const formatNumber = (value) => {
   const num = Number(value || 0)
   return Number.isFinite(num) ? num.toLocaleString() : '0'
@@ -385,6 +469,14 @@ const formatDateTime = (value) => {
   const time = new Date(value || '').getTime()
   if (!Number.isFinite(time) || time <= 0) return 'Unknown'
   return new Date(time).toLocaleString()
+}
+
+const formatAgeHours = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 0) return 'Unknown'
+  if (num < 1) return `${Math.round(num * 60)}m`
+  if (num < 48) return `${num.toFixed(1)}h`
+  return `${(num / 24).toFixed(1)}d`
 }
 
 const formatJson = (value) => {
@@ -434,6 +526,14 @@ const fetchOpsSignals = async () => {
   if (metricsData?.success) opsMetrics.value = metricsData
 }
 
+const fetchMaintenance = async () => {
+  if (!auth.user?.id) return
+  const res = await fetch(apiUrl(`/api/admin/ops/maintenance?user_id=${encodeURIComponent(String(auth.user?.id || ''))}`))
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data?.success) throw new Error(data?.message || 'Failed to load maintenance status')
+  maintenance.value = data.data || null
+}
+
 const fetchErrorFeed = async () => {
   const res = await fetch(apiUrl(`/api/admin/ops/errors?${buildErrorQuery()}`))
   const data = await res.json().catch(() => ({}))
@@ -456,7 +556,7 @@ const fetchOpsCenter = async (forceMessage = false) => {
   if (!forceMessage) flashText.value = ''
   errorText.value = ''
   try {
-    await Promise.all([fetchErrorFeed(), fetchPricing(), fetchOpsSignals()])
+    await Promise.all([fetchErrorFeed(), fetchPricing(), fetchOpsSignals(), fetchMaintenance()])
     generatedAt.value = new Date().toISOString()
   } catch (err) {
     setError(err?.message || 'Failed to load ops center')
@@ -518,6 +618,27 @@ const savePricing = async () => {
   } finally {
     savingPrices.value = false
   }
+}
+
+const taskBadgeClass = (task) => {
+  if (!task?.installed) return 'status-ignored'
+  if (!task?.enabled) return 'status-acknowledged'
+  if (task?.last_result_ok === false) return 'status-open'
+  return 'status-resolved'
+}
+
+const taskBadgeLabel = (task) => {
+  if (!task?.installed) return 'Not installed'
+  if (!task?.enabled) return 'Disabled'
+  if (task?.last_result_ok === false) return 'Attention'
+  return 'Healthy'
+}
+
+const taskResultLabel = (task) => {
+  if (!task?.installed) return task?.message || 'Install required'
+  if (task?.last_result_ok === false) return `Last result ${task?.last_result ?? 'Unknown'}`
+  if (task?.last_run_time) return 'Last run OK'
+  return 'Awaiting first run'
 }
 
 onMounted(() => {
@@ -717,9 +838,25 @@ onMounted(() => {
   gap: 10px;
 }
 
+.backup-summary,
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .layout-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.maintenance-grid,
+.pricing-grid,
+.signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -767,6 +904,15 @@ onMounted(() => {
   gap: 10px;
 }
 
+.task-card {
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, transparent);
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
 .error-item,
 .compact-item {
   border-radius: 16px;
@@ -781,6 +927,20 @@ onMounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+}
+
+.task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-meta {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .error-badges {
@@ -872,6 +1032,36 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.ops-note {
+  margin-top: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, #f59e0b 32%, transparent);
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.ops-note span {
+  color: var(--muted);
+}
+
+.log-box {
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, transparent);
+  background: color-mix(in srgb, var(--badge) 76%, transparent);
+  padding: 14px;
+}
+
+.log-box pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .price-editor {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -908,7 +1098,9 @@ onMounted(() => {
   }
 
   .signal-list,
-  .price-editor {
+  .price-editor,
+  .backup-summary,
+  .task-grid {
     grid-template-columns: 1fr;
   }
 
